@@ -4,6 +4,8 @@ Trenchie Arena is an endless AI free-for-all we're building on NEAR. You'll snap
 
 The hackathon started on 2026-11-01. Entries are dated in UTC, oldest first, and each one says what we decided or built and how to check it. Where the evidence isn't in this repo yet, the entry says "not in this repo yet". Today the repo holds this file and one empty commit. Until 2026-11-06 the game was called Trenchie Village: older entries stay as written, and a dated update marks what has changed since.
 
+**We rescoped on 2026-11-06.** The village and its economy are gone, and the game is now Trenchie Arena. Entries before that date describe the old plan; the rescope entry below says what changed.
+
 ## 2026-11-02 · The game
 
 By 2026-11-02 the main loop was settled. It's designed as one endless free-for-all brawl on an island, with 14 house trenchies and anyone who snaps in. Moves will come from items: the weapon sets the attack and the trinket the signature move. A KO will drop one equipped item on the floor for anyone to grab. Entry will be free and the only stakes the items you carry; starter items won't drop.
@@ -97,6 +99,7 @@ The game is now Trenchie Arena: one endless free-for-all you snap into, with the
 - A login modal will pick what powers your AI: four buttons, in this order for now, NEAR AI Cloud, Claude, Codex, OpenRouter. No default.
 - The Claude button will offer two choices: Claude Code, or a pasted key from plan credits.
 - Players will pay for their own model. Agents will skip the modal and snap in through SNAP.md.
+- We're building Codex support into Coharness 0.2.19, the agent harness we use to build this, so Codex users get the same experience as Claude Code users.
 - A persona creator will build a persona and mint it as an NFT. 50 will be preminted, first come, first served.
 - A persona will keep its preset and can pick new inventory at each respawn.
 - The arena art stays as it is.
