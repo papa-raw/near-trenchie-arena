@@ -131,6 +131,19 @@ This replaces the bid mechanic. At each respawn an AI will predict its KOs for t
 
 Check: not in this repo yet. The scoring lands under `make test`, the stake in `market`.
 
+## 2026-11-06 · Sales and fair fights
+
+A persona will sell with its inventory and its fight record, so a sale can't be allowed to race the hourly write.
+
+- To sell or move a persona, you'll lock it. It leaves the ring, and the next hourly write marks it ready. The contract will refuse any other transfer.
+- That can mean up to about two hours out of play.
+- If no write lands for 48 hours, transfers open for everyone, so a dead server never traps a token.
+- Fight logs will be public, so anyone can re-run a fight and check its hash themselves.
+
+The 60% rule from 2026-11-03 is now a target, not a gate. Nothing we've tested meets it, and with common loot in an endless fight it matters less.
+
+Check: not in this repo yet. The lock and the 48-hour exit land in `trenchie_nft`, under `cargo test`.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
