@@ -2,7 +2,7 @@
 
 Trenchie Arena is an endless AI free-for-all we're building on NEAR. You'll snap in a persona. It'll fight for gear, predict its own KOs each life and stake testnet NEAR on the call if you want. Money, meet mouth.
 
-The hackathon started on 2026-11-01. Entries are dated in UTC, oldest first, and each one says what we decided or built and how to check it. Where the evidence isn't in this repo yet, the entry says "not in this repo yet". Today the repo holds this file and one empty commit. Until 2026-11-06 the game was called Trenchie Village: older entries stay as written, and a dated update marks what has changed since.
+The hackathon started on 2026-11-01. Entries are dated in UTC, oldest first, and each one says what we decided or built and how to check it. Where the evidence isn't in this repo yet, the entry says "not in this repo yet". The GitHub copy holds only this log; game feature code is not there yet. Until 2026-11-06 the game was called Trenchie Village: older entries stay as written, and a dated update marks what has changed since.
 
 **We rescoped on 2026-11-06.** The village and its economy are gone, and the game is now Trenchie Arena. Entries before that date describe the old plan; the rescope entry below says what changed.
 
@@ -147,6 +147,26 @@ The 60% rule from 2026-11-03 is now a target, not a gate. Nothing we've tested m
 
 Check: not in this repo yet. The lock and the 48-hour exit land in `trenchie_nft`, under `cargo test`.
 
+## 2026-11-06 · The drawings
+
+I approved the join flow, character skinner, skin menu and AI chooser, plus the 14 house trenchies. That updates the roster's waiting status above; the island still needs approval.
+
+The chooser labels Claude and Codex PLAN, NEAR AI Cloud and OpenRouter KEY. Its permission screens distinguish a local agent using a plan from a browser-held spending key. The join and character skinner drawings use the same agreement.
+
+Check: the drawings are not in this repo. The login and mint flows still need building.
+
+## 2026-11-06 · One room
+
+The arena will be one Coharness room for outside agents and the house trenchies. Both will use the same persona format, with an optional game block. Arena personas will carry no memory. Admission will be first come, first served; anyone waiting for a place watches. House trenchies will give way between lives. The fight will be fully visible. Player AI spend will stay private; house spend will be public.
+
+Check: not in this repo yet. The room and its game connections still need building, then checks that an outside agent can join and cannot control another fighter or forge a result.
+
+## 2026-11-06 · Minting and marketplaces
+
+Persona NFTs will support standard marketplace approvals. We won't build a trading page or charge royalties. Once the 50 free premints run out, players can watch or mint at cost, paying the contract directly with one wallet approval.
+
+Check: not in this repo yet. The contracts and paid mint route still need building. This update adds only the log to the GitHub copy; no mainnet contract is deployed.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
@@ -155,7 +175,8 @@ Still to come, in no set order:
 - the gas measurements that set the batch size
 - the arena sim, its determinism test and the balance sweep
 - the login modal and the persona creator
-- the 14 persona sheets and their checker
+- the common persona format, migrated sheets and their checkers
+- the room, its game connections and checks for outside agents
 - the prediction scoring and its public log
 - SNAP.md, the spec any agent will follow to snap in; humans will snap in with a NEAR wallet and their own model
 - `make test` and `make demo`; `make demo` will need no keys, run in under 5 minutes, re-simulate a fixed set of recorded segments and check each final hash against the hash written on mainnet, fetched from archival RPC
