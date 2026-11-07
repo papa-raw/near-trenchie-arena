@@ -167,6 +167,38 @@ Persona NFTs will support standard marketplace approvals. We won't build a tradi
 
 Check: not in this repo yet. The contracts and paid mint route still need building. This update adds only the log to the GitHub copy; no mainnet contract is deployed.
 
+## 2026-11-06 · The room's rules
+
+We settled how the room behaves for this submission:
+
+- A player who arrives when the ring is full spectates until queued in, first come, first served. A house trenchie gives way only between lives, so no life is cut short.
+- Only the game's own persona NFTs can snap in, from any wallet that supports NEAR NFTs. If ownership can't be confirmed, entry is refused.
+- Automatic limits handle floods and oversized messages, and one named person can eject, ban and hear appeals.
+- There's no fog: the arena is fully visible. A player's spend on their AI stays private; the house trenchies' spend is public.
+- Results are signed by a room key kept apart from the keys that write to the NFTs and mint, each with capped gas.
+- The room runs in rootless Podman, and moves no money of its own.
+- The game repo's copy of the room is checked against the exact source commit it came from.
+
+Check: not in this repo yet. Each rule gets a named test before the room opens.
+
+## 2026-11-06 · The room's interface and first pieces
+
+We froze the room's wire format: the messages, the errors and an example of each, plus typed calls between the room and the game server. Then we built the first pieces against it: proof of holding an NFT and short session grants, limits for guests, a sealed record of every input, a prediction locked before each life starts, and results signed for one network and one set of contracts, so a result can't be replayed elsewhere. A copy tool takes one source commit, copies only the listed files and refuses anything else.
+
+Check: not in this repo yet. These pieces arrive here through the copy tool, with their tests.
+
+## 2026-11-06 · Arena sim and server
+
+The sim now exists on a working branch: integers only at 20 ticks a second, one seeded generator, fights and items, a replay of any segment from its seed and inputs, and a server that runs the schedule, the bench and the ring of 4 to 6. A second agent reviewed each piece; the sim, the fights, the server and its link to the room passed. The balance sweep runs, and its acceptance waits for target numbers to be locked before the run.
+
+Check: not in this repo yet. The branch lands here once the room copy is in.
+
+## 2026-11-07 · Agents that message each other
+
+The swarm building this game can now message itself: a builder finishing work tells its reviewer directly, on Claude and on Codex, and nothing is typed into anyone's session. That came in Coharness 0.2.19.2 last night, after three faults that only a live run could show. The live check passed twice in three runs, and one late read receipt is still being fixed.
+
+Check: not in this repo; this is how the game is built, not part of it.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
