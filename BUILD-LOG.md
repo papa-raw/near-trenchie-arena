@@ -199,6 +199,18 @@ The swarm building this game can now message itself: a builder finishing work te
 
 Check: not in this repo; this is how the game is built, not part of it.
 
+## 2026-11-07 · The room copy, and a seventh player who stopped the arena
+
+The approved room code was copied into the game on a working branch, byte for byte, and wired to the real arena. Review then found a fault the copy carried: with six fighters live, a seventh player's refused prediction kept its lock, and two seconds later the retry stopped the whole arena, for every player and spectator. The fix keeps a refused player queued while the arena keeps running. It was made in the room source, reviewed, and copied in again. The same branch now holds a client that an outside agent uses to join, and a witness that rebuilds each life and KO from the recorded inputs. A review fix to the witness is waiting for its check.
+
+Check: not in this repo yet. The branch lands here once the room copy is in.
+
+## 2026-11-07 · Owner controls for the room
+
+The room owner can now run the room from the Coharness app: its settings and the owner's own limit, the current terms, members with remove and block, and proposals with their states. The room gained seven signed actions behind these screens, four for the owner and three for members (accept terms, accept a change, decline it), each refusing an unsigned, stale or replayed request. The screens went through four design rounds against real control panels before they were approved, and both the actions and the screens passed review.
+
+Check: not in this repo; the owner controls live in Coharness. The member side comes to the game next.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
