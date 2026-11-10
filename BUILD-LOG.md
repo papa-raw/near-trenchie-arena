@@ -225,6 +225,14 @@ The art lane redrew the weakest items and added more. The kit now has 28 items, 
 
 Check: not in this repo yet. The kit lands with the arena view.
 
+## 2026-11-10 · The arena's host is ready, and stopped
+
+The server that will run the hosted arena now has its foundation: a separate account for the arena with no login, its own firewall rules that leave the other services on the box alone, a hard cap of one CPU and 1 GB for everything it runs, and a stop latch that holds the arena down until someone clears it on purpose. Nothing runs on it yet. The game image, the arena's address and its testnet keys come next, and the arena stays closed until each of those is in place and checked.
+
+The installer went through a red team before it touched the box. The review found one serious fault: an install killed halfway could leave the server refusing to restart any of its services. That was fixed before the real run. The real server then caught three faults no test had: a system file Ubuntu keeps as a link, the way apt marks a new package, and the way the firewall prints its own rules. Each was fixed against the real output, and the other services on the box answered their health checks before and after every step.
+
+Check: not in this repo. The installer and its read-only verifier live with the room source; the verifier passes on the host and prints `DEPLOYMENT CLOSED`.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
