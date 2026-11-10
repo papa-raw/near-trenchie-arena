@@ -1,0 +1,16 @@
+# Secrets and keys never enter this repo.
+.env
+.env.*
+*.env
+*.pem
+*.key
+# Generated output.
+node_modules/
+__pycache__/
+*.pyc
+.demo/
+.state/
+.DS_Store
+.venv*/
+
+.near-credentials/

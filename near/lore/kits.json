@@ -1,0 +1,1937 @@
+{
+ "spec": "trenchie-kits/1",
+ "generatedBy": "near/lore/gen_kits.py (2026-11-03)",
+ "status": "INFERRED tuning; the balance sweep recalibrates every number",
+ "budgets": {
+  "common": 10,
+  "rare": 16,
+  "legendary": 24,
+  "maxShareOfBudget": 0.4
+ },
+ "signatures": [
+  "beam_sweep",
+  "chain_storm",
+  "shockwave",
+  "blink_strike",
+  "magnet",
+  "bubble"
+ ],
+ "starterKit": {
+  "weapon": "st-bonk",
+  "trinket": "st-roll",
+  "head": "st-cap",
+  "body": "st-tee"
+ },
+ "trenchies": [
+  {
+   "trenchieId": "satrenchi",
+   "name": "Satrenchi",
+   "tag": "Satrenchi",
+   "loadout": "commons",
+   "fightStyle": "hunter",
+   "kit": {
+    "weapon": "c-lunge",
+    "trinket": "leg-stack-sats",
+    "head": "sig-satrenchi",
+    "body": "c-body-builder"
+   },
+   "signaturePiece": {
+    "id": "sig-satrenchi",
+    "name": "Genesis Hood",
+    "slot": "head",
+    "look": "a deep grey hood framing a shadowed face with two soft lamp-glow eyes (eyes stay visible)",
+    "replaces": "c-head-builder"
+   },
+   "legendary": {
+    "id": "leg-stack-sats",
+    "name": "Stack Sats",
+    "reskinOf": "magnet",
+    "look": "a grey hood over a stack of gold coins nobody has ever seen move; it spirals open and sucks loot in",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p06",
+    "p04"
+   ]
+  },
+  {
+   "trenchieId": "captain-banana-zone",
+   "name": "Captain Banana Zone",
+   "tag": "Banana Zone",
+   "loadout": "commons",
+   "fightStyle": "brawler",
+   "kit": {
+    "weapon": "c-swing",
+    "trinket": "leg-liquidity-wave",
+    "head": "c-head-maxi",
+    "body": "sig-captain-banana-zone"
+   },
+   "signaturePiece": {
+    "id": "sig-captain-banana-zone",
+    "name": "Banana Bandolier",
+    "slot": "body",
+    "look": "a bandolier of bananas slung across an open linen beach shirt",
+    "replaces": "c-body-maxi"
+   },
+   "legendary": {
+    "id": "leg-liquidity-wave",
+    "name": "Liquidity Wave",
+    "reskinOf": "shockwave",
+    "look": "a banana-yellow surfboard slammed flat; a sky-blue wave ring rolls out from it",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p12",
+    "p09"
+   ]
+  },
+  {
+   "trenchieId": "vitrenchik",
+   "name": "Vitrenchik",
+   "tag": "Vitrenchik",
+   "loadout": "commons",
+   "fightStyle": "brawler",
+   "kit": {
+    "weapon": "c-lob",
+    "trinket": "leg-tinker-coil",
+    "head": "sig-vitrenchik",
+    "body": "c-body-builder"
+   },
+   "signaturePiece": {
+    "id": "sig-vitrenchik",
+    "name": "Rainbow Unicorn Hat",
+    "slot": "head",
+    "look": "a soft hat with a rainbow-striped unicorn horn on top, over tousled light-brown hair (Pat)",
+    "replaces": "c-head-builder"
+   },
+   "legendary": {
+    "id": "leg-tinker-coil",
+    "name": "Tinker Coil",
+    "reskinOf": "chain_storm",
+    "look": "a hand-wound copper coil on a backpack; lilac sparks hop body to body",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p11",
+    "p07"
+   ]
+  },
+  {
+   "trenchieId": "laser-sailor",
+   "name": "Laser Sailor",
+   "tag": "Sailor",
+   "loadout": "commons",
+   "fightStyle": "survivor",
+   "kit": {
+    "weapon": "c-beam",
+    "trinket": "leg-laser-eyes",
+    "head": "sig-laser-sailor",
+    "body": "c-body-maxi"
+   },
+   "signaturePiece": {
+    "id": "sig-laser-sailor",
+    "name": "Silver Swept Hair",
+    "slot": "head",
+    "look": "swept-back silver-grey hair; bitcoin-orange as the only accent",
+    "replaces": "c-head-maxi"
+   },
+   "legendary": {
+    "id": "leg-laser-eyes",
+    "name": "Laser Eyes",
+    "reskinOf": "beam_sweep",
+    "look": "the eyes glow red, and a red beam sweeps the cone",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p15",
+    "p16"
+   ]
+  },
+  {
+   "trenchieId": "tommy-leeth",
+   "name": "Tommy Leeth",
+   "tag": "Leeth",
+   "loadout": "commons",
+   "fightStyle": "looter",
+   "kit": {
+    "weapon": "c-shot",
+    "trinket": "leg-ether-stack",
+    "head": "sig-tommy-leeth",
+    "body": "c-body-degen"
+   },
+   "signaturePiece": {
+    "id": "sig-tommy-leeth",
+    "name": "Ether Peak Cap",
+    "slot": "head",
+    "look": "a lilac cap with a blue band and a two-tone diamond standing on top (Pat; as drawn on the approved art board)",
+    "replaces": "c-head-degen"
+   },
+   "legendary": {
+    "id": "leg-ether-stack",
+    "name": "Ether Stack",
+    "reskinOf": "magnet",
+    "look": "a tower of lilac ether coins that whirls into a spiral and sucks loot in",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p10",
+    "p04"
+   ]
+  },
+  {
+   "trenchieId": "trenchtoly",
+   "name": "Trenchtoly",
+   "tag": "Trenchtoly",
+   "loadout": "commons",
+   "fightStyle": "hunter",
+   "kit": {
+    "weapon": "c-lunge",
+    "trinket": "leg-fast-finality",
+    "head": "sig-trenchtoly",
+    "body": "c-body-speedrunner"
+   },
+   "signaturePiece": {
+    "id": "sig-trenchtoly",
+    "name": "Gradient Ballcap",
+    "slot": "head",
+    "look": "a black baseball cap with a purple-to-green gradient brim",
+    "replaces": "c-head-speedrunner"
+   },
+   "legendary": {
+    "id": "leg-fast-finality",
+    "name": "Fast Finality",
+    "reskinOf": "blink_strike",
+    "look": "a green speed streak that ends in a stamped 'FINAL' tick mark behind the target",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p08",
+    "p11"
+   ]
+  },
+  {
+   "trenchieId": "kathie-moonwood",
+   "name": "Kathie Moonwood",
+   "tag": "Moonwood",
+   "loadout": "commons",
+   "fightStyle": "survivor",
+   "kit": {
+    "weapon": "c-lob",
+    "trinket": "leg-lifeboat",
+    "head": "sig-kathie-moonwood",
+    "body": "c-body-degen"
+   },
+   "signaturePiece": {
+    "id": "sig-kathie-moonwood",
+    "name": "Side-Part Bob & Specs",
+    "slot": "head",
+    "look": "a shoulder-length side-parted light-brown bob, with dark rectangular glasses framing the eyes",
+    "replaces": "c-head-degen"
+   },
+   "legendary": {
+    "id": "leg-lifeboat",
+    "name": "Lifeboat",
+    "reskinOf": "bubble",
+    "look": "a little wooden boat hull closes over her as a peach bubble",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p14",
+    "p05"
+   ]
+  },
+  {
+   "trenchieId": "illia-trenchukhin",
+   "name": "Illia Trenchukhin",
+   "tag": "Trenchukhin",
+   "loadout": "rares",
+   "fightStyle": "brawler",
+   "kit": {
+    "weapon": "r-zap",
+    "trinket": "leg-hydra-halo",
+    "head": "sig-illia-trenchukhin",
+    "body": "r-body-builder"
+   },
+   "signaturePiece": {
+    "id": "sig-illia-trenchukhin",
+    "name": "Nightshard Beanie",
+    "slot": "head",
+    "look": "a mint beanie with a folded brim and a dark N mark (Pat; pastel, as drawn on the approved art board)",
+    "replaces": "r-head-builder"
+   },
+   "legendary": {
+    "id": "leg-hydra-halo",
+    "name": "Hydra Halo",
+    "reskinOf": "beam_sweep",
+    "look": "a halo of eight tiny heads, each firing a thin sky-blue beam as the sweep passes",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p03",
+    "p09"
+   ]
+  },
+  {
+   "trenchieId": "eddie-lazertrench",
+   "name": "Eddie Lazertrench",
+   "tag": "Eddie",
+   "loadout": "rares",
+   "fightStyle": "survivor",
+   "kit": {
+    "weapon": "r-swing",
+    "trinket": "leg-loop-flywheel",
+    "head": "r-head-speedrunner",
+    "body": "sig-eddie-lazertrench"
+   },
+   "signaturePiece": {
+    "id": "sig-eddie-lazertrench",
+    "name": "Paradox Cube",
+    "slot": "body",
+    "look": "a plain wire cube floating by the shoulder (as drawn on the approved art board)",
+    "replaces": "r-body-speedrunner"
+   },
+   "legendary": {
+    "id": "leg-loop-flywheel",
+    "name": "Loop Flywheel",
+    "reskinOf": "shockwave",
+    "look": "a flywheel on the back spins up and throws a grey ring outward",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p09",
+    "p06"
+   ]
+  },
+  {
+   "trenchieId": "mert-mumtrench",
+   "name": "Mert Mumtrench",
+   "tag": "Mumtrench",
+   "loadout": "rares",
+   "fightStyle": "brawler",
+   "kit": {
+    "weapon": "r-shot",
+    "trinket": "leg-priority-fee",
+    "head": "sig-mert-mumtrench",
+    "body": "r-body-speedrunner"
+   },
+   "signaturePiece": {
+    "id": "sig-mert-mumtrench",
+    "name": "Night-Shift Headset",
+    "slot": "head",
+    "look": "a smooth bald dome under an always-on headset: a band over the crown, two ear cups, a mic with a speech bubble (mouth stays visible)",
+    "replaces": "r-head-speedrunner"
+   },
+   "legendary": {
+    "id": "leg-priority-fee",
+    "name": "Priority Fee",
+    "reskinOf": "magnet",
+    "look": "a mint toll gate; floor items queue through it to him, fastest first",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p07",
+    "p15"
+   ]
+  },
+  {
+   "trenchieId": "avichad",
+   "name": "Avichad",
+   "tag": "Avichad",
+   "loadout": "rares",
+   "fightStyle": "brawler",
+   "kit": {
+    "weapon": "r-zap",
+    "trinket": "leg-builder-census",
+    "head": "r-head-builder",
+    "body": "sig-avichad"
+   },
+   "signaturePiece": {
+    "id": "sig-avichad",
+    "name": "Trail Shell Jacket",
+    "slot": "body",
+    "look": "a black technical shell jacket with a headset mic clipped to the collar",
+    "replaces": "r-body-builder"
+   },
+   "legendary": {
+    "id": "leg-builder-census",
+    "name": "Builder Census",
+    "reskinOf": "chain_storm",
+    "look": "a clipboard that crackles; yellow tally marks jump from head to head",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p05",
+    "p12"
+   ]
+  },
+  {
+   "trenchieId": "kain-warrior",
+   "name": "Kain Warrior",
+   "tag": "Warrior",
+   "loadout": "rares",
+   "fightStyle": "looter",
+   "kit": {
+    "weapon": "r-swing",
+    "trinket": "leg-harvest-quake",
+    "head": "sig-kain-warrior",
+    "body": "r-body-builder"
+   },
+   "signaturePiece": {
+    "id": "sig-kain-warrior",
+    "name": "Spiked Fringe",
+    "slot": "head",
+    "look": "short hair spiked up at the front, greying at the sides",
+    "replaces": "r-head-builder"
+   },
+   "legendary": {
+    "id": "leg-harvest-quake",
+    "name": "Harvest Quake",
+    "reskinOf": "shockwave",
+    "look": "a pitchfork stamped into the dirt; a ring of sprouting crops bursts outward",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p02",
+    "p08"
+   ]
+  },
+  {
+   "trenchieId": "hameme-pumpeshi",
+   "name": "Hameme Pumpeshi",
+   "tag": "Pumpeshi",
+   "loadout": "rares",
+   "fightStyle": "hunter",
+   "kit": {
+    "weapon": "r-lunge",
+    "trinket": "leg-poker-face",
+    "head": "sig-hameme-pumpeshi",
+    "body": "r-body-degen"
+   },
+   "signaturePiece": {
+    "id": "sig-hameme-pumpeshi",
+    "name": "High-Roller Visor",
+    "slot": "head",
+    "look": "a green card-dealer visor on a smooth bald dome, brim above one raised sceptical brow",
+    "replaces": "r-head-degen"
+   },
+   "legendary": {
+    "id": "leg-poker-face",
+    "name": "Poker Face",
+    "reskinOf": "bubble",
+    "look": "a fanned hand of cards closes into a shield; it pops like a table flip",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p01",
+    "p15"
+   ]
+  },
+  {
+   "trenchieId": "stepan-gershunode",
+   "name": "Stepan Gershunode",
+   "tag": "Gershunode",
+   "loadout": "rares",
+   "fightStyle": "hunter",
+   "kit": {
+    "weapon": "r-beam",
+    "trinket": "leg-router-drone",
+    "head": "r-head-speedrunner",
+    "body": "sig-stepan-gershunode"
+   },
+   "signaturePiece": {
+    "id": "sig-stepan-gershunode",
+    "name": "Node Rack Backpack",
+    "slot": "body",
+    "look": "a compact server-rack backpack with blinking node lights",
+    "replaces": "r-body-speedrunner"
+   },
+   "legendary": {
+    "id": "leg-router-drone",
+    "name": "Router Drone",
+    "reskinOf": "blink_strike",
+    "look": "a small cream drone blinks out of his orbit and reappears behind the weakest brawler",
+    "serial": 1
+   },
+   "paletteIds": [
+    "p04",
+    "p10"
+   ]
+  }
+ ],
+ "items": [
+  {
+   "id": "st-bonk",
+   "name": "Driftwood Bonk",
+   "slot": "weapon",
+   "tier": "common",
+   "weapon": "swing",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 0,
+    "speed": 0,
+    "range": 3
+   },
+   "setTag": null,
+   "origin": "starter",
+   "house": null,
+   "starter": true
+  },
+  {
+   "id": "st-roll",
+   "name": "Dodge Roll",
+   "slot": "trinket",
+   "tier": "common",
+   "weapon": null,
+   "signature": "dodge_roll",
+   "reskinOf": null,
+   "stats": {
+    "damage": 0,
+    "cooldown": 4,
+    "hp": 3,
+    "speed": 3,
+    "range": 0
+   },
+   "setTag": null,
+   "origin": "starter",
+   "house": null,
+   "starter": true
+  },
+  {
+   "id": "st-cap",
+   "name": "Sun Cap",
+   "slot": "head",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 0,
+    "hp": 4,
+    "speed": 0,
+    "range": 3
+   },
+   "setTag": null,
+   "origin": "starter",
+   "house": null,
+   "starter": true
+  },
+  {
+   "id": "st-tee",
+   "name": "Beach Tee",
+   "slot": "body",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 0,
+    "cooldown": 3,
+    "hp": 4,
+    "speed": 3,
+    "range": 0
+   },
+   "setTag": null,
+   "origin": "starter",
+   "house": null,
+   "starter": true
+  },
+  {
+   "id": "c-swing",
+   "name": "Oar Swipe",
+   "slot": "weapon",
+   "tier": "common",
+   "weapon": "swing",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 2,
+    "hp": 3,
+    "speed": 1,
+    "range": 0
+   },
+   "setTag": "maxi",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-shot",
+   "name": "Pebble Sling",
+   "slot": "weapon",
+   "tier": "common",
+   "weapon": "shot",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 4,
+    "hp": 0,
+    "speed": 1,
+    "range": 2
+   },
+   "setTag": "degen",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-beam",
+   "name": "Trout",
+   "slot": "weapon",
+   "tier": "common",
+   "weapon": "beam",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 2,
+    "hp": 1,
+    "speed": 0,
+    "range": 4
+   },
+   "setTag": "builder",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-lob",
+   "name": "Coconut Mortar",
+   "slot": "weapon",
+   "tier": "common",
+   "weapon": "lob",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 2,
+    "hp": 1,
+    "speed": 0,
+    "range": 3
+   },
+   "setTag": "builder",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-zap",
+   "name": "Jelly Zapper",
+   "slot": "weapon",
+   "tier": "common",
+   "weapon": "zap",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 4,
+    "hp": 1,
+    "speed": 0,
+    "range": 2
+   },
+   "setTag": "degen",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-lunge",
+   "name": "Narwhal Pike",
+   "slot": "weapon",
+   "tier": "common",
+   "weapon": "lunge",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 2,
+    "hp": 1,
+    "speed": 4,
+    "range": 0
+   },
+   "setTag": "speedrunner",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-head-maxi",
+   "name": "Bucket Hat",
+   "slot": "head",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 2,
+    "hp": 4,
+    "speed": 0,
+    "range": 1
+   },
+   "setTag": "maxi",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-body-maxi",
+   "name": "Life Vest",
+   "slot": "body",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 2,
+    "cooldown": 3,
+    "hp": 4,
+    "speed": 0,
+    "range": 1
+   },
+   "setTag": "maxi",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-head-degen",
+   "name": "Party Cone",
+   "slot": "head",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 0,
+    "speed": 2,
+    "range": 1
+   },
+   "setTag": "degen",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-body-degen",
+   "name": "Hawaiian Shirt",
+   "slot": "body",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 2,
+    "hp": 0,
+    "speed": 3,
+    "range": 1
+   },
+   "setTag": "degen",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-head-speedrunner",
+   "name": "Sweatband",
+   "slot": "head",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 2,
+    "cooldown": 3,
+    "hp": 1,
+    "speed": 4,
+    "range": 0
+   },
+   "setTag": "speedrunner",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-body-speedrunner",
+   "name": "Wetsuit",
+   "slot": "body",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 2,
+    "hp": 1,
+    "speed": 4,
+    "range": 0
+   },
+   "setTag": "speedrunner",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-head-builder",
+   "name": "Hard Hat",
+   "slot": "head",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 2,
+    "cooldown": 3,
+    "hp": 1,
+    "speed": 0,
+    "range": 4
+   },
+   "setTag": "builder",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-body-builder",
+   "name": "Overalls",
+   "slot": "body",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 2,
+    "hp": 1,
+    "speed": 0,
+    "range": 4
+   },
+   "setTag": "builder",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-beam-sweep",
+   "name": "Pocket Laser",
+   "slot": "trinket",
+   "tier": "common",
+   "weapon": null,
+   "signature": "beam_sweep",
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 2,
+    "hp": 1,
+    "speed": 0,
+    "range": 4
+   },
+   "setTag": null,
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-chain-storm",
+   "name": "Static Sock",
+   "slot": "trinket",
+   "tier": "common",
+   "weapon": null,
+   "signature": "chain_storm",
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 4,
+    "hp": 1,
+    "speed": 0,
+    "range": 2
+   },
+   "setTag": null,
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-shockwave",
+   "name": "Thump Shell",
+   "slot": "trinket",
+   "tier": "common",
+   "weapon": null,
+   "signature": "shockwave",
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 2,
+    "hp": 4,
+    "speed": 0,
+    "range": 1
+   },
+   "setTag": null,
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-blink-strike",
+   "name": "Smoke Bomb",
+   "slot": "trinket",
+   "tier": "common",
+   "weapon": null,
+   "signature": "blink_strike",
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 2,
+    "hp": 1,
+    "speed": 3,
+    "range": 0
+   },
+   "setTag": null,
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-magnet",
+   "name": "Fridge Magnet",
+   "slot": "trinket",
+   "tier": "common",
+   "weapon": null,
+   "signature": "magnet",
+   "reskinOf": null,
+   "stats": {
+    "damage": 0,
+    "cooldown": 2,
+    "hp": 3,
+    "speed": 4,
+    "range": 1
+   },
+   "setTag": null,
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "c-bubble",
+   "name": "Bubble Wand",
+   "slot": "trinket",
+   "tier": "common",
+   "weapon": null,
+   "signature": "bubble",
+   "reskinOf": null,
+   "stats": {
+    "damage": 1,
+    "cooldown": 3,
+    "hp": 4,
+    "speed": 0,
+    "range": 2
+   },
+   "setTag": null,
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-swing",
+   "name": "Captain's Oar",
+   "slot": "weapon",
+   "tier": "rare",
+   "weapon": "swing",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 6,
+    "cooldown": 3,
+    "hp": 4,
+    "speed": 2,
+    "range": 1
+   },
+   "setTag": "maxi",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-shot",
+   "name": "Pearl Sling",
+   "slot": "weapon",
+   "tier": "rare",
+   "weapon": "shot",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 6,
+    "hp": 1,
+    "speed": 2,
+    "range": 3
+   },
+   "setTag": "degen",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-beam",
+   "name": "Prism Lens",
+   "slot": "weapon",
+   "tier": "rare",
+   "weapon": "beam",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 2,
+    "speed": 1,
+    "range": 6
+   },
+   "setTag": "builder",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-lob",
+   "name": "Golden Coconut Mortar",
+   "slot": "weapon",
+   "tier": "rare",
+   "weapon": "lob",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 6,
+    "cooldown": 3,
+    "hp": 2,
+    "speed": 1,
+    "range": 4
+   },
+   "setTag": "builder",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-zap",
+   "name": "Moon Jelly Zapper",
+   "slot": "weapon",
+   "tier": "rare",
+   "weapon": "zap",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 6,
+    "hp": 2,
+    "speed": 1,
+    "range": 3
+   },
+   "setTag": "degen",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-lunge",
+   "name": "Swordfish Pike",
+   "slot": "weapon",
+   "tier": "rare",
+   "weapon": "lunge",
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 2,
+    "speed": 6,
+    "range": 1
+   },
+   "setTag": "speedrunner",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-head-maxi",
+   "name": "Lifeguard Helmet",
+   "slot": "head",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 6,
+    "speed": 1,
+    "range": 2
+   },
+   "setTag": "maxi",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-body-maxi",
+   "name": "Diving Suit",
+   "slot": "body",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 4,
+    "hp": 6,
+    "speed": 1,
+    "range": 2
+   },
+   "setTag": "maxi",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-head-degen",
+   "name": "Neon Visor",
+   "slot": "head",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 6,
+    "cooldown": 4,
+    "hp": 1,
+    "speed": 3,
+    "range": 2
+   },
+   "setTag": "degen",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-body-degen",
+   "name": "Velvet Robe",
+   "slot": "body",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 6,
+    "cooldown": 3,
+    "hp": 1,
+    "speed": 4,
+    "range": 2
+   },
+   "setTag": "degen",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-head-speedrunner",
+   "name": "Aero Goggles",
+   "slot": "head",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 4,
+    "hp": 2,
+    "speed": 6,
+    "range": 1
+   },
+   "setTag": "speedrunner",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-body-speedrunner",
+   "name": "Racing Jersey",
+   "slot": "body",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 2,
+    "speed": 6,
+    "range": 1
+   },
+   "setTag": "speedrunner",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-head-builder",
+   "name": "Surveyor Hat",
+   "slot": "head",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 4,
+    "hp": 2,
+    "speed": 1,
+    "range": 6
+   },
+   "setTag": "builder",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-body-builder",
+   "name": "Tool Belt Vest",
+   "slot": "body",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 2,
+    "speed": 1,
+    "range": 6
+   },
+   "setTag": "builder",
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-beam-sweep",
+   "name": "Lighthouse Charm",
+   "slot": "trinket",
+   "tier": "rare",
+   "weapon": null,
+   "signature": "beam_sweep",
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 2,
+    "speed": 1,
+    "range": 6
+   },
+   "setTag": null,
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-chain-storm",
+   "name": "Storm Jar",
+   "slot": "trinket",
+   "tier": "rare",
+   "weapon": null,
+   "signature": "chain_storm",
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 6,
+    "hp": 2,
+    "speed": 1,
+    "range": 3
+   },
+   "setTag": null,
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-shockwave",
+   "name": "Conch of Thunder",
+   "slot": "trinket",
+   "tier": "rare",
+   "weapon": null,
+   "signature": "shockwave",
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 6,
+    "speed": 1,
+    "range": 2
+   },
+   "setTag": null,
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-blink-strike",
+   "name": "Ink Cloud Locket",
+   "slot": "trinket",
+   "tier": "rare",
+   "weapon": null,
+   "signature": "blink_strike",
+   "reskinOf": null,
+   "stats": {
+    "damage": 6,
+    "cooldown": 3,
+    "hp": 2,
+    "speed": 4,
+    "range": 1
+   },
+   "setTag": null,
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-magnet",
+   "name": "Horseshoe Magnet",
+   "slot": "trinket",
+   "tier": "rare",
+   "weapon": null,
+   "signature": "magnet",
+   "reskinOf": null,
+   "stats": {
+    "damage": 1,
+    "cooldown": 3,
+    "hp": 4,
+    "speed": 6,
+    "range": 2
+   },
+   "setTag": null,
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "r-bubble",
+   "name": "Pearl Bubble Ring",
+   "slot": "trinket",
+   "tier": "rare",
+   "weapon": null,
+   "signature": "bubble",
+   "reskinOf": null,
+   "stats": {
+    "damage": 2,
+    "cooldown": 4,
+    "hp": 6,
+    "speed": 1,
+    "range": 3
+   },
+   "setTag": null,
+   "origin": "pool",
+   "house": null,
+   "starter": false
+  },
+  {
+   "id": "leg-stack-sats",
+   "name": "Stack Sats",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "magnet",
+   "reskinOf": "magnet",
+   "stats": {
+    "damage": 2,
+    "cooldown": 4,
+    "hp": 6,
+    "speed": 9,
+    "range": 3
+   },
+   "setTag": null,
+   "origin": "house:satrenchi",
+   "house": "satrenchi",
+   "starter": false
+  },
+  {
+   "id": "sig-satrenchi",
+   "name": "Genesis Hood",
+   "slot": "head",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 2,
+    "cooldown": 3,
+    "hp": 1,
+    "speed": 0,
+    "range": 4
+   },
+   "setTag": "builder",
+   "origin": "house:satrenchi",
+   "house": "satrenchi",
+   "starter": false
+  },
+  {
+   "id": "leg-liquidity-wave",
+   "name": "Liquidity Wave",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "shockwave",
+   "reskinOf": "shockwave",
+   "stats": {
+    "damage": 6,
+    "cooldown": 4,
+    "hp": 9,
+    "speed": 2,
+    "range": 3
+   },
+   "setTag": null,
+   "origin": "house:captain-banana-zone",
+   "house": "captain-banana-zone",
+   "starter": false
+  },
+  {
+   "id": "sig-captain-banana-zone",
+   "name": "Banana Bandolier",
+   "slot": "body",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 2,
+    "cooldown": 3,
+    "hp": 4,
+    "speed": 0,
+    "range": 1
+   },
+   "setTag": "maxi",
+   "origin": "house:captain-banana-zone",
+   "house": "captain-banana-zone",
+   "starter": false
+  },
+  {
+   "id": "leg-tinker-coil",
+   "name": "Tinker Coil",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "chain_storm",
+   "reskinOf": "chain_storm",
+   "stats": {
+    "damage": 6,
+    "cooldown": 9,
+    "hp": 3,
+    "speed": 2,
+    "range": 4
+   },
+   "setTag": null,
+   "origin": "house:vitrenchik",
+   "house": "vitrenchik",
+   "starter": false
+  },
+  {
+   "id": "sig-vitrenchik",
+   "name": "Rainbow Unicorn Hat",
+   "slot": "head",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 2,
+    "cooldown": 3,
+    "hp": 1,
+    "speed": 0,
+    "range": 4
+   },
+   "setTag": "builder",
+   "origin": "house:vitrenchik",
+   "house": "vitrenchik",
+   "starter": false
+  },
+  {
+   "id": "leg-laser-eyes",
+   "name": "Laser Eyes",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "beam_sweep",
+   "reskinOf": "beam_sweep",
+   "stats": {
+    "damage": 6,
+    "cooldown": 4,
+    "hp": 3,
+    "speed": 2,
+    "range": 9
+   },
+   "setTag": null,
+   "origin": "house:laser-sailor",
+   "house": "laser-sailor",
+   "starter": false
+  },
+  {
+   "id": "sig-laser-sailor",
+   "name": "Silver Swept Hair",
+   "slot": "head",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 2,
+    "hp": 4,
+    "speed": 0,
+    "range": 1
+   },
+   "setTag": "maxi",
+   "origin": "house:laser-sailor",
+   "house": "laser-sailor",
+   "starter": false
+  },
+  {
+   "id": "leg-ether-stack",
+   "name": "Ether Stack",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "magnet",
+   "reskinOf": "magnet",
+   "stats": {
+    "damage": 2,
+    "cooldown": 4,
+    "hp": 6,
+    "speed": 9,
+    "range": 3
+   },
+   "setTag": null,
+   "origin": "house:tommy-leeth",
+   "house": "tommy-leeth",
+   "starter": false
+  },
+  {
+   "id": "sig-tommy-leeth",
+   "name": "Ether Peak Cap",
+   "slot": "head",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 0,
+    "speed": 2,
+    "range": 1
+   },
+   "setTag": "degen",
+   "origin": "house:tommy-leeth",
+   "house": "tommy-leeth",
+   "starter": false
+  },
+  {
+   "id": "leg-fast-finality",
+   "name": "Fast Finality",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "blink_strike",
+   "reskinOf": "blink_strike",
+   "stats": {
+    "damage": 9,
+    "cooldown": 4,
+    "hp": 3,
+    "speed": 6,
+    "range": 2
+   },
+   "setTag": null,
+   "origin": "house:trenchtoly",
+   "house": "trenchtoly",
+   "starter": false
+  },
+  {
+   "id": "sig-trenchtoly",
+   "name": "Gradient Ballcap",
+   "slot": "head",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 2,
+    "cooldown": 3,
+    "hp": 1,
+    "speed": 4,
+    "range": 0
+   },
+   "setTag": "speedrunner",
+   "origin": "house:trenchtoly",
+   "house": "trenchtoly",
+   "starter": false
+  },
+  {
+   "id": "leg-lifeboat",
+   "name": "Lifeboat",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "bubble",
+   "reskinOf": "bubble",
+   "stats": {
+    "damage": 3,
+    "cooldown": 6,
+    "hp": 9,
+    "speed": 2,
+    "range": 4
+   },
+   "setTag": null,
+   "origin": "house:kathie-moonwood",
+   "house": "kathie-moonwood",
+   "starter": false
+  },
+  {
+   "id": "sig-kathie-moonwood",
+   "name": "Side-Part Bob & Specs",
+   "slot": "head",
+   "tier": "common",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 0,
+    "speed": 2,
+    "range": 1
+   },
+   "setTag": "degen",
+   "origin": "house:kathie-moonwood",
+   "house": "kathie-moonwood",
+   "starter": false
+  },
+  {
+   "id": "leg-hydra-halo",
+   "name": "Hydra Halo",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "beam_sweep",
+   "reskinOf": "beam_sweep",
+   "stats": {
+    "damage": 6,
+    "cooldown": 4,
+    "hp": 3,
+    "speed": 2,
+    "range": 9
+   },
+   "setTag": null,
+   "origin": "house:illia-trenchukhin",
+   "house": "illia-trenchukhin",
+   "starter": false
+  },
+  {
+   "id": "sig-illia-trenchukhin",
+   "name": "Nightshard Beanie",
+   "slot": "head",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 4,
+    "hp": 2,
+    "speed": 1,
+    "range": 6
+   },
+   "setTag": "builder",
+   "origin": "house:illia-trenchukhin",
+   "house": "illia-trenchukhin",
+   "starter": false
+  },
+  {
+   "id": "leg-loop-flywheel",
+   "name": "Loop Flywheel",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "shockwave",
+   "reskinOf": "shockwave",
+   "stats": {
+    "damage": 6,
+    "cooldown": 4,
+    "hp": 9,
+    "speed": 2,
+    "range": 3
+   },
+   "setTag": null,
+   "origin": "house:eddie-lazertrench",
+   "house": "eddie-lazertrench",
+   "starter": false
+  },
+  {
+   "id": "sig-eddie-lazertrench",
+   "name": "Paradox Cube",
+   "slot": "body",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 2,
+    "speed": 6,
+    "range": 1
+   },
+   "setTag": "speedrunner",
+   "origin": "house:eddie-lazertrench",
+   "house": "eddie-lazertrench",
+   "starter": false
+  },
+  {
+   "id": "leg-priority-fee",
+   "name": "Priority Fee",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "magnet",
+   "reskinOf": "magnet",
+   "stats": {
+    "damage": 2,
+    "cooldown": 4,
+    "hp": 6,
+    "speed": 9,
+    "range": 3
+   },
+   "setTag": null,
+   "origin": "house:mert-mumtrench",
+   "house": "mert-mumtrench",
+   "starter": false
+  },
+  {
+   "id": "sig-mert-mumtrench",
+   "name": "Night-Shift Headset",
+   "slot": "head",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 4,
+    "hp": 2,
+    "speed": 6,
+    "range": 1
+   },
+   "setTag": "speedrunner",
+   "origin": "house:mert-mumtrench",
+   "house": "mert-mumtrench",
+   "starter": false
+  },
+  {
+   "id": "leg-builder-census",
+   "name": "Builder Census",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "chain_storm",
+   "reskinOf": "chain_storm",
+   "stats": {
+    "damage": 6,
+    "cooldown": 9,
+    "hp": 3,
+    "speed": 2,
+    "range": 4
+   },
+   "setTag": null,
+   "origin": "house:avichad",
+   "house": "avichad",
+   "starter": false
+  },
+  {
+   "id": "sig-avichad",
+   "name": "Trail Shell Jacket",
+   "slot": "body",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 2,
+    "speed": 1,
+    "range": 6
+   },
+   "setTag": "builder",
+   "origin": "house:avichad",
+   "house": "avichad",
+   "starter": false
+  },
+  {
+   "id": "leg-harvest-quake",
+   "name": "Harvest Quake",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "shockwave",
+   "reskinOf": "shockwave",
+   "stats": {
+    "damage": 6,
+    "cooldown": 4,
+    "hp": 9,
+    "speed": 2,
+    "range": 3
+   },
+   "setTag": null,
+   "origin": "house:kain-warrior",
+   "house": "kain-warrior",
+   "starter": false
+  },
+  {
+   "id": "sig-kain-warrior",
+   "name": "Spiked Fringe",
+   "slot": "head",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 3,
+    "cooldown": 4,
+    "hp": 2,
+    "speed": 1,
+    "range": 6
+   },
+   "setTag": "builder",
+   "origin": "house:kain-warrior",
+   "house": "kain-warrior",
+   "starter": false
+  },
+  {
+   "id": "leg-poker-face",
+   "name": "Poker Face",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "bubble",
+   "reskinOf": "bubble",
+   "stats": {
+    "damage": 3,
+    "cooldown": 6,
+    "hp": 9,
+    "speed": 2,
+    "range": 4
+   },
+   "setTag": null,
+   "origin": "house:hameme-pumpeshi",
+   "house": "hameme-pumpeshi",
+   "starter": false
+  },
+  {
+   "id": "sig-hameme-pumpeshi",
+   "name": "High-Roller Visor",
+   "slot": "head",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 6,
+    "cooldown": 4,
+    "hp": 1,
+    "speed": 3,
+    "range": 2
+   },
+   "setTag": "degen",
+   "origin": "house:hameme-pumpeshi",
+   "house": "hameme-pumpeshi",
+   "starter": false
+  },
+  {
+   "id": "leg-router-drone",
+   "name": "Router Drone",
+   "slot": "trinket",
+   "tier": "legendary",
+   "weapon": null,
+   "signature": "blink_strike",
+   "reskinOf": "blink_strike",
+   "stats": {
+    "damage": 9,
+    "cooldown": 4,
+    "hp": 3,
+    "speed": 6,
+    "range": 2
+   },
+   "setTag": null,
+   "origin": "house:stepan-gershunode",
+   "house": "stepan-gershunode",
+   "starter": false
+  },
+  {
+   "id": "sig-stepan-gershunode",
+   "name": "Node Rack Backpack",
+   "slot": "body",
+   "tier": "rare",
+   "weapon": null,
+   "signature": null,
+   "reskinOf": null,
+   "stats": {
+    "damage": 4,
+    "cooldown": 3,
+    "hp": 2,
+    "speed": 6,
+    "range": 1
+   },
+   "setTag": "speedrunner",
+   "origin": "house:stepan-gershunode",
+   "house": "stepan-gershunode",
+   "starter": false
+  }
+ ],
+ "rivals": [
+  {
+   "a": "laser-sailor",
+   "b": "vitrenchik",
+   "reason": "one coin forever against a thousand experiments; the first beef on the island"
+  },
+  {
+   "a": "trenchtoly",
+   "b": "illia-trenchukhin",
+   "reason": "whose chain is faster: the speedster against the builder of the home chain"
+  },
+  {
+   "a": "tommy-leeth",
+   "b": "hameme-pumpeshi",
+   "reason": "the bull who always sees a bigger cycle ahead against the sceptic who wants proof first: who called the top"
+  },
+  {
+   "a": "captain-banana-zone",
+   "b": "kathie-moonwood",
+   "reason": "two chart forecasters with rival curves; each brawl settles whose line was right this week"
+  }
+ ],
+ "alliances": [
+  {
+   "a": "mert-mumtrench",
+   "b": "trenchtoly",
+   "reason": "same-chain crew: they back each other's speed claims on the timeline"
+  },
+  {
+   "a": "avichad",
+   "b": "stepan-gershunode",
+   "reason": "both think agents will hire agents; they split the work and the loot"
+  }
+ ]
+}

@@ -2,7 +2,7 @@
 
 Trenchie Arena is an endless AI free-for-all we're building on NEAR. You'll snap in a persona. It'll fight for gear, predict its own KOs each life and stake testnet NEAR on the call if you want. Money, meet mouth.
 
-The hackathon started on 2026-11-01. Entries are dated in UTC, oldest first, and each one says what we decided or built and how to check it. Where the evidence isn't in this repo yet, the entry says "not in this repo yet". The GitHub copy holds only this log; game feature code is not there yet. Until 2026-11-06 the game was called Trenchie Village: older entries stay as written, and a dated update marks what has changed since.
+The hackathon started on 2026-11-01. Entries are dated in UTC, oldest first, and each one says what we decided or built and how to check it. Where the evidence isn't in this repo yet, the entry says "not in this repo yet". The GitHub copy held only this log until 2026-11-10, when the first game code landed; that entry says what is in it. Until 2026-11-06 the game was called Trenchie Village: older entries stay as written, and a dated update marks what has changed since.
 
 **We rescoped on 2026-11-06.** The village and its economy are gone, and the game is now Trenchie Arena. Entries before that date describe the old plan; the rescope entry below says what changed.
 
@@ -211,20 +211,25 @@ The room owner can now run the room from the Coharness app: its settings and the
 
 Check: not in this repo; the owner controls live in Coharness. The member side comes to the game next.
 
+## 2026-11-10 · The first game code lands here
+
+Until now this repo held only this log. It now holds the game's first tree: the deterministic arena sim and its server, the room that outside agents snap into, the 14 house personas on one documented format with a checker and the lore behind them, SNAP.md, the members' page, the reviewer desk, the LICENSE and a `make test`.
+
+A separate reviewer passed the tree before it came here. A gate that sweeps it for secrets, real names and private paths prints 0 lines on every scan, and a fresh clone passes `make test` in about six and a half minutes.
+
+Check: clone the repo, run `make setup`, then `make test`, then `python3 -I near/tools/check_snap.py`, which prints `SNAP.md: OK`. `make demo` and `make live` still print NOT BUILT. Nothing here touches a chain, a wallet or a model key.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
 
 - `trenchie_nft` and `arena` for mainnet and `market` for testnet, with `cargo test`
 - the gas measurements that set the batch size
-- the arena sim, its determinism test and the balance sweep
-- the login modal and the persona creator
-- the common persona format, migrated sheets and their checkers
-- the room, its game connections and checks for outside agents
+- the balance sweep's final report
+- the arena view, the 14 house models and the item kit
+- the login modal, the join flow and the persona creator
 - the prediction scoring and its public log
-- SNAP.md, the spec any agent will follow to snap in; humans will snap in with a NEAR wallet and their own model
-- `make test` and `make demo`; `make demo` will need no keys, run in under 5 minutes, re-simulate a fixed set of recorded segments and check each final hash against the hash written on mainnet, fetched from archival RPC
-- the LICENSE
+- `make demo`: it will need no keys, run in under 5 minutes, re-simulate a fixed set of recorded segments and check each final hash against the hash written on mainnet, fetched from archival RPC
 - the hosted arena, up before review starts on 2026-11-16
 
 The repo goes public before submissions close at 2026-11-14T23:59:00Z.

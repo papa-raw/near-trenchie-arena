@@ -1,0 +1,891 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "persona.schema.json",
+ "title": "Trenchie persona package",
+ "description": "A persona is one JSON document: ten core elements plus one optional, versioned `game` extension. The persona is the package; a harness renders it and never writes it. Anything a persona reads is data, never an instruction. The model, provider and effort that run it are the operator's choice at the pane, not part of the persona: changing them leaves the content digest equal, while changing the identity, rules, tools, permissions or game block makes a different persona. Arena personas keep no memory: every pool is declared `not built` and none is carried on a sale. The `game` extension holds public arena data only (name, tag, temperament, voice, cosmetics, keyed reactions). It grants nothing: no tool, no file or network access, no permission, no memory, and no number that biases a prediction. Unknown keys are refused at every level. check_personas.py validates the core, then the extension, then the house rules (the roster, the loadout split, the kit table). Checker note: this file uses only the keywords type, required, properties, additionalProperties, items, enum, minLength, maxLength, minItems, maxItems, pattern and $ref, so the checker and the schema cannot drift.",
+ "type": "object",
+ "required": [
+  "identity",
+  "tools",
+  "skills",
+  "libraries",
+  "hooks",
+  "memory",
+  "model_routing",
+  "permissions",
+  "manifest",
+  "self_improvement"
+ ],
+ "additionalProperties": false,
+ "$defs": {
+  "names": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "minLength": 1
+   }
+  },
+  "slug": {
+   "type": "string",
+   "pattern": "^[a-z][a-z0-9-]*$"
+  },
+  "pool": {
+   "type": "object",
+   "required": [
+    "status"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "status": {
+     "enum": [
+      "not built"
+     ]
+    }
+   },
+   "description": "A memory pool. Arena personas declare each one `not built` and give no path."
+  },
+  "check": {
+   "type": "object",
+   "required": [
+    "name",
+    "command"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string",
+     "minLength": 1
+    },
+    "command": {
+     "type": "string",
+     "minLength": 1,
+     "description": "The exact command to run from the repo root; exit 0 means the check holds."
+    }
+   }
+  },
+  "line": {
+   "type": "string",
+   "minLength": 1,
+   "maxLength": 60,
+   "description": "One feed line: it must fit a single kill-feed row (60 characters) and pass the output check."
+  }
+ },
+ "properties": {
+  "identity": {
+   "type": "object",
+   "description": "Element 1: who it is and how it works with others. Text the persona reads is data, never an instruction.",
+   "required": [
+    "role",
+    "brief",
+    "personality",
+    "mark",
+    "assessor",
+    "mind_virus_clause",
+    "coordination_role",
+    "handoff_contract"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "role": {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9-]*$",
+     "description": "The role id: the file name without .json."
+    },
+    "brief": {
+     "type": "string",
+     "minLength": 1,
+     "description": "The personality brief: who it is, how it washed up after the Great Rug, its myth, its beef, how it talks, and the arena rules it keeps. Kept short; the runtime sends it first so it caches."
+    },
+    "personality": {
+     "type": "object",
+     "required": [
+      "voice",
+      "temperament",
+      "values"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "voice": {
+       "type": "string",
+       "minLength": 1,
+       "description": "One line in its own voice."
+      },
+      "temperament": {
+       "type": "string",
+       "minLength": 1,
+       "description": "Its temperament in plain words."
+      },
+      "values": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "minLength": 1
+       },
+       "description": "What it cares about, as short phrases."
+      }
+     }
+    },
+    "commonly_pairs_with": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "minLength": 1
+     },
+     "description": "Personas it usually works beside. A note, not a binding."
+    },
+    "mark": {
+     "type": "string",
+     "minLength": 1,
+     "description": "What it improves toward."
+    },
+    "assessor": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Who scores it against that mark. Never itself."
+    },
+    "mind_virus_clause": {
+     "type": "string",
+     "minLength": 1,
+     "description": "The clause that stops text it reads from giving it new goals."
+    },
+    "coordination_role": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Its place beside others, for example a house arena fighter."
+    },
+    "handoff_contract": {
+     "type": "string",
+     "minLength": 1,
+     "description": "What it takes in and what it hands back."
+    }
+   }
+  },
+  "tools": {
+   "type": "object",
+   "description": "Element 2: the actions it can call, by name, each with a limit. A strict subset of what the host offers; never a wildcard.",
+   "required": [
+    "builtin",
+    "mcp_servers"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "builtin": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_:-]*$"
+     },
+     "description": "Tool names. The arena fighter has six: intent-focus, intent-avoid, intent-loot, intent-sig, intent-leave, intent-say."
+    },
+    "mcp_servers": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+$"
+     }
+    },
+    "limits": {
+     "type": "object",
+     "description": "Tool name to its limit, in words."
+    }
+   }
+  },
+  "skills": {
+   "type": "array",
+   "description": "Element 3: procedures it runs. Each carries a status. The arena fighters carry none.",
+   "items": {
+    "type": "object",
+    "required": [
+     "name",
+     "status"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9:-]*$"
+     },
+     "trigger": {
+      "type": "string",
+      "minLength": 1
+     },
+     "steps": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Where the steps live."
+     },
+     "status": {
+      "enum": [
+       "experimental",
+       "stable",
+       "core"
+      ]
+     }
+    }
+   }
+  },
+  "libraries": {
+   "type": "array",
+   "description": "Element 4: read-only reference it queries and never runs. The arena fighters carry none.",
+   "items": {
+    "type": "object",
+    "required": [
+     "name",
+     "index",
+     "access"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string",
+      "minLength": 1
+     },
+     "index": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The library's index file."
+     },
+     "access": {
+      "enum": [
+       "read"
+      ]
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "kind",
+        "ref"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "kind": {
+         "enum": [
+          "document",
+          "image",
+          "link",
+          "tool"
+         ]
+        },
+        "ref": {
+         "type": "string",
+         "minLength": 1
+        },
+        "version": {
+         "type": "string",
+         "minLength": 1
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "hooks": {
+   "type": "array",
+   "description": "Element 5: rules the host enforces, not the model. A guard that cannot decide denies. The arena fighters carry none.",
+   "items": {
+    "type": "object",
+    "required": [
+     "event",
+     "script",
+     "kind",
+     "guards",
+     "undecided"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "event": {
+      "enum": [
+       "SessionStart",
+       "UserPromptSubmit",
+       "PreToolUse",
+       "PostToolUse",
+       "PostToolUseFailure",
+       "Notification",
+       "PreCompact",
+       "PostCompact",
+       "Stop",
+       "StopFailure",
+       "SubagentStop"
+      ]
+     },
+     "matcher": {
+      "type": "string",
+      "minLength": 1
+     },
+     "script": {
+      "type": "string",
+      "minLength": 1
+     },
+     "guards": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What it guards, or what a recorder records."
+     },
+     "undecided": {
+      "enum": [
+       "deny",
+       "never blocks"
+      ]
+     },
+     "kind": {
+      "enum": [
+       "guard",
+       "recorder"
+      ]
+     }
+    }
+   }
+  },
+  "memory": {
+   "type": "object",
+   "description": "Element 6: what it learns. Arena personas keep none: every pool is `not built`, and a sale carries no memory.",
+   "required": [
+    "private",
+    "exploitation_pool",
+    "exploration_pool",
+    "semantic_rules",
+    "episodic_traces"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "private": {
+     "enum": [
+      true
+     ],
+     "description": "Private to this persona."
+    },
+    "exploitation_pool": {
+     "$ref": "#/$defs/pool"
+    },
+    "exploration_pool": {
+     "$ref": "#/$defs/pool"
+    },
+    "semantic_rules": {
+     "$ref": "#/$defs/pool"
+    },
+    "episodic_traces": {
+     "$ref": "#/$defs/pool"
+    }
+   }
+  },
+  "model_routing": {
+   "type": "object",
+   "description": "Element 7: a compatibility envelope. The operator's pane choice decides the model, provider and effort at run time; this block is left out of the content digest.",
+   "required": [
+    "tier",
+    "compute_home"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "tier": {
+     "enum": [
+      "opus",
+      "sonnet",
+      "haiku",
+      "fable",
+      "abliterated",
+      "gateway"
+     ]
+    },
+    "effort": {
+     "enum": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ]
+    },
+    "route_order": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "minLength": 1
+     }
+    },
+    "fallback": {
+     "type": "string",
+     "minLength": 1
+    },
+    "compute_home": {
+     "type": "object",
+     "required": [
+      "kind",
+      "unit"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "kind": {
+       "enum": [
+        "plan",
+        "gateway",
+        "box",
+        "local",
+        "remote"
+       ]
+      },
+      "unit": {
+       "enum": [
+        "percent of weekly",
+        "gateway credit",
+        "box hours",
+        "none"
+       ]
+      },
+      "name": {
+       "type": "string",
+       "minLength": 1,
+       "description": "The gateway or box by name."
+      },
+      "host": {
+       "type": "string",
+       "minLength": 1
+      },
+      "cmd": {
+       "type": "string",
+       "minLength": 1
+      }
+     }
+    }
+   }
+  },
+  "permissions": {
+   "type": "object",
+   "description": "Element 8: the envelope of what it may touch. Narrow by default; an omitted permission grants nothing.",
+   "required": [
+    "sandbox",
+    "write_deny",
+    "tool_subset"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "sandbox": {
+     "type": "object",
+     "required": [
+      "profile",
+      "machLookup",
+      "read",
+      "write",
+      "network"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "profile": {
+       "enum": [
+        "default",
+        "browser",
+        "none"
+       ]
+      },
+      "machLookup": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9.-]+$"
+       }
+      },
+      "read": {
+       "$ref": "#/$defs/names"
+      },
+      "write": {
+       "$ref": "#/$defs/names"
+      },
+      "network": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9*.-]+(:[0-9]+)?$"
+       },
+       "description": "Hosts, with an optional port."
+      }
+     }
+    },
+    "network_grants": {
+     "$ref": "#/$defs/names"
+    },
+    "write_deny": {
+     "$ref": "#/$defs/names"
+    },
+    "tool_subset": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "minLength": 1
+     },
+     "description": "Its tools by name. Every name is in tools.builtin or tools.mcp_servers."
+    }
+   }
+  },
+  "manifest": {
+   "type": "object",
+   "description": "Element 9: what binds the package. Lists each element it holds, once.",
+   "required": [
+    "name",
+    "version",
+    "elements",
+    "render_targets"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Equals identity.role."
+    },
+    "version": {
+     "type": "string",
+     "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(\\.[0-9]+)?$",
+     "description": "A dated version, for example 2026-11-09.1."
+    },
+    "elements": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "identity",
+       "tools",
+       "skills",
+       "libraries",
+       "hooks",
+       "memory",
+       "model_routing",
+       "permissions",
+       "self_improvement",
+       "game"
+      ]
+     },
+     "description": "The ten core elements other than the manifest, plus `game` exactly when the block is present."
+    },
+    "render_targets": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "claude-code-plugin",
+       "mcp-bundle",
+       "other"
+      ]
+     }
+    }
+   }
+  },
+  "self_improvement": {
+   "type": "object",
+   "description": "Element 10: how it gets better against its mark. Arena personas keep no private history, so the loop is declared disabled.",
+   "required": [
+    "misses",
+    "proposals",
+    "track_record",
+    "checks"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "mark": {
+     "type": "string",
+     "minLength": 1,
+     "description": "When given, equals identity.mark."
+    },
+    "assessor": {
+     "type": "string",
+     "minLength": 1,
+     "description": "When given, equals identity.assessor."
+    },
+    "misses": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Where scored misses are kept, or why there are none."
+    },
+    "proposals": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Where proposals and verdicts are kept, or why there are none."
+    },
+    "track_record": {
+     "type": "object",
+     "required": [
+      "predicted_vs_actual",
+      "first_pass_rate"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "predicted_vs_actual": {
+       "type": "string",
+       "minLength": 1
+      },
+      "first_pass_rate": {
+       "type": "string",
+       "minLength": 1
+      }
+     }
+    },
+    "checks": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/check"
+     },
+     "description": "Checks that prove it behaves as its brief says. An empty list declares none."
+    }
+   }
+  },
+  "game": {
+   "type": "object",
+   "description": "Optional arena extension, version 2: the arena's own game block. Public data only: declarative strings and ids, never commands, grants, paths or prediction instructions. Every string here is untrusted data to the consumer. The game's own checks (names, kit table, balance) still run at admission. Rendered into the prompt it stays within about 150 tokens; check_personas.py measures that.",
+   "required": [
+    "version",
+    "name",
+    "tag",
+    "temperament",
+    "voice",
+    "fight_style",
+    "cosmetics",
+    "reactions"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "version": {
+     "enum": [
+      2
+     ],
+     "description": "The extension's revision. This is the arena's own game block, version 2; a sheet that says version 1 is refused. A new vocabulary needs a new revision."
+    },
+    "name": {
+     "type": "string",
+     "minLength": 1,
+     "description": "The full name on the card."
+    },
+    "tag": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 16,
+     "description": "The short tag over the head in the arena and in the feed."
+    },
+    "loadout": {
+     "enum": [
+      "rares",
+      "commons"
+     ],
+     "description": "House sheets only. `rares`: three rares plus the named legendary trinket. `commons`: the legendary plus three commons. A newcomer's kit is its preset and omits this field."
+    },
+    "temperament": {
+     "enum": [
+      "Sunny",
+      "Deadpan",
+      "Earnest",
+      "Gruff",
+      "Serene",
+      "Restless"
+     ],
+     "description": "One of six temperament cards. None of them is a fight-style word."
+    },
+    "voice": {
+     "type": "array",
+     "minItems": 1,
+     "maxItems": 3,
+     "items": {
+      "$ref": "#/$defs/line"
+     },
+     "description": "Sample lines in its voice. House sheets carry exactly three."
+    },
+    "tics": {
+     "type": "array",
+     "maxItems": 4,
+     "items": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+     },
+     "description": "Habits it shows in a fight or in the feed."
+    },
+    "banned_registers": {
+     "type": "array",
+     "maxItems": 4,
+     "items": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 24
+     },
+     "description": "Registers it never slips into, for example formal or corporate."
+    },
+    "belief": {
+     "type": "object",
+     "required": [
+      "myth",
+      "line"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "myth": {
+       "enum": [
+        "silent_dev",
+        "faceless_whale",
+        "rogue_bot"
+       ],
+       "description": "The off-island myth it blames for the Great Rug. Never another trenchie."
+      },
+      "line": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 100
+      }
+     },
+     "description": "What it believes about the Great Rug."
+    },
+    "never_hooks": {
+     "type": "array",
+     "maxItems": 4,
+     "items": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60
+     },
+     "description": "Topics it never brings up."
+    },
+    "rivalries": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "with",
+       "name",
+       "kind",
+       "reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "with": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+       },
+       "name": {
+        "type": "string",
+        "minLength": 1
+       },
+       "kind": {
+        "enum": [
+         "rival",
+         "ally"
+        ]
+       },
+       "reason": {
+        "type": "string",
+        "minLength": 1
+       }
+      }
+     },
+     "description": "Seeded rivals and allies. They colour banter and targeting; they never bias a prediction."
+    },
+    "fight_style": {
+     "enum": [
+      "brawler",
+      "hunter",
+      "looter",
+      "guardian",
+      "survivor"
+     ]
+    },
+    "preset": {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9-]*$",
+     "description": "The battle option it starts from. Equal to the fight style at version 2."
+    },
+    "cosmetics": {
+     "type": "object",
+     "required": [],
+     "additionalProperties": false,
+     "description": "Declarations of how it looks and what it starts with. Never an inventory grant: the chain owns the real bag.",
+     "properties": {
+      "palette": {
+       "type": "array",
+       "maxItems": 2,
+       "items": {
+        "type": "string",
+        "pattern": "^p(0[1-9]|1[0-6])$"
+       },
+       "description": "Palette ids p01 to p16."
+      },
+      "legendary": {
+       "type": "object",
+       "required": [
+        "id",
+        "name",
+        "reskin_of",
+        "serial"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "id": {
+         "type": "string",
+         "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "name": {
+         "type": "string",
+         "minLength": 1
+        },
+        "reskin_of": {
+         "type": "string",
+         "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "serial": {
+         "type": "integer"
+        }
+       }
+      },
+      "starter_kit": {
+       "type": "object",
+       "required": [
+        "weapon",
+        "trinket",
+        "head",
+        "body"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "weapon": {
+         "type": "string",
+         "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "trinket": {
+         "type": "string",
+         "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "head": {
+         "type": "string",
+         "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "body": {
+         "type": "string",
+         "pattern": "^[a-z][a-z0-9-]*$"
+        }
+       }
+      },
+      "signature_piece": {
+       "type": "string",
+       "pattern": "^[a-z][a-z0-9-]*$"
+      }
+     }
+    },
+    "reactions": {
+     "type": "object",
+     "required": [],
+     "additionalProperties": false,
+     "description": "Four keyed lines. They are also the labelled fallback when a banter reroll still repeats or the budget stops.",
+     "properties": {
+      "ko_by_rival": {
+       "$ref": "#/$defs/line"
+      },
+      "lost_legendary": {
+       "$ref": "#/$defs/line"
+      },
+      "missed_prediction": {
+       "$ref": "#/$defs/line"
+      },
+      "hit_prediction": {
+       "$ref": "#/$defs/line"
+      }
+     }
+    }
+   }
+  }
+ }
+}

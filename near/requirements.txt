@@ -1,0 +1,2 @@
+-r ../room/requirements.txt
+-r onboarding/requirements.txt
