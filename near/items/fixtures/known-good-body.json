@@ -1,0 +1,16 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-body-builder",
+ "name": "Builder Tee",
+ "slot": "body",
+ "tier": "common",
+ "stats": {
+  "cooldown": 2,
+  "damage": 3,
+  "hp": 1,
+  "range": 4,
+  "speed": 0
+ },
+ "tag": "builder",
+ "kit": "body/tee"
+}

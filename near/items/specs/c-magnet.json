@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-magnet",
+ "name": "Fridge Magnet",
+ "slot": "trinket",
+ "tier": "common",
+ "stats": {
+  "damage": 0,
+  "cooldown": 2,
+  "hp": 3,
+  "speed": 4,
+  "range": 1
+ },
+ "sig": "magnet",
+ "kit": "trinket/fridge",
+ "colors": {
+  "main": "p15",
+  "accent": "p06"
+ }
+}

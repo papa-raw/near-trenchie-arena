@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-blink-strike",
+ "name": "Smoke Bomb",
+ "slot": "trinket",
+ "tier": "common",
+ "stats": {
+  "damage": 4,
+  "cooldown": 2,
+  "hp": 1,
+  "speed": 3,
+  "range": 0
+ },
+ "sig": "blink_strike",
+ "kit": "trinket/bomb",
+ "colors": {
+  "main": "p01",
+  "accent": "p15"
+ }
+}

@@ -1,0 +1,182 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "leg-laser-eyes",
+ "name": "Laser Eyes",
+ "slot": "trinket",
+ "tier": "legendary",
+ "stats": {
+  "damage": 6,
+  "cooldown": 4,
+  "hp": 3,
+  "speed": 2,
+  "range": 9
+ },
+ "sig": "beam_sweep",
+ "nodes": [
+  {
+   "type": "sphere",
+   "color": "p04",
+   "r": 0.068,
+   "translate": [
+    -0.0748,
+    0.22,
+    0.0816
+   ],
+   "scale": [
+    1.2,
+    0.9,
+    0.4
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p04",
+   "r": 0.068,
+   "translate": [
+    0.0748,
+    0.22,
+    0.0816
+   ],
+   "scale": [
+    1.2,
+    0.9,
+    0.4
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p15",
+   "r": 0.0425,
+   "translate": [
+    -0.0748,
+    0.22,
+    0.102
+   ],
+   "scale": [
+    1,
+    1,
+    0.5
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p15",
+   "r": 0.0425,
+   "translate": [
+    0.0748,
+    0.22,
+    0.102
+   ],
+   "scale": [
+    1,
+    1,
+    0.5
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p01",
+   "r": 0.0187,
+   "translate": [
+    -0.0748,
+    0.22,
+    0.1156
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p01",
+   "r": 0.0187,
+   "translate": [
+    0.0748,
+    0.22,
+    0.1156
+   ]
+  },
+  {
+   "type": "plate",
+   "color": "p15",
+   "h": 0.0306,
+   "w": 0.1224,
+   "radius": 0.0119,
+   "t": 0.017,
+   "translate": [
+    -0.17,
+    0.1452,
+    0.0816
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    31.51
+   ]
+  },
+  {
+   "type": "plate",
+   "color": "p15",
+   "h": 0.0306,
+   "w": 0.1224,
+   "radius": 0.0119,
+   "t": 0.017,
+   "translate": [
+    0.17,
+    0.1452,
+    0.0816
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    -31.51
+   ]
+  },
+  {
+   "type": "plate",
+   "color": "p12",
+   "h": 0.0119,
+   "w": 0.102,
+   "radius": 0.0051,
+   "t": 0.0136,
+   "translate": [
+    -0.17,
+    0.1452,
+    0.0952
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    31.51
+   ]
+  },
+  {
+   "type": "plate",
+   "color": "p12",
+   "h": 0.0119,
+   "w": 0.102,
+   "radius": 0.0051,
+   "t": 0.0136,
+   "translate": [
+    0.17,
+    0.1452,
+    0.0952
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    -31.51
+   ]
+  },
+  {
+   "type": "plate",
+   "color": "p03",
+   "h": 0.0238,
+   "w": 0.238,
+   "radius": 0.0102,
+   "t": 0.017,
+   "translate": [
+    0.0,
+    0.3084,
+    0.0816
+   ]
+  }
+ ]
+}

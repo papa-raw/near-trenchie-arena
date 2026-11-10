@@ -1,0 +1,97 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "leg-stack-sats",
+ "name": "Stack Sats",
+ "slot": "trinket",
+ "tier": "legendary",
+ "stats": {
+  "damage": 2,
+  "cooldown": 4,
+  "hp": 6,
+  "speed": 9,
+  "range": 3
+ },
+ "sig": "magnet",
+ "nodes": [
+  {
+   "type": "cylinder",
+   "color": "p12",
+   "r": 0.0816,
+   "h": 0.0289,
+   "translate": [
+    0.0,
+    0.1044,
+    0.0884
+   ]
+  },
+  {
+   "type": "cylinder",
+   "color": "p13",
+   "r": 0.0816,
+   "h": 0.0289,
+   "translate": [
+    0.0,
+    0.1333,
+    0.0884
+   ]
+  },
+  {
+   "type": "cylinder",
+   "color": "p12",
+   "r": 0.0816,
+   "h": 0.0289,
+   "translate": [
+    0.0,
+    0.1622,
+    0.0884
+   ]
+  },
+  {
+   "type": "cylinder",
+   "color": "p13",
+   "r": 0.0816,
+   "h": 0.0289,
+   "translate": [
+    0.0,
+    0.1911,
+    0.0884
+   ]
+  },
+  {
+   "type": "cylinder",
+   "color": "p12",
+   "r": 0.0816,
+   "h": 0.0289,
+   "translate": [
+    0.0,
+    0.22,
+    0.0884
+   ]
+  },
+  {
+   "type": "hemisphere",
+   "color": "p06",
+   "r": 0.0714,
+   "translate": [
+    0.0,
+    0.254,
+    0.0884
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p05",
+   "r": 0.017,
+   "translate": [
+    0.0,
+    0.3356,
+    0.0884
+   ]
+  }
+ ]
+}

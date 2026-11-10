@@ -1,0 +1,21 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-shot",
+ "name": "Pebble Sling",
+ "slot": "weapon",
+ "tier": "common",
+ "stats": {
+  "damage": 3,
+  "cooldown": 4,
+  "hp": 0,
+  "speed": 1,
+  "range": 2
+ },
+ "move": "shot",
+ "tag": "degen",
+ "kit": "weapon/sling",
+ "colors": {
+  "main": "p03",
+  "accent": "p14"
+ }
+}

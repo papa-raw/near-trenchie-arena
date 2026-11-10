@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trenchie Arena</title>
+<link rel="icon" href="data:,">
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
+<style>
+  :root { --ink: #3B2F25; --paper: #FFF8EA; --mint: #9FDCC5; --sea: #D9EEEC; --gold: #F7CF6B; --danger: #E84855; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--sea); color: var(--ink); font: 14px/1.3 "Fredoka", ui-rounded, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; }
+  #world { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .tag { position: absolute; left: 0; top: 0; will-change: transform; display: flex; flex-direction: column; align-items: center; gap: 2px; white-space: nowrap; }
+  .tag .name { font-weight: 600; font-size: 13px; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); border-radius: 6px 10px 10px 6px; padding: 0 7px; box-shadow: 0 2px 0 rgba(59,47,37,.25); }
+  .tag.lead .name { background: var(--mint); }
+  .tag .hp { width: 46px; height: 7px; background: rgba(59,47,37,.35); border-radius: 4px; overflow: hidden; border: 1px solid rgba(59,47,37,.5); }
+  .tag .hp i { display: block; height: 100%; background: #5FB79A; }
+  .tag.low .hp i { background: var(--danger); }
+  .tag.bench { opacity: .55; }
+  .atag { position: absolute; left: 0; top: 0; will-change: transform; white-space: nowrap; font: 600 11px/1.15 "Fredoka", ui-rounded, system-ui, sans-serif; letter-spacing: .01em; color: var(--ink); background: rgba(255,248,234,.92); border-radius: 5px; padding: 1px 5px 2px; box-shadow: 0 0 0 1px rgba(59,47,37,.55); transition: opacity .15s; }
+  .atag.lead { background: var(--mint); } .atag.lead::before { content: "\2605 "; color: #8A6A12; }
+  .atag.bench { opacity: .6; } .atag.far { opacity: .3; } .atag.narrow { font-size: 10px; padding: 0 4px 1px; }
+  .inset { position: fixed; right: 18px; bottom: 86px; width: 280px; height: 210px; z-index: 4; border: 3px solid var(--ink); border-radius: 12px; box-shadow: 0 4px 0 rgba(59,47,37,.3); pointer-events: none; }
+  .inset .cap { position: absolute; left: 8px; top: -13px; font: 600 12px/1.2 "Fredoka", ui-rounded, system-ui, sans-serif; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); border-radius: 6px; padding: 0 7px; }
+  .inset .x { position: absolute; right: -2px; top: -14px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--ink); background: var(--paper); color: var(--ink); font: 700 18px/1 system-ui, sans-serif; cursor: pointer; pointer-events: auto; padding: 0; }
+  .inset .x:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; }
+  .atag .dev { margin-left: 5px; padding: 0 4px; border-radius: 3px; background: var(--ink); color: var(--paper); font-size: 9px; font-weight: 700; letter-spacing: .06em; vertical-align: 1px; }
+  .atag.collabel { z-index: 3; pointer-events: none; opacity: .92; }
+  .atag .style-word, .atag .quirk-line { display: none; }
+  .atag:hover .style-word, .atag:focus .style-word, .atag.bounty .style-word { display: inline; }
+  .atag .quirk-line { position:absolute;left:0;top:100%;width:230px;max-width:calc(100vw - 16px);box-sizing:border-box;white-space:normal;overflow-wrap:anywhere;padding:7px 9px;background:#FFF8EA;color:#3B2F25;border:1px solid #3B2F25;border-radius:5px;box-shadow:0 2px 5px #3B2F2540;font-weight:500;line-height:1.4; }
+  .atag:hover .quirk-line, .atag:focus .quirk-line { display:block; }
+  .atag:hover, .atag:focus { opacity:1;z-index:30; }
+  .atag:focus-visible { outline: 2px solid #6FA3D6; outline-offset: 2px; }
+  .atag.followed { box-shadow: 0 0 0 2px var(--ink); }
+  @media (max-width: 700px) { .inset { width: 150px; height: 150px; right: 10px; bottom: 150px; } }
+  #status { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); background: var(--paper); border: 2px solid var(--ink); border-radius: 12px; padding: 3px 12px; font-size: 13px; z-index: 5; pointer-events: none; }
+  #status.live { display: none; }
+  #status.warn { background: #FFD98F; }
+  #diag { position: fixed; right: 8px; top: 8px; font: 11px/1.3 ui-monospace, monospace; background: rgba(255,248,234,.85); padding: 3px 6px; border-radius: 6px; z-index: 5; display: none; }
+  body.diag #diag { display: block; }
+</style>
+</head>
+<body>
+<canvas id="stage" aria-label="Live arena"></canvas>
+<div id="world"></div>
+<div id="status" class="warn">Loading</div>
+<pre id="diag"></pre>
+<script type="module" src="./arena/main.mjs"></script>
+</body>
+</html>

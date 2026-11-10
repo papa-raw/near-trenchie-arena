@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-body-degen",
+ "name": "Hawaiian Shirt",
+ "slot": "body",
+ "tier": "common",
+ "stats": {
+  "damage": 4,
+  "cooldown": 2,
+  "hp": 0,
+  "speed": 3,
+  "range": 1
+ },
+ "tag": "degen",
+ "kit": "body/hawaiian",
+ "colors": {
+  "main": "p08",
+  "accent": "p14"
+ }
+}

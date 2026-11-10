@@ -1,0 +1,101 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "leg-priority-fee",
+ "name": "Priority Fee",
+ "slot": "trinket",
+ "tier": "legendary",
+ "stats": {
+  "damage": 2,
+  "cooldown": 4,
+  "hp": 6,
+  "speed": 9,
+  "range": 3
+ },
+ "sig": "magnet",
+ "nodes": [
+  {
+   "type": "box",
+   "color": "p07",
+   "h": 0.204,
+   "w": 0.034,
+   "d": 0.034,
+   "translate": [
+    -0.0884,
+    0.2064,
+    0.0816
+   ]
+  },
+  {
+   "type": "box",
+   "color": "p07",
+   "h": 0.204,
+   "w": 0.034,
+   "d": 0.034,
+   "translate": [
+    0.0884,
+    0.2064,
+    0.0816
+   ]
+  },
+  {
+   "type": "box",
+   "color": "p08",
+   "h": 0.034,
+   "w": 0.2108,
+   "d": 0.0408,
+   "translate": [
+    0.0,
+    0.322,
+    0.0816
+   ]
+  },
+  {
+   "type": "cylinder",
+   "color": "p12",
+   "r": 0.0408,
+   "h": 0.0204,
+   "translate": [
+    0.0,
+    0.1792,
+    0.0748
+   ],
+   "rotate": [
+    90.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "type": "cylinder",
+   "color": "p13",
+   "r": 0.0272,
+   "h": 0.017,
+   "translate": [
+    -0.1904,
+    0.1792,
+    0.068
+   ],
+   "rotate": [
+    90.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "type": "cone",
+   "color": "p08",
+   "r": 0.0272,
+   "h": 0.0544,
+   "translate": [
+    0.034,
+    0.118,
+    0.0816
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    -90.0
+   ]
+  }
+ ]
+}

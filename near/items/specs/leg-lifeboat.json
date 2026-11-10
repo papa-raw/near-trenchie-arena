@@ -1,0 +1,99 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "leg-lifeboat",
+ "name": "Lifeboat",
+ "slot": "trinket",
+ "tier": "legendary",
+ "stats": {
+  "damage": 3,
+  "cooldown": 6,
+  "hp": 9,
+  "speed": 2,
+  "range": 4
+ },
+ "sig": "bubble",
+ "nodes": [
+  {
+   "type": "hemisphere",
+   "color": "p03",
+   "r": 0.0884,
+   "translate": [
+    0.0,
+    0.1792,
+    0.0816
+   ],
+   "rotate": [
+    180.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.4,
+    0.8,
+    0.8
+   ]
+  },
+  {
+   "type": "box",
+   "color": "p02",
+   "h": 0.017,
+   "w": 0.1972,
+   "d": 0.068,
+   "translate": [
+    0.0,
+    0.2166,
+    0.0816
+   ]
+  },
+  {
+   "type": "cylinder",
+   "color": "p05",
+   "r": 0.0102,
+   "h": 0.136,
+   "translate": [
+    0.0,
+    0.288,
+    0.0816
+   ]
+  },
+  {
+   "type": "plate",
+   "color": "p14",
+   "h": 0.0476,
+   "w": 0.0612,
+   "radius": 0.0136,
+   "t": 0.0136,
+   "translate": [
+    0.0408,
+    0.2948,
+    0.0816
+   ]
+  },
+  {
+   "type": "torus",
+   "color": "p14",
+   "r": 0.1496,
+   "tube": 0.0136,
+   "translate": [
+    0.0,
+    0.22,
+    0.0748
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p04",
+   "r": 0.017,
+   "translate": [
+    -0.0884,
+    0.3084,
+    0.1088
+   ]
+  }
+ ]
+}

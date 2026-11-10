@@ -1,0 +1,31 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Quirk focus fixture</title>
+<link rel="icon" href="data:,"><script type="importmap">{"imports":{"three":"./vendor/three/three.module.min.js"}}</script>
+<style>@font-face{font-family:Fredoka;src:url('./hud-art/fonts/Fredoka-var.woff2')}body{margin:0;background:#F7F0DC}#fixture{position:fixed;inset:0}#result{position:fixed;bottom:12px;left:12px;color:#3B2F25;font:14px sans-serif}</style>
+<div id="fixture"></div><div id="result">Focus or hover a tag</div>
+<script type="module">
+import { Hud } from './arena/hud.mjs';
+import { MAX_QUIRK_DISTANCE } from './arena/hover.mjs';
+import { shortName } from './arena/names.mjs';
+import { ROSTER } from './art/roster.js';
+const markup = await (await fetch('./arena.html')).text(), parsed = new DOMParser().parseFromString(markup, 'text/html');
+const style = document.createElement('style'); style.textContent = parsed.querySelector('style').textContent; document.head.appendChild(style); document.body.style.background = '#F7F0DC';
+const rules = await (await fetch('../arena/rules/integer-11.json')).json();
+const hud = Object.create(Hud.prototype), layer = document.getElementById('fixture');
+Object.assign(hud, { w: innerWidth, h: innerHeight, tags: new Map(), styles: new Map(), bounties: new Set(), cardRects: [], KITS: { roster: ROSTER }, details: { rules }, tagLayer: layer,
+  toScreen: (x, y, z) => ({ x, y: z }) });
+const ids = ROSTER.map((row) => row.trenchieId), positions = new Map(ids.map((id, i) => {
+  const row = ROSTER.find((r) => r.trenchieId === id); return [id, { x: innerWidth < 700 ? 104 + i % 2 * 116 : 740 + i % 4 * 88, z: 240 + Math.floor(i / (innerWidth < 700 ? 2 : 4)) * 23, state: 'bench', f: { status: 1, items: row.kit } }];
+}));
+const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+function check() {
+  const tag = document.activeElement.closest?.('.atag') || hud.tags.get('satrenchi'), panel = tag.querySelector('.quirk-line'), rect = panel.getBoundingClientRect();
+  const anchor = tag.getBoundingClientRect(), distance = Math.hypot(rect.x + rect.width / 2 - anchor.x - anchor.width / 2, rect.y + rect.height / 2 - anchor.y - anchor.height / 2);
+  const id = [...hud.tags.entries()].find(([, el]) => el === tag)[0];
+  const collisions = [...hud.tags.values()].filter((other) => other !== tag && overlaps(rect, other.getBoundingClientRect())).length;
+  return { id, nameAtStart: panel.textContent.startsWith(shortName(hud.KITS.roster, id) + ' · '), centerDistance: +distance.toFixed(1), distanceBound: MAX_QUIRK_DISTANCE, near: distance <= MAX_QUIRK_DISTANCE, focused: tag === document.activeElement, panelWidth: rect.width, neighboursOverlapped: collisions, tagOpacity: getComputedStyle(tag).opacity, inViewport: rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight };
+}
+function frame() { hud.w = innerWidth; hud.h = innerHeight; hud.placeTags(positions, null); requestAnimationFrame(frame); }
+frame(); setTimeout(() => { hud.tags.get('satrenchi').focus(); setTimeout(() => { document.getElementById('result').textContent = JSON.stringify(check()); }, 50); }, 100);
+async function checkAll() { const results = []; for (const id of ids) { hud.tags.get(id).focus(); await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))); results.push(check()); } return results; }
+window.HOVER_FIXTURE = { hud, positions, check, checkAll };
+</script></html>

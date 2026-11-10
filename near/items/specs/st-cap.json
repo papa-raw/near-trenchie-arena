@@ -1,0 +1,19 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "st-cap",
+ "name": "Sun Cap",
+ "slot": "head",
+ "tier": "common",
+ "stats": {
+  "damage": 3,
+  "cooldown": 0,
+  "hp": 4,
+  "speed": 0,
+  "range": 3
+ },
+ "kit": "head/cap",
+ "colors": {
+  "main": "p14",
+  "accent": "p15"
+ }
+}

@@ -1,0 +1,21 @@
+[package]
+name = "trenchie_nft"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { workspace = true }
+trenchie_rows = { path = "../trenchie_rows" }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }
+ed25519-dalek = "=2.2.0"
+
+[lints]
+workspace = true

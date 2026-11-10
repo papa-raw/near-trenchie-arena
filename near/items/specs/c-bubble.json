@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-bubble",
+ "name": "Bubble Wand",
+ "slot": "trinket",
+ "tier": "common",
+ "stats": {
+  "damage": 1,
+  "cooldown": 3,
+  "hp": 4,
+  "speed": 0,
+  "range": 2
+ },
+ "sig": "bubble",
+ "kit": "trinket/ring",
+ "colors": {
+  "main": "p10",
+  "accent": "p12"
+ }
+}

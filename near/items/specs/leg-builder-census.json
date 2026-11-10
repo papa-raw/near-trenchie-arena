@@ -1,0 +1,120 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "leg-builder-census",
+ "name": "Builder Census",
+ "slot": "trinket",
+ "tier": "legendary",
+ "stats": {
+  "damage": 6,
+  "cooldown": 9,
+  "hp": 3,
+  "speed": 2,
+  "range": 4
+ },
+ "sig": "chain_storm",
+ "nodes": [
+  {
+   "type": "plate",
+   "color": "p03",
+   "h": 0.238,
+   "w": 0.17,
+   "radius": 0.0204,
+   "t": 0.0204,
+   "translate": [
+    0.0,
+    0.22,
+    0.0748
+   ]
+  },
+  {
+   "type": "plate",
+   "color": "p04",
+   "h": 0.1836,
+   "w": 0.136,
+   "radius": 0.0102,
+   "t": 0.0136,
+   "translate": [
+    0.0,
+    0.2064,
+    0.0884
+   ]
+  },
+  {
+   "type": "box",
+   "color": "p06",
+   "h": 0.0272,
+   "w": 0.068,
+   "d": 0.0272,
+   "translate": [
+    0.0,
+    0.3424,
+    0.0952
+   ]
+  },
+  {
+   "type": "box",
+   "color": "p12",
+   "h": 0.0816,
+   "w": 0.0136,
+   "d": 0.0102,
+   "translate": [
+    -0.0408,
+    0.2064,
+    0.102
+   ]
+  },
+  {
+   "type": "box",
+   "color": "p12",
+   "h": 0.0816,
+   "w": 0.0136,
+   "d": 0.0102,
+   "translate": [
+    -0.0136,
+    0.2064,
+    0.102
+   ]
+  },
+  {
+   "type": "box",
+   "color": "p12",
+   "h": 0.0816,
+   "w": 0.0136,
+   "d": 0.0102,
+   "translate": [
+    0.0136,
+    0.2064,
+    0.102
+   ]
+  },
+  {
+   "type": "box",
+   "color": "p12",
+   "h": 0.0816,
+   "w": 0.0136,
+   "d": 0.0102,
+   "translate": [
+    0.0408,
+    0.2064,
+    0.102
+   ]
+  },
+  {
+   "type": "box",
+   "color": "p13",
+   "h": 0.1156,
+   "w": 0.0136,
+   "d": 0.0102,
+   "translate": [
+    0.0,
+    0.2064,
+    0.1088
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    57.3
+   ]
+  }
+ ]
+}

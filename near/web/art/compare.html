@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>House models compare</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg: #F6F0E2; --card: #FFFBF2; --ink: #3B2F25; --mute: #8A7A66; --line: #E6DCC8; --ok: #2F7D5B; --bad: #B8382E; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 ui-rounded, "SF Pro Rounded", system-ui, sans-serif; }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 32px 40px 80px; }
+  .eyebrow { font: 600 11px/1 ui-monospace, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+  h1 { font-size: 30px; margin: 8px 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); margin: 28px 0 10px; font-weight: 700; }
+  .lede { color: #6B5D4C; margin: 0 0 12px; max-width: 860px; }
+  #summary { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font: 13px/1.5 ui-monospace, Menlo, monospace; }
+  #summary b.ok { color: var(--ok); } #summary b.bad { color: var(--bad); }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .pair { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px 8px 10px; min-width: 0; }
+  .imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .imgs .cell { margin: 0; min-width: 0; }
+  .imgs canvas, .imgs img { width: 100%; aspect-ratio: 270 / 290; height: auto; display: block; border-radius: 10px; background: #ECEEEA; }
+  .cap { display: block; font-size: 11px; color: var(--mute); margin-top: 3px; }
+  .name { font-weight: 700; font-size: 16px; margin: 7px 2px 0; }
+  .metric { font: 12px/1.4 ui-monospace, Menlo, monospace; color: #5B4D3C; margin: 2px 2px 0; }
+  .metric .ok { color: var(--ok); font-weight: 700; } .metric .bad { color: var(--bad); font-weight: 700; }
+  .presets { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .presets .pair { padding: 6px; }
+  .presets canvas { width: 100%; aspect-ratio: 270 / 290; height: auto; display: block; border-radius: 10px; }
+  .foot { margin-top: 18px; font-size: 12px; color: var(--mute); }
+  @media (max-width: 720px) {
+    .wrap { padding: 20px 16px 80px; } h1 { font-size: 24px; }
+    .grid { grid-template-columns: 1fr; }
+    .presets { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">near/web/art · house models · three-band toon</div>
+  <h1>14 house models and 6 body presets</h1>
+  <p class="lede">Left: the approved roster board render (classic build, stored as a 2x PNG). Right: the same camera, light and ground drawn live by the ES modules in this folder. Each pair shows the pixels that differ by more than 8/255.</p>
+  <div id="summary">rendering…</div>
+  <h2>House: reference | module</h2>
+  <div class="grid" id="grid"></div>
+  <h2>Body presets: the starter kit on six shapes</h2>
+  <div class="presets" id="presets"></div>
+  <div class="foot" id="foot"></div>
+</div>
+<script type="module" src="compare.js"></script>
+</body>
+</html>

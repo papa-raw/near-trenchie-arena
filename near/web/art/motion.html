@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motion key poses</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg: #F6F0E2; --card: #FFFBF2; --ink: #3B2F25; --mute: #8A7A66; --line: #E6DCC8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 ui-rounded, "SF Pro Rounded", system-ui, sans-serif; }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 32px 40px 80px; }
+  .eyebrow { font: 600 11px/1 ui-monospace, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+  h1 { font-size: 30px; margin: 8px 0 6px; letter-spacing: -0.01em; }
+  .lede { color: #6B5D4C; margin: 0 0 14px; max-width: 880px; }
+  .row { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px 10px; margin: 0 0 10px; }
+  .row h2 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: #6B5D4C; margin: 2px 0 6px; font-weight: 700; display: flex; gap: 10px; align-items: baseline; }
+  .row h2 small { font: 11px ui-monospace, Menlo, monospace; color: var(--mute); text-transform: none; letter-spacing: 0; }
+  .cells { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+  .cells div { min-width: 0; }
+  .cells canvas { width: 100%; aspect-ratio: 150 / 165; height: auto; display: block; border-radius: 8px; }
+  .cells span { display: block; font: 10px/1.2 ui-monospace, Menlo, monospace; color: var(--mute); margin-top: 2px; text-align: center; }
+  #summary { font: 13px/1.5 ui-monospace, Menlo, monospace; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; margin-bottom: 12px; }
+  @media (max-width: 720px) {
+    .wrap { padding: 20px 16px 80px; } h1 { font-size: 24px; }
+    .cells { grid-template-columns: repeat(4, 1fr); }
+  }
+</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">near/web/art · motion · RIG3 joints</div>
+  <h1>Key poses: 13 states, 6 weapons</h1>
+  <p class="lede">Eight frames across each motion, drawn from the same pure function the game calls (state, weapon, age). Loops show one cycle; one-shots run start to end. Hitstop, position and facing belong to the renderer.</p>
+  <div id="summary">rendering…</div>
+  <div id="rows"></div>
+</div>
+<script type="module" src="motion.js"></script>
+</body>
+</html>

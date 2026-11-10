@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-beam-sweep",
+ "name": "Pocket Laser",
+ "slot": "trinket",
+ "tier": "common",
+ "stats": {
+  "damage": 3,
+  "cooldown": 2,
+  "hp": 1,
+  "speed": 0,
+  "range": 4
+ },
+ "sig": "beam_sweep",
+ "kit": "trinket/pen",
+ "colors": {
+  "main": "p10",
+  "accent": "p12"
+ }
+}

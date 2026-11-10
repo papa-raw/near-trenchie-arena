@@ -1,0 +1,109 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "leg-fast-finality",
+ "name": "Fast Finality",
+ "slot": "trinket",
+ "tier": "legendary",
+ "stats": {
+  "damage": 9,
+  "cooldown": 4,
+  "hp": 3,
+  "speed": 6,
+  "range": 2
+ },
+ "sig": "blink_strike",
+ "nodes": [
+  {
+   "type": "plate",
+   "color": "p08",
+   "h": 0.0272,
+   "w": 0.17,
+   "radius": 0.0102,
+   "t": 0.017,
+   "translate": [
+    -0.0748,
+    0.2812,
+    0.0748
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    20.05
+   ]
+  },
+  {
+   "type": "plate",
+   "color": "p07",
+   "h": 0.0272,
+   "w": 0.1496,
+   "radius": 0.0102,
+   "t": 0.017,
+   "translate": [
+    -0.0952,
+    0.2336,
+    0.0748
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    20.05
+   ]
+  },
+  {
+   "type": "plate",
+   "color": "p08",
+   "h": 0.0272,
+   "w": 0.1292,
+   "radius": 0.0102,
+   "t": 0.017,
+   "translate": [
+    -0.0816,
+    0.186,
+    0.0748
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    20.05
+   ]
+  },
+  {
+   "type": "cylinder",
+   "color": "p04",
+   "r": 0.0884,
+   "h": 0.0204,
+   "translate": [
+    0.0612,
+    0.2132,
+    0.0816
+   ],
+   "rotate": [
+    90.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "type": "tube",
+   "color": "p08",
+   "width": 0.0272,
+   "points": [
+    [
+     0.0136,
+     0.2064,
+     0.102
+    ],
+    [
+     0.0476,
+     0.169,
+     0.102
+    ],
+    [
+     0.1156,
+     0.2608,
+     0.102
+    ]
+   ]
+  }
+ ]
+}

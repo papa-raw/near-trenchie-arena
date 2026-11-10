@@ -327,6 +327,36 @@ Integer-10 is a separate tuning candidate:
 the hunt weight is 100. Select it with `--rules-hash` using its canonical hash;
 it does not replace the default table or enable an optional control.
 
+Integer-11 is the default table with fourteen named legendary quirks. Its
+`item_quirks` data contains each one-line description and item-local overrides
+of the existing signature parameters. The quirks travel with a grabbed copy,
+for house and player holders alike. All item stat budgets remain unchanged;
+the new tradeoffs are unmeasured, with no balance certification. The default
+hunt weight remains 150 and optional controls remain off. Released tables
+remain available for exact replay.
+
+Under this table, each signature binds its item, effective range, damage
+percentage, tier and signature parameters when its cast starts. A grab during
+the warning cannot change that cast; sweeps and shield pops retain their bound
+parameters through export/restore. Tables without `item_quirks` retain their
+previous cast behavior. Quirk overrides accept only existing positive integer
+signature parameters; malformed quirk records refuse during rules validation.
+The public room snapshot's cast telegraphs use the same bound range percentage
+and signature parameters as resolution. Legacy casts retain their shared-table
+fallback. This projection leaves the frozen compact tick format unchanged.
+Stack Sats changes shield burst size and loot cadence; Priority Fee changes
+them in the opposite direction. Both retain the base shield-to-cooldown ratio,
+so their descriptions make no claim of lower shield throughput.
+
+The focused cases are `python3 -B near/arena/test_quirks.py Quirks Bindings
+QuirkReplay QuirkData`. Passing `--rules near/arena/rules/integer-9.json Quirks`
+is the intentional negative baseline: all fourteen quirk cases fail there.
+The replay case seals a seeded 1,200-tick segment starting with active casts
+and reproduces its state hash twice using the archived new table.
+The focused projection regression is `python3 -B near/arena/test_quirk_telegraphs.py
+Telegraphs ShieldText`: six quirk shapes, their boundaries, a changed live range
+stat after casting, the legacy fallback and the shield/cadence descriptions.
+
 The report contains random default and mixed builds across all five styles,
 the five closed presets, mirrored pairs, loot rates, 52/72-point builds,
 pick pressure, item-density pairs with the hunt on and off, conservative

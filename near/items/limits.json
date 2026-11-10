@@ -1,0 +1,22 @@
+{
+  "spec": "trenchie-item-limits/1",
+  "status": "INFERRED slot boxes and size caps; the item-kit board (V3) may widen them, and a change here is a rules change",
+  "primitives": ["group", "sphere", "hemisphere", "cylinder", "cone", "box", "torus", "tube", "plate"],
+  "palette": ["p01","p02","p03","p04","p05","p06","p07","p08","p09","p10","p11","p12","p13","p14","p15","p16"],
+  "max_nodes": 40,
+  "max_bytes": 4096,
+  "kit_decorations": 6,
+  "scale": [0.25, 4],
+  "size_max": 4.0,
+  "tube_points": [2, 8],
+  "slot_boxes": {
+    "head":    {"min": [-0.6, 0.0, -0.6], "max": [0.6, 1.0, 0.6]},
+    "body":    {"min": [-0.7, 0.0, -0.6], "max": [0.7, 1.4, 0.6]},
+    "weapon":  {"min": [-0.4, -0.2, -1.2], "max": [0.4, 1.6, 1.2]},
+    "trinket": {"min": [-0.4, 0.0, -0.4], "max": [0.4, 0.8, 0.4]}
+  },
+  "budgets": {"common": 10, "rare": 16, "legendary": 24},
+  "stat_cap_pct": 40,
+  "banned_words": [["jud", "ge"], ["jud", "ges"], ["figur", "e"], ["figur", "es"], "scam", "fraud", "jail"],
+  "box_tolerance": 0.001
+}

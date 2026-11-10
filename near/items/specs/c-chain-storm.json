@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-chain-storm",
+ "name": "Static Sock",
+ "slot": "trinket",
+ "tier": "common",
+ "stats": {
+  "damage": 3,
+  "cooldown": 4,
+  "hp": 1,
+  "speed": 0,
+  "range": 2
+ },
+ "sig": "chain_storm",
+ "kit": "trinket/bolt",
+ "colors": {
+  "main": "p10",
+  "accent": "p12"
+ }
+}

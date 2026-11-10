@@ -1,0 +1,9 @@
+{
+ "note": "two minimal banter sheets for test_novelty.py: a name, four keyed reaction lines and a scripted line pool that repeats the way the model test measured (9 or 10 of 20)",
+ "sheets": [
+  {"name": "Harbour", "keyed": {"ko_given": "Down you go.", "ko_taken": "Fine. Fine. Again.", "loot": "Mine now.", "idle": "Tide is turning."},
+   "pool": ["One coin, one island.", "One coin, one island!", "Tide is turning slowly.", "The tide is turning.", "I keep what I keep.", "Eyes on the water.", "One coin and one island.", "Nobody swims out with my lamp."]},
+  {"name": "Builder", "keyed": {"ko_given": "Shipped.", "ko_taken": "Rolled back.", "loot": "Merged.", "idle": "Another week another toy."},
+   "pool": ["Another week, another toy.", "Another toy this week.", "Ship it small.", "Ship it small, ship it often.", "Scoreboard says I am fine.", "I built that brawl.", "Nobody reads the changelog.", "The changelog is the story."]}
+ ]
+}

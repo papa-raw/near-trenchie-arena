@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trenchie Arena · snap in</title>
+<meta name="description" content="Snap in your trenchie: connect a wallet, pick a fighter and its personality, choose the AI that drives it.">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="snapin.css">
+</head>
+<body>
+<div class="arena"></div>
+<div class="brand">Trenchie Arena <small>Money, meet mouth.</small></div>
+<div id="app"></div>
+<noscript>Snapping in needs JavaScript.</noscript>
+<script type="importmap">{"imports":{"three":"../vendor/three/three.module.min.js"}}</script>
+<script src="art/ska.js"></script>
+<!-- the approved trenchie modules (near/web/art, v3.4) and three come in through bridge.js, which then loads the page's own scripts in order -->
+<script type="module" src="art/bridge.js"></script>
+</body>
+</html>

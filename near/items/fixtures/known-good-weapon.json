@@ -1,0 +1,17 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-beam",
+ "name": "Beam Club",
+ "slot": "weapon",
+ "tier": "common",
+ "stats": {
+  "cooldown": 2,
+  "damage": 3,
+  "hp": 1,
+  "range": 4,
+  "speed": 0
+ },
+ "move": "beam",
+ "tag": "beam",
+ "kit": "weapon/club"
+}

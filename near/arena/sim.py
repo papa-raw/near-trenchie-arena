@@ -13,7 +13,7 @@ except ImportError:
 
 
 _RULES = {
-    "version": "integer-9",
+    "version": "integer-11",
     "dodge_weapon_warnings": True,
     "beam_slow_active": True,
     "rival_seek": True,
@@ -142,6 +142,35 @@ _RULES = {
         "bubble": {"shield": 30, "cooldown": 200, "range": 1000,
                    "shield_ticks": 60, "hp_pct": 50, "knockback": 1000},
         "dodge_roll": {"cooldown": 120, "range": 2000, "invulnerable_ticks": 6}},
+    "item_quirks": {
+        "leg-stack-sats": {"text": "Larger shield bursts, with longer waits between loot pulls.",
+                           "overrides": {"shield": 33, "cooldown": 264}},
+        "leg-liquidity-wave": {"text": "A bigger wipeout, a softer landing.",
+                               "overrides": {"knockback": 2200, "damage": 11}},
+        "leg-tinker-coil": {"text": "Tries a longer connection; each spark is a little weaker.",
+                            "overrides": {"range": 4400, "damage": 27}},
+        "leg-laser-eyes": {"text": "One conviction: farther ahead, less to either side.",
+                           "overrides": {"range": 4950, "half_arc": 24}},
+        "leg-ether-stack": {"text": "Bigger cycle ahead; healthier pullback.",
+                            "overrides": {"range": 4400, "pull": 2250}},
+        "leg-fast-finality": {"text": "Finalizes sooner, with a lighter stamp.",
+                              "overrides": {"vanish_ticks": 16, "damage": 16}},
+        "leg-lifeboat": {"text": "Conviction floats longer; the next boat takes longer.",
+                         "overrides": {"shield_ticks": 66, "cooldown": 220}},
+        "leg-hydra-halo": {"text": "More heads watch the sides; none sees quite as far.",
+                           "overrides": {"half_arc": 36, "range": 4050}},
+        "leg-loop-flywheel": {"text": "The next loop comes sooner and hits lighter.",
+                              "overrides": {"cooldown": 180, "damage": 10}},
+        "leg-priority-fee": {"text": "Pulls loot more often; each shield is smaller.",
+                             "overrides": {"cooldown": 216, "shield": 27}},
+        "leg-builder-census": {"text": "Counts one more head; gives each a smaller share.",
+                               "overrides": {"base_targets": 3, "damage": 24, "cooldown": 198}},
+        "leg-harvest-quake": {"text": "Reaps a wider row, with a lighter, slower stomp.",
+                              "overrides": {"range": 3300, "damage": 11, "cooldown": 220}},
+        "leg-poker-face": {"text": "A thinner bluff, a harder table flip.",
+                           "overrides": {"shield": 27, "knockback": 1200}},
+        "leg-router-drone": {"text": "Spots a finish earlier, but takes a shorter route.",
+                             "overrides": {"hp_pct": 35, "range": 5400}}},
     "telegraph_ticks": 10,
     "knockback_ticks": 4,
     "knobs": {"misses": False, "looter_reengage": False, "beam_fire_slow": False,
@@ -228,6 +257,24 @@ def validate_rules(rules):
             total += points
         if total > budget:
             raise ValueError("item exceeds tier budget")
+    for row, quirk in rules.get("item_quirks", {}).items():
+        _validate_quirk(rules, row, quirk)
+
+
+def _validate_quirk(rules: Mapping, row: str, quirk: Mapping) -> None:
+    """Quirks can override only positive, existing signature parameters."""
+    item = rules["items"].get(row)
+    if item is None or item["tier"] != "legendary" or item["signature"] not in rules["signatures"]:
+        raise ValueError("quirk requires a legendary signature item")
+    if not isinstance(quirk, Mapping) or set(quirk) != {"text", "overrides"}:
+        raise ValueError("quirk requires text and parameter overrides")
+    if (type(quirk["text"]) is not str or not quirk["text"].strip()
+            or not isinstance(quirk["overrides"], Mapping)):
+        raise ValueError("quirk requires text and parameter overrides")
+    base = rules["signatures"][item["signature"]]
+    for key, value in quirk["overrides"].items():
+        if key not in base or type(value) is not int or value <= 0:
+            raise ValueError("quirk parameter must be an existing positive integer")
 
 
 def unsigned(value, name):
@@ -768,22 +815,28 @@ class Sim:
                     f["attack_at"] = tick + max(1, weapon["cooldown"] * self.rules["percent"] // f["cooldown_pct"])
                     self._fire_weapon(f, target, weapon, reach)
             if f["cast"] is None and tick >= f["sig_at"]:
-                kind = self.rules["items"][f["equipped"]["trinket"]]["signature"]
+                item_id = f["equipped"]["trinket"]
+                kind = self.rules["items"][item_id]["signature"]
+                s = self._signature_rules(item_id)
                 if self._should_signature(f, kind, target):
                     delay = self.rules["telegraph_ticks"]
                     if kind == "blink_strike":
-                        delay += self.rules["signatures"][kind]["vanish_ticks"]
+                        delay += s["vanish_ticks"]
                         f["invulnerable_until"] = tick + delay
-                        f["cannot_attack_until"] = tick + delay + self.rules["signatures"][kind]["recovery_ticks"]
+                        f["cannot_attack_until"] = tick + delay + s["recovery_ticks"]
                     f["cast"] = {"kind": kind, "resolve_at": tick + delay,
                                  "start_tick": tick, "item_id": f["equipped"]["trinket"],
                                  "target": target["id"] if target is not None else None,
                                  "x": target["x"] if target is not None else f["x"],
                                  "y": target["y"] if target is not None else f["y"]}
+                    if "item_quirks" in self.rules:
+                        f["cast"].update(parameters=rules_dict(s), damage_pct=f["damage_pct"],
+                                         sig_range_pct=f["sig_range_pct"],
+                                         tier_pct=self.rules["tier_damage_pct"][self.rules["items"][item_id]["tier"]])
                     if "snapshot_version" not in self.rules:
                         f["cast"].pop("start_tick")
                         f["cast"].pop("item_id")
-                    f["sig_at"] = tick + max(1, self.rules["signatures"][kind]["cooldown"] * self.rules["percent"] // f["cooldown_pct"])
+                    f["sig_at"] = tick + max(1, s["cooldown"] * self.rules["percent"] // f["cooldown_pct"])
                     self.state["events"].append({"kind": "telegraph", "fighter": name, "signature": kind,
                                                  "resolve_at": tick + delay})
 
@@ -843,17 +896,27 @@ class Sim:
         dx, dy = e["x"] - origin["x"], e["y"] - origin["y"]
         return dx * vx + dy * vy >= distance(origin, e) * sin_deg(half_arc + self.rules["quarter_turn"], self.rules)
 
-    def _chain(self, f, first, count, jump_range, damage, tier_pct, move="zap"):
+    def _chain(self, f: dict, first: dict | None, count: int, jump_range: int,
+               damage: int, tier_pct: int, move: str = "zap", damage_pct: int | None = None) -> None:
+        if damage_pct is None:
+            damage_pct = f["damage_pct"]
         visited = {f["id"]}
         current = first
         for _ in range(count):
             if current is None or current["id"] in visited or current["state"] != "alive":
                 break
             visited.add(current["id"])
-            self.queue_hit(f["id"], current["id"], damage, f["damage_pct"], tier_pct, move=move)
+            self.queue_hit(f["id"], current["id"], damage, damage_pct, tier_pct, move=move)
             choices = [self.state["fighters"][n] for n in self._live() if n not in visited
                        and distance(current, self.state["fighters"][n]) <= jump_range]
             current = min(choices, key=lambda e: (distance(current, e), e["id"])) if choices else None
+
+    def _signature_rules(self, item_id: str) -> Mapping:
+        """Resolve item-local signature parameters without changing the shared table."""
+        kind = self.rules["items"][item_id]["signature"]
+        base = self.rules["signatures"][kind]
+        override = self.rules.get("item_quirks", {}).get(item_id, {}).get("overrides", {})
+        return {**base, **override}
 
     def _should_signature(self, f, kind, target):
         r, intent = self.rules, f["intent"]
@@ -861,7 +924,7 @@ class Sim:
             return False
         if intent["sig"] == "use":
             return True
-        s = r["signatures"][kind]
+        s = self._signature_rules(f["equipped"]["trinket"])
         enemies = [self.state["fighters"][n] for n in self._live() if n != f["id"]]
         near = [e for e in enemies if distance(f, e) <= s["range"]]
         if kind == "beam_sweep":
@@ -881,9 +944,9 @@ class Sim:
             return f["hp"] * r["percent"] < f["max_hp"] * s["hp_pct"] and any(e["target"] == f["id"] for e in enemies)
         if r.get("dodge_weapon_warnings", False) and self._weapon_warning(f):
             return True
-        return any(self.state["fighters"][n]["cast"] is not None
-                   and distance(f, self.state["fighters"][n]) <= r["signatures"][self.state["fighters"][n]["cast"]["kind"]]["range"]
-                   for n in self._live() if n != f["id"])
+        casts = ((enemy, enemy["cast"]) for enemy in enemies if enemy["cast"] is not None)
+        return any(distance(f, enemy) <= cast.get("parameters", r["signatures"][cast["kind"]])["range"]
+                   for enemy, cast in casts)
 
     def _weapon_warning(self, fighter: dict) -> bool:
         """Dodge only while an enemy's unexpired weapon warning covers this body."""
@@ -902,37 +965,43 @@ class Sim:
 
     def _signature(self, f, cast):
         kind, r = cast["kind"], self.rules
-        s = r["signatures"][kind]
-        tier_pct = r["tier_damage_pct"][r["items"][f["equipped"]["trinket"]]["tier"]]
+        s = cast.get("parameters", r["signatures"][kind])
+        tier_pct = cast.get("tier_pct", r["tier_damage_pct"][r["items"][f["equipped"]["trinket"]]["tier"]])
+        damage_pct = cast.get("damage_pct", f["damage_pct"])
         target = self.state["fighters"].get(cast["target"])
-        reach = s["range"] * f["sig_range_pct"] // r["percent"]
+        reach = s["range"] * cast.get("sig_range_pct", f["sig_range_pct"]) // r["percent"]
         f["shield_until"] = self.state["tick"]
         if kind == "beam_sweep":
             angle = angle_to(cast["x"] - f["x"], cast["y"] - f["y"], r)
-            self._object({"kind": kind, "owner": f["id"], "x": f["x"], "y": f["y"],
-                          "item_id": cast.get("item_id", f["equipped"]["trinket"]), "start_tick": self.state["tick"],
-                          "angle": angle - s["half_arc"], "start": self.state["tick"],
-                          "resolve_at": self.state["tick"], "until": self.state["tick"] + s["duration"],
-                          "range": reach, "width": s["width"], "damage": s["damage"],
-                          "damage_pct": f["damage_pct"], "tier_pct": tier_pct, "hit": []})
+            obj = {"kind": kind, "owner": f["id"], "x": f["x"], "y": f["y"],
+                   "item_id": cast.get("item_id", f["equipped"]["trinket"]), "start_tick": self.state["tick"],
+                   "angle": angle - s["half_arc"], "start": self.state["tick"],
+                   "resolve_at": self.state["tick"], "until": self.state["tick"] + s["duration"],
+                   "range": reach, "width": s["width"], "damage": s["damage"],
+                   "damage_pct": damage_pct, "tier_pct": tier_pct, "hit": []}
+            if "parameters" in cast:
+                obj.update(half_arc=s["half_arc"], duration=s["duration"])
+            self._object(obj)
         elif kind == "chain_storm":
             if target is not None and target["state"] == "alive" and distance(f, target) <= reach:
                 count = s["base_targets"] + len(self._live()) // s["crowd_divisor"]
-                self._chain(f, target, count, reach, s["damage"], tier_pct, move=kind)
+                self._chain(f, target, count, reach, s["damage"], tier_pct, move=kind, damage_pct=damage_pct)
         elif kind == "shockwave":
             for name in self._live():
                 e = self.state["fighters"][name]
                 if name != f["id"] and distance(f, e) <= reach:
-                    self.queue_hit(f["id"], name, s["damage"], f["damage_pct"], tier_pct, s["knockback"], move=kind)
+                    self.queue_hit(f["id"], name, s["damage"], damage_pct, tier_pct, s["knockback"], move=kind)
         elif kind == "blink_strike":
             if target is not None and target["state"] == "alive" and distance(f, target) <= reach:
                 dx, dy = vector(target["direction"], -s["behind"], r)
                 f["x"], f["y"] = target["x"] + dx, target["y"] + dy
                 self._clamp(f)
-                self.queue_hit(f["id"], target["id"], s["damage"], f["damage_pct"], tier_pct, move=kind)
+                self.queue_hit(f["id"], target["id"], s["damage"], damage_pct, tier_pct, move=kind)
         elif kind in ("magnet", "bubble"):
             f["shield"], f["shield_kind"] = s["shield"], kind
             f["shield_ends"] = self.state["tick"] + s["shield_ticks"]
+            if "parameters" in cast:
+                f["shield_parameters"] = rules_dict(s)
             if kind == "magnet":
                 for drop_id in ordered_ids(self.state["drops"]):
                     d = self.state["drops"][drop_id]
@@ -984,7 +1053,7 @@ class Sim:
                 angle = obj["angle"]
                 if kind == "beam_sweep":
                     s = self.rules["signatures"][kind]
-                    angle += (tick - obj["start"]) * (s["half_arc"] * 2) // s["duration"]
+                    angle += (tick - obj["start"]) * (obj.get("half_arc", s["half_arc"]) * 2) // obj.get("duration", s["duration"])
                     remove = tick >= obj["until"]
                 vx, vy = vector(angle, self.rules["trig_scale"], self.rules)
                 for name in self._live():
@@ -1051,6 +1120,8 @@ class Sim:
             f["hp"] = max(0, f["hp"] - amount + absorbed)
             if f["shield"] == 0 and f["shield_kind"] == "bubble":
                 self._pop_bubble(f)
+            if f["shield"] == 0:
+                f.pop("shield_parameters", None)
             f["hits"][hit["source"]] = tick
             f["last_hit"] = hit["source"]
             f["last_damage_tick"] = tick
@@ -1075,16 +1146,18 @@ class Sim:
             f["shield"] = 0
             if f["shield_kind"] == "bubble":
                 self._pop_bubble(f)
+            f.pop("shield_parameters", None)
             f["shield_kind"] = None
 
     def _pop_bubble(self, f):
         f["shield_kind"] = None
-        radius = self.rules["signatures"]["bubble"]["range"]
+        s = f.pop("shield_parameters", self.rules["signatures"]["bubble"])
+        radius = s["range"]
         for name in self._live():
             e = self.state["fighters"][name]
             if name != f["id"] and distance(f, e) <= radius:
                 e["knock_x"], e["knock_y"] = normalise(e["x"] - f["x"], e["y"] - f["y"],
-                                                       self.rules["signatures"]["bubble"]["knockback"] // self.rules["knockback_ticks"])
+                                                       s["knockback"] // self.rules["knockback_ticks"])
                 e["knock_ticks"] = self.rules["knockback_ticks"]
 
     def inventory_entry(self, row):
@@ -1196,6 +1269,7 @@ class Sim:
 
     def _respawn(self, f):
         r = self.rules
+        f.pop("shield_parameters", None)
         if f["house"]:
             f["bag"] = {row: self.inventory_entry(row) for row in sorted(f["kit"].values())
                         if not r["items"][row]["default"]}

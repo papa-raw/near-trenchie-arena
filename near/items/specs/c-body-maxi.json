@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-body-maxi",
+ "name": "Life Vest",
+ "slot": "body",
+ "tier": "common",
+ "stats": {
+  "damage": 2,
+  "cooldown": 3,
+  "hp": 4,
+  "speed": 0,
+  "range": 1
+ },
+ "tag": "maxi",
+ "kit": "body/vest",
+ "colors": {
+  "main": "p14",
+  "accent": "p04"
+ }
+}

@@ -50,6 +50,20 @@ class Baseline(unittest.TestCase):
         self.assertEqual(g.rules["weapons"]["shot"]["speed"], 350)
         self.assertEqual(g.rules["shot_hit_radius"], 250)
 
+    def test_legendary_lift_gives_a_third_of_the_crowd_other_legendary_wearers(self):
+        import balance
+        rules = sim.DEFAULT_RULES
+        row = next(r for r in sorted(rules["items"]) if rules["items"][r]["tier"] == "legendary")
+        for arm in ("legendary", "rare"):
+            case = balance.Scenario("legendary_lift", 6, "brawler", "rares", left=row, right=arm, density=2)
+            players = balance.roster(case, rules, 1)
+            others = [p for p in players if p["name"] != "holder"
+                      and rules["items"][p["loadout"]["trinket"]]["tier"] == "legendary"]
+            self.assertEqual(len(others), -(-case.crowd // 3))
+            self.assertNotIn(row, [p["loadout"]["trinket"] for p in others])
+        lifts = [c for c in balance.scenarios(rules) if c.family == "legendary_lift"]
+        self.assertTrue(lifts and all(c.density == -(-c.crowd // 3) for c in lifts))
+
 
 class Sweep(unittest.TestCase):
     def test_first_life_requires_distinct_victims_of_that_rare_life(self):

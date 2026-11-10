@@ -1,0 +1,2105 @@
+{
+ "spec": "trenchie-kit/1",
+ "item_spec": "trenchie-item/3",
+ "units": "item units: 2 per tile; angles in degrees; a tube is stroked at width = 2r",
+ "note": "Colours are palette ids p01-p15; p16 is the reserved danger hue and no item uses it. A node with a role recolours when a row names a colour for that role.",
+ "bases": {
+  "head": {
+   "cap": {
+    "name": "Sun cap",
+    "colors": {
+     "main": "p14",
+     "accent": "p15"
+    },
+    "nodes": [
+     {
+      "type": "hemisphere",
+      "role": "main",
+      "color": "p14",
+      "r": 0.4436,
+      "translate": [
+       0.0,
+       0.164,
+       0.0
+      ],
+      "scale": [
+       1,
+       0.95,
+       1
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p15",
+      "r": 0.4346,
+      "h": 0.044,
+      "arc": 162.0,
+      "arcStart": -81.0,
+      "translate": [
+       0.0,
+       0.172,
+       0.024
+      ],
+      "scale": [
+       1,
+       1,
+       1.3
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "accent",
+      "color": "p15",
+      "r": 0.052,
+      "translate": [
+       0.0,
+       0.5616,
+       0.0
+      ]
+     }
+    ]
+   },
+   "bucket": {
+    "name": "Bucket hat",
+    "colors": {
+     "main": "p09",
+     "accent": "p10"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p09",
+      "r": 0.44,
+      "rTop": 0.231,
+      "h": 0.34,
+      "translate": [
+       0.0,
+       0.334,
+       0.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p09",
+      "r": 0.5956,
+      "h": 0.04,
+      "translate": [
+       0.0,
+       0.156,
+       0.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p10",
+      "r": 0.4368,
+      "h": 0.068,
+      "open": true,
+      "translate": [
+       0.0,
+       0.232,
+       0.0
+      ]
+     }
+    ]
+   },
+   "cone": {
+    "name": "Party cone",
+    "colors": {
+     "main": "p11",
+     "accent": "p12"
+    },
+    "nodes": [
+     {
+      "type": "cone",
+      "role": "main",
+      "color": "p11",
+      "r": 0.2442,
+      "h": 0.52,
+      "translate": [
+       -0.04,
+       0.6416,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       -12.61
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "accent",
+      "color": "p12",
+      "r": 0.076,
+      "translate": [
+       -0.108,
+       0.8916,
+       0.0
+      ]
+     },
+     {
+      "type": "torus",
+      "role": "accent",
+      "color": "p12",
+      "r": 0.3082,
+      "tube": 0.024,
+      "translate": [
+       -0.004,
+       0.224,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       -12.61
+      ]
+     }
+    ]
+   },
+   "sweatband": {
+    "name": "Sweatband",
+    "colors": {
+     "main": "p14",
+     "accent": "p15"
+    },
+    "nodes": [
+     {
+      "type": "torus",
+      "role": "main",
+      "color": "p14",
+      "r": 0.4072,
+      "tube": 0.06,
+      "translate": [
+       0.0,
+       0.234,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "scale": [
+       1,
+       1.25,
+       1
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "main",
+      "color": "p14",
+      "r": 0.072,
+      "translate": [
+       0.0,
+       0.234,
+       -0.4312
+      ]
+     },
+     {
+      "type": "cone",
+      "role": "accent",
+      "color": "p15",
+      "r": 0.06,
+      "h": 0.24,
+      "translate": [
+       0.08,
+       0.154,
+       -0.4672
+      ],
+      "rotate": [
+       22.92,
+       0.0,
+       20.05
+      ]
+     },
+     {
+      "type": "cone",
+      "role": "accent",
+      "color": "p15",
+      "r": 0.06,
+      "h": 0.22,
+      "translate": [
+       -0.07,
+       0.158,
+       -0.4672
+      ],
+      "rotate": [
+       22.92,
+       0.0,
+       -17.19
+      ]
+     }
+    ]
+   },
+   "hardhat": {
+    "name": "Hard hat",
+    "colors": {
+     "main": "p05",
+     "accent": "p12"
+    },
+    "nodes": [
+     {
+      "type": "hemisphere",
+      "role": "main",
+      "color": "p05",
+      "r": 0.4476,
+      "translate": [
+       0.0,
+       0.164,
+       0.0
+      ],
+      "scale": [
+       1,
+       0.9,
+       1
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p05",
+      "r": 0.4956,
+      "h": 0.048,
+      "translate": [
+       0.0,
+       0.176,
+       0.032
+      ]
+     },
+     {
+      "type": "tube",
+      "role": "accent",
+      "color": "p12",
+      "width": 0.072,
+      "points": [
+       [
+        0.0,
+        0.172,
+        0.443
+       ],
+       [
+        0.0,
+        0.3714,
+        0.3836
+       ],
+       [
+        0.0,
+        0.5174,
+        0.2216
+       ],
+       [
+        0.0,
+        0.5708,
+        0.0
+       ],
+       [
+        0.0,
+        0.5174,
+        -0.2216
+       ],
+       [
+        0.0,
+        0.3714,
+        -0.3836
+       ],
+       [
+        0.0,
+        0.172,
+        -0.443
+       ]
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "accent",
+      "color": "p12",
+      "r": 0.044,
+      "translate": [
+       0.0,
+       0.264,
+       0.4356
+      ]
+     }
+    ]
+   },
+   "beanie": {
+    "name": "Beanie",
+    "colors": {
+     "main": "p10",
+     "accent": "p09"
+    },
+    "nodes": [
+     {
+      "type": "hemisphere",
+      "role": "main",
+      "color": "p10",
+      "r": 0.4436,
+      "translate": [
+       0.0,
+       0.144,
+       0.0
+      ],
+      "scale": [
+       1,
+       1.1,
+       1
+      ]
+     },
+     {
+      "type": "torus",
+      "role": "accent",
+      "color": "p09",
+      "r": 0.4226,
+      "tube": 0.06,
+      "translate": [
+       0.0,
+       0.192,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "accent",
+      "color": "p09",
+      "r": 0.1,
+      "translate": [
+       0.0,
+       0.6016,
+       0.0
+      ]
+     }
+    ]
+   },
+   "visor": {
+    "name": "Visor",
+    "colors": {
+     "main": "p07",
+     "accent": "p08"
+    },
+    "nodes": [
+     {
+      "type": "torus",
+      "role": "main",
+      "color": "p07",
+      "r": 0.4152,
+      "tube": 0.048,
+      "translate": [
+       0.0,
+       0.224,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p08",
+      "r": 0.4268,
+      "h": 0.032,
+      "arc": 162.0,
+      "arcStart": -81.0,
+      "translate": [
+       0.0,
+       0.228,
+       0.04
+      ],
+      "scale": [
+       1,
+       1,
+       1.3
+      ]
+     },
+     {
+      "type": "hemisphere",
+      "role": "main",
+      "color": "p07",
+      "r": 0.2286,
+      "translate": [
+       0.0,
+       0.234,
+       0.0
+      ],
+      "scale": [
+       1,
+       0.8,
+       1
+      ]
+     }
+    ]
+   },
+   "crown": {
+    "name": "Crown",
+    "colors": {
+     "main": "p12",
+     "accent": "p15"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p12",
+      "r": 0.4272,
+      "h": 0.13,
+      "translate": [
+       0.0,
+       0.234,
+       0.0
+      ]
+     },
+     {
+      "type": "cone",
+      "role": "main",
+      "color": "p12",
+      "r": 0.064,
+      "h": 0.18,
+      "translate": [
+       0.2224,
+       0.374,
+       0.306
+      ]
+     },
+     {
+      "type": "cone",
+      "role": "main",
+      "color": "p12",
+      "r": 0.064,
+      "h": 0.18,
+      "translate": [
+       0.3598,
+       0.374,
+       -0.1168
+      ]
+     },
+     {
+      "type": "cone",
+      "role": "main",
+      "color": "p12",
+      "r": 0.064,
+      "h": 0.18,
+      "translate": [
+       0.0,
+       0.374,
+       -0.3782
+      ]
+     },
+     {
+      "type": "cone",
+      "role": "main",
+      "color": "p12",
+      "r": 0.064,
+      "h": 0.18,
+      "translate": [
+       -0.3598,
+       0.374,
+       -0.1168
+      ]
+     },
+     {
+      "type": "cone",
+      "role": "main",
+      "color": "p12",
+      "r": 0.064,
+      "h": 0.18,
+      "translate": [
+       -0.2224,
+       0.374,
+       0.306
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "accent",
+      "color": "p15",
+      "r": 0.044,
+      "translate": [
+       0.0,
+       0.254,
+       0.4228
+      ]
+     }
+    ]
+   }
+  },
+  "body": {
+   "tee": {
+    "name": "Tee",
+    "colors": {
+     "main": "p05",
+     "accent": "p09"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p05",
+      "r": 0.3022,
+      "rTop": 0.485,
+      "h": 0.66,
+      "translate": [
+       0.0,
+       0.4,
+       0.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p09",
+      "r": 0.4632,
+      "rTop": 0.486,
+      "h": 0.16,
+      "translate": [
+       0.0,
+       0.4,
+       0.0
+      ]
+     },
+     {
+      "type": "torus",
+      "role": "accent",
+      "color": "p09",
+      "r": 0.473,
+      "tube": 0.028,
+      "translate": [
+       0.0,
+       0.74,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     }
+    ]
+   },
+   "vest": {
+    "name": "Life vest",
+    "colors": {
+     "main": "p14",
+     "accent": "p05"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p14",
+      "r": 0.393,
+      "rTop": 0.486,
+      "h": 0.5,
+      "translate": [
+       0.0,
+       0.43,
+       0.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p05",
+      "r": 0.456,
+      "rTop": 0.4806,
+      "h": 0.08,
+      "translate": [
+       0.0,
+       0.4,
+       0.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p05",
+      "r": 0.486,
+      "rTop": 0.486,
+      "h": 0.08,
+      "translate": [
+       0.0,
+       0.58,
+       0.0
+      ]
+     },
+     {
+      "type": "box",
+      "color": "p01",
+      "h": 0.5,
+      "w": 0.048,
+      "d": 0.02,
+      "translate": [
+       0.0,
+       0.43,
+       0.4872
+      ]
+     }
+    ]
+   },
+   "suit": {
+    "name": "Wetsuit",
+    "colors": {
+     "main": "p01",
+     "accent": "p09"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p01",
+      "r": 0.2802,
+      "rTop": 0.486,
+      "h": 0.68,
+      "translate": [
+       0.0,
+       0.4,
+       0.0
+      ]
+     },
+     {
+      "type": "box",
+      "role": "accent",
+      "color": "p09",
+      "h": 0.62,
+      "w": 0.036,
+      "d": 0.14,
+      "translate": [
+       -0.4696,
+       0.4,
+       0.0
+      ]
+     },
+     {
+      "type": "box",
+      "role": "accent",
+      "color": "p09",
+      "h": 0.62,
+      "w": 0.036,
+      "d": 0.14,
+      "translate": [
+       0.4696,
+       0.4,
+       0.0
+      ]
+     }
+    ]
+   },
+   "overalls": {
+    "name": "Overalls",
+    "colors": {
+     "main": "p10",
+     "accent": "p12"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p10",
+      "r": 0.2802,
+      "rTop": 0.486,
+      "h": 0.52,
+      "translate": [
+       0.0,
+       0.32,
+       0.0
+      ]
+     },
+     {
+      "type": "plate",
+      "role": "main",
+      "color": "p10",
+      "h": 0.32,
+      "w": 0.24,
+      "radius": 0.06,
+      "t": 0.032,
+      "translate": [
+       0.0,
+       0.7,
+       0.451
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "accent",
+      "color": "p12",
+      "r": 0.032,
+      "translate": [
+       -0.08,
+       0.8,
+       0.4676
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "accent",
+      "color": "p12",
+      "r": 0.032,
+      "translate": [
+       0.08,
+       0.8,
+       0.4676
+      ]
+     },
+     {
+      "type": "torus",
+      "color": "p03",
+      "r": 0.4708,
+      "tube": 0.02,
+      "translate": [
+       0.0,
+       0.58,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     }
+    ]
+   },
+   "robe": {
+    "name": "Robe",
+    "colors": {
+     "main": "p11",
+     "accent": "p13"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p11",
+      "r": 0.04,
+      "rTop": 0.486,
+      "h": 0.72,
+      "translate": [
+       0.0,
+       0.36,
+       0.0
+      ]
+     },
+     {
+      "type": "torus",
+      "role": "accent",
+      "color": "p13",
+      "r": 0.243,
+      "tube": 0.036,
+      "translate": [
+       0.0,
+       0.04,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "type": "plate",
+      "role": "accent",
+      "color": "p13",
+      "h": 0.6,
+      "w": 0.06,
+      "radius": 0.02,
+      "t": 0.024,
+      "translate": [
+       0.0,
+       0.4,
+       0.4696
+      ]
+     }
+    ]
+   },
+   "poncho": {
+    "name": "Poncho",
+    "colors": {
+     "main": "p07",
+     "accent": "p13"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p07",
+      "r": 0.3182,
+      "rTop": 0.486,
+      "h": 0.68,
+      "translate": [
+       0.0,
+       0.4,
+       0.0
+      ]
+     },
+     {
+      "type": "torus",
+      "role": "accent",
+      "color": "p13",
+      "r": 0.354,
+      "tube": 0.032,
+      "translate": [
+       0.0,
+       0.12,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "type": "torus",
+      "role": "accent",
+      "color": "p13",
+      "r": 0.4736,
+      "tube": 0.024,
+      "translate": [
+       0.0,
+       0.4,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     }
+    ]
+   },
+   "sash": {
+    "name": "Sash",
+    "colors": {
+     "main": "p15",
+     "accent": "p12"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "color": "p05",
+      "r": 0.2982,
+      "rTop": 0.4806,
+      "h": 0.46,
+      "translate": [
+       0.0,
+       0.32,
+       0.0
+      ]
+     },
+     {
+      "type": "torus",
+      "role": "main",
+      "color": "p15",
+      "r": 0.4296,
+      "tube": 0.056,
+      "translate": [
+       0.0,
+       0.4,
+       0.0
+      ],
+      "rotate": [
+       -22.92,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "accent",
+      "color": "p12",
+      "r": 0.068,
+      "translate": [
+       -0.2,
+       0.2,
+       0.2946
+      ]
+     }
+    ]
+   },
+   "apron": {
+    "name": "Apron",
+    "colors": {
+     "main": "p05",
+     "accent": "p10"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p05",
+      "r": 0.2722,
+      "rTop": 0.4806,
+      "h": 0.48,
+      "translate": [
+       0.0,
+       0.3,
+       0.0
+      ]
+     },
+     {
+      "type": "plate",
+      "role": "accent",
+      "color": "p10",
+      "h": 0.52,
+      "w": 0.3,
+      "radius": 0.08,
+      "t": 0.032,
+      "translate": [
+       0.0,
+       0.48,
+       0.4426
+      ]
+     },
+     {
+      "type": "plate",
+      "role": "main",
+      "color": "p05",
+      "h": 0.12,
+      "w": 0.16,
+      "radius": 0.032,
+      "t": 0.024,
+      "translate": [
+       0.0,
+       0.4,
+       0.4536
+      ]
+     },
+     {
+      "type": "torus",
+      "color": "p03",
+      "r": 0.4676,
+      "tube": 0.02,
+      "translate": [
+       0.0,
+       0.6,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     }
+    ]
+   }
+  },
+  "weapon": {
+   "club": {
+    "name": "Bat",
+    "colors": {
+     "main": "p02",
+     "accent": "p03"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p02",
+      "r": 0.036,
+      "rTop": 0.084,
+      "h": 0.68,
+      "translate": [
+       0.0,
+       0.32,
+       0.0
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "main",
+      "color": "p02",
+      "r": 0.084,
+      "translate": [
+       0.0,
+       0.67,
+       0.0
+      ]
+     },
+     {
+      "type": "torus",
+      "role": "accent",
+      "color": "p03",
+      "r": 0.04,
+      "tube": 0.024,
+      "translate": [
+       0.0,
+       0.04,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "accent",
+      "color": "p03",
+      "r": 0.028,
+      "translate": [
+       0.0,
+       0.44,
+       0.08
+      ]
+     }
+    ]
+   },
+   "oar": {
+    "name": "Oar",
+    "colors": {
+     "main": "p05",
+     "accent": "p10"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p10",
+      "r": 0.036,
+      "h": 0.68,
+      "translate": [
+       0.0,
+       0.2,
+       0.0
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "main",
+      "color": "p05",
+      "r": 0.15,
+      "translate": [
+       0.0,
+       0.76,
+       0.0
+      ],
+      "scale": [
+       0.85,
+       1.9,
+       0.26
+      ]
+     },
+     {
+      "type": "cylinder",
+      "color": "p13",
+      "r": 0.052,
+      "h": 0.06,
+      "translate": [
+       0.0,
+       0.44,
+       0.0
+      ]
+     }
+    ]
+   },
+   "spear": {
+    "name": "Spear",
+    "colors": {
+     "main": "p05",
+     "accent": "p10"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p10",
+      "r": 0.036,
+      "h": 0.68,
+      "translate": [
+       0.0,
+       0.2,
+       0.0
+      ]
+     },
+     {
+      "type": "cone",
+      "role": "main",
+      "color": "p05",
+      "r": 0.116,
+      "h": 0.44,
+      "translate": [
+       0.0,
+       0.76,
+       0.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "color": "p13",
+      "r": 0.06,
+      "h": 0.06,
+      "translate": [
+       0.0,
+       0.54,
+       0.0
+      ]
+     }
+    ]
+   },
+   "sling": {
+    "name": "Sling",
+    "colors": {
+     "main": "p03",
+     "accent": "p14"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p03",
+      "r": 0.044,
+      "rTop": 0.04,
+      "h": 0.4,
+      "translate": [
+       0.0,
+       0.16,
+       0.0
+      ]
+     },
+     {
+      "type": "torus",
+      "role": "main",
+      "color": "p03",
+      "r": 0.14,
+      "tube": 0.04,
+      "arc": 180.0,
+      "translate": [
+       0.0,
+       0.42,
+       0.0
+      ],
+      "rotate": [
+       -90.0,
+       0.0,
+       180.0
+      ]
+     },
+     {
+      "type": "sphere",
+      "color": "p06",
+      "r": 0.08,
+      "translate": [
+       0.0,
+       0.4,
+       0.0
+      ]
+     },
+     {
+      "type": "tube",
+      "role": "accent",
+      "color": "p14",
+      "width": 0.032,
+      "points": [
+       [
+        -0.14,
+        0.42,
+        0.0
+       ],
+       [
+        0.0,
+        0.34,
+        0.02
+       ],
+       [
+        0.14,
+        0.42,
+        0.0
+       ]
+      ]
+     }
+    ]
+   },
+   "wand": {
+    "name": "Jelly wand",
+    "colors": {
+     "main": "p11",
+     "accent": "p09"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "color": "p03",
+      "r": 0.034,
+      "h": 0.64,
+      "translate": [
+       0.0,
+       0.2,
+       0.0
+      ]
+     },
+     {
+      "type": "hemisphere",
+      "role": "main",
+      "color": "p11",
+      "r": 0.15,
+      "translate": [
+       0.0,
+       0.54,
+       0.0
+      ],
+      "scale": [
+       1,
+       0.9,
+       1
+      ]
+     },
+     {
+      "type": "torus",
+      "role": "accent",
+      "color": "p09",
+      "r": 0.136,
+      "tube": 0.032,
+      "translate": [
+       0.0,
+       0.54,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     }
+    ]
+   },
+   "lens": {
+    "name": "Lantern",
+    "colors": {
+     "main": "p14",
+     "accent": "p12"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "color": "p03",
+      "r": 0.034,
+      "h": 0.56,
+      "translate": [
+       0.0,
+       0.16,
+       0.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p14",
+      "r": 0.104,
+      "rTop": 0.08,
+      "h": 0.2,
+      "translate": [
+       0.0,
+       0.6,
+       0.0
+      ]
+     },
+     {
+      "type": "cone",
+      "color": "p15",
+      "r": 0.12,
+      "h": 0.1,
+      "translate": [
+       0.0,
+       0.77,
+       0.0
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "accent",
+      "color": "p12",
+      "r": 0.068,
+      "translate": [
+       0.0,
+       0.62,
+       0.06
+      ]
+     }
+    ]
+   },
+   "bomb": {
+    "name": "Coconut",
+    "colors": {
+     "main": "p03",
+     "accent": "p12"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "color": "p02",
+      "r": 0.108,
+      "rTop": 0.088,
+      "h": 0.4,
+      "translate": [
+       0.0,
+       0.2,
+       0.0
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "main",
+      "color": "p03",
+      "r": 0.124,
+      "translate": [
+       0.0,
+       0.48,
+       0.0
+      ]
+     },
+     {
+      "type": "cone",
+      "role": "accent",
+      "color": "p12",
+      "r": 0.024,
+      "h": 0.12,
+      "translate": [
+       0.02,
+       0.62,
+       0.0
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       -22.92
+      ]
+     },
+     {
+      "type": "sphere",
+      "color": "p15",
+      "r": 0.032,
+      "translate": [
+       0.068,
+       0.68,
+       0.0
+      ]
+     }
+    ]
+   },
+   "fish": {
+    "name": "Trout",
+    "colors": {
+     "main": "p09",
+     "accent": "p10"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "color": "p03",
+      "r": 0.034,
+      "h": 0.44,
+      "translate": [
+       0.0,
+       0.12,
+       0.0
+      ]
+     },
+     {
+      "type": "sphere",
+      "role": "main",
+      "color": "p09",
+      "r": 0.15,
+      "translate": [
+       0.0,
+       0.6,
+       0.0
+      ],
+      "scale": [
+       0.6,
+       1.5,
+       0.45
+      ]
+     },
+     {
+      "type": "cone",
+      "role": "accent",
+      "color": "p10",
+      "r": 0.1,
+      "h": 0.18,
+      "translate": [
+       0.0,
+       0.85,
+       0.0
+      ],
+      "rotate": [
+       180.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "type": "sphere",
+      "color": "p04",
+      "r": 0.028,
+      "translate": [
+       0.04,
+       0.68,
+       0.068
+      ]
+     },
+     {
+      "type": "sphere",
+      "color": "p01",
+      "r": 0.014,
+      "translate": [
+       0.048,
+       0.68,
+       0.088
+      ]
+     }
+    ]
+   }
+  },
+  "trinket": {
+   "roll": {
+    "name": "Bedroll",
+    "colors": {
+     "main": "p05",
+     "accent": "p10"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p05",
+      "r": 0.09,
+      "h": 0.24,
+      "translate": [
+       0.0,
+       0.22,
+       0.078
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       90.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p10",
+      "r": 0.096,
+      "h": 0.042,
+      "translate": [
+       -0.078,
+       0.22,
+       0.078
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       90.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p10",
+      "r": 0.096,
+      "h": 0.042,
+      "translate": [
+       0.078,
+       0.22,
+       0.078
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       90.0
+      ]
+     }
+    ]
+   },
+   "pen": {
+    "name": "Laser pen",
+    "colors": {
+     "main": "p03",
+     "accent": "p11"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p03",
+      "r": 0.048,
+      "h": 0.255,
+      "translate": [
+       0.0,
+       0.22,
+       0.072
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       34.38
+      ]
+     },
+     {
+      "type": "cone",
+      "role": "accent",
+      "color": "p11",
+      "r": 0.048,
+      "h": 0.09,
+      "translate": [
+       -0.081,
+       0.1,
+       0.072
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       214.38
+      ]
+     },
+     {
+      "type": "sphere",
+      "color": "p15",
+      "r": 0.042,
+      "translate": [
+       0.081,
+       0.34,
+       0.072
+      ]
+     }
+    ]
+   },
+   "bolt": {
+    "name": "Bolt",
+    "colors": {
+     "main": "p12",
+     "accent": "p13"
+    },
+    "nodes": [
+     {
+      "type": "tube",
+      "role": "main",
+      "color": "p12",
+      "width": 0.072,
+      "points": [
+       [
+        0.054,
+        0.355,
+        0.078
+       ],
+       [
+        -0.06,
+        0.244,
+        0.078
+       ],
+       [
+        0.06,
+        0.196,
+        0.078
+       ],
+       [
+        -0.054,
+        0.085,
+        0.078
+       ]
+      ]
+     }
+    ]
+   },
+   "shell": {
+    "name": "Shell",
+    "colors": {
+     "main": "p14",
+     "accent": "p15"
+    },
+    "nodes": [
+     {
+      "type": "hemisphere",
+      "role": "main",
+      "color": "p14",
+      "r": 0.12,
+      "translate": [
+       0.0,
+       0.22,
+       0.036
+      ],
+      "rotate": [
+       90.0,
+       0.0,
+       0.0
+      ],
+      "scale": [
+       1.1,
+       1,
+       0.9
+      ]
+     },
+     {
+      "type": "torus",
+      "role": "accent",
+      "color": "p15",
+      "r": 0.084,
+      "tube": 0.021,
+      "translate": [
+       0.0,
+       0.22,
+       0.06
+      ],
+      "rotate": [
+       -90.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "type": "torus",
+      "role": "accent",
+      "color": "p15",
+      "r": 0.045,
+      "tube": 0.018,
+      "translate": [
+       0.0,
+       0.22,
+       0.078
+      ],
+      "rotate": [
+       -90.0,
+       0.0,
+       0.0
+      ]
+     }
+    ]
+   },
+   "bomb": {
+    "name": "Smoke bomb",
+    "colors": {
+     "main": "p01",
+     "accent": "p12"
+    },
+    "nodes": [
+     {
+      "type": "sphere",
+      "role": "main",
+      "color": "p01",
+      "r": 0.12,
+      "translate": [
+       0.0,
+       0.208,
+       0.09
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p12",
+      "r": 0.024,
+      "h": 0.102,
+      "translate": [
+       0.036,
+       0.346,
+       0.09
+      ],
+      "rotate": [
+       0.0,
+       0.0,
+       -28.65
+      ]
+     },
+     {
+      "type": "sphere",
+      "color": "p15",
+      "r": 0.03,
+      "translate": [
+       0.078,
+       0.4,
+       0.09
+      ]
+     }
+    ]
+   },
+   "magnet": {
+    "name": "Magnet",
+    "colors": {
+     "main": "p15",
+     "accent": "p06"
+    },
+    "nodes": [
+     {
+      "type": "tube",
+      "role": "main",
+      "color": "p15",
+      "width": 0.084,
+      "points": [
+       [
+        -0.09,
+        0.31,
+        0.072
+       ],
+       [
+        -0.09,
+        0.196,
+        0.072
+       ],
+       [
+        -0.042,
+        0.118,
+        0.072
+       ],
+       [
+        0.042,
+        0.118,
+        0.072
+       ],
+       [
+        0.09,
+        0.196,
+        0.072
+       ],
+       [
+        0.09,
+        0.31,
+        0.072
+       ]
+      ]
+     },
+     {
+      "type": "box",
+      "role": "accent",
+      "color": "p06",
+      "h": 0.06,
+      "w": 0.09,
+      "d": 0.072,
+      "translate": [
+       -0.09,
+       0.34,
+       0.072
+      ]
+     },
+     {
+      "type": "box",
+      "role": "accent",
+      "color": "p06",
+      "h": 0.06,
+      "w": 0.09,
+      "d": 0.072,
+      "translate": [
+       0.09,
+       0.34,
+       0.072
+      ]
+     }
+    ]
+   },
+   "ring": {
+    "name": "Bubble loop",
+    "colors": {
+     "main": "p09",
+     "accent": "p10"
+    },
+    "nodes": [
+     {
+      "type": "torus",
+      "role": "main",
+      "color": "p09",
+      "r": 0.09,
+      "tube": 0.027,
+      "translate": [
+       0.0,
+       0.256,
+       0.078
+      ],
+      "rotate": [
+       -90.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p10",
+      "r": 0.027,
+      "h": 0.15,
+      "translate": [
+       0.0,
+       0.1,
+       0.078
+      ]
+     },
+     {
+      "type": "sphere",
+      "color": "p04",
+      "r": 0.021,
+      "translate": [
+       -0.03,
+       0.295,
+       0.108
+      ]
+     }
+    ]
+   },
+   "coins": {
+    "name": "Coins",
+    "colors": {
+     "main": "p12",
+     "accent": "p13"
+    },
+    "nodes": [
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p12",
+      "r": 0.096,
+      "h": 0.036,
+      "translate": [
+       0.0,
+       0.22,
+       0.036
+      ],
+      "rotate": [
+       90.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "accent",
+      "color": "p13",
+      "r": 0.096,
+      "h": 0.036,
+      "translate": [
+       0.0,
+       0.22,
+       0.075
+      ],
+      "rotate": [
+       90.0,
+       0.0,
+       0.0
+      ]
+     },
+     {
+      "type": "cylinder",
+      "role": "main",
+      "color": "p12",
+      "r": 0.096,
+      "h": 0.036,
+      "translate": [
+       0.0,
+       0.22,
+       0.114
+      ],
+      "rotate": [
+       90.0,
+       0.0,
+       0.0
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "menu": [
+  {
+   "row": "st-cap",
+   "kit": "head/cap",
+   "colors": {
+    "main": "p14",
+    "accent": "p15"
+   }
+  },
+  {
+   "row": "c-head-maxi",
+   "kit": "head/bucket",
+   "colors": {
+    "main": "p09",
+    "accent": "p10"
+   }
+  },
+  {
+   "row": "c-head-degen",
+   "kit": "head/cone",
+   "colors": {
+    "main": "p11",
+    "accent": "p12"
+   }
+  },
+  {
+   "row": "c-head-speedrunner",
+   "kit": "head/sweatband",
+   "colors": {
+    "main": "p14",
+    "accent": "p15"
+   }
+  },
+  {
+   "row": "c-head-builder",
+   "kit": "head/hardhat",
+   "colors": {
+    "main": "p05",
+    "accent": "p12"
+   }
+  },
+  {
+   "row": "st-tee",
+   "kit": "body/tee",
+   "colors": {
+    "main": "p05",
+    "accent": "p09"
+   }
+  },
+  {
+   "row": "c-body-maxi",
+   "kit": "body/vest",
+   "colors": {
+    "main": "p14",
+    "accent": "p05"
+   }
+  },
+  {
+   "row": "c-body-degen",
+   "kit": "body/tee",
+   "colors": {
+    "main": "p07",
+    "accent": "p14"
+   }
+  },
+  {
+   "row": "c-body-speedrunner",
+   "kit": "body/suit",
+   "colors": {
+    "main": "p01",
+    "accent": "p09"
+   }
+  },
+  {
+   "row": "c-body-builder",
+   "kit": "body/overalls",
+   "colors": {
+    "main": "p10",
+    "accent": "p12"
+   }
+  },
+  {
+   "row": "st-bonk",
+   "kit": "weapon/club",
+   "colors": {
+    "main": "p02",
+    "accent": "p03"
+   }
+  },
+  {
+   "row": "c-swing",
+   "kit": "weapon/oar",
+   "colors": {
+    "main": "p05",
+    "accent": "p10"
+   }
+  },
+  {
+   "row": "c-shot",
+   "kit": "weapon/sling",
+   "colors": {
+    "main": "p03",
+    "accent": "p14"
+   }
+  },
+  {
+   "row": "c-beam",
+   "kit": "weapon/fish",
+   "colors": {
+    "main": "p09",
+    "accent": "p10"
+   }
+  },
+  {
+   "row": "c-lob",
+   "kit": "weapon/bomb",
+   "colors": {
+    "main": "p03",
+    "accent": "p12"
+   }
+  },
+  {
+   "row": "c-zap",
+   "kit": "weapon/wand",
+   "colors": {
+    "main": "p11",
+    "accent": "p09"
+   }
+  },
+  {
+   "row": "c-lunge",
+   "kit": "weapon/spear",
+   "colors": {
+    "main": "p05",
+    "accent": "p10"
+   }
+  },
+  {
+   "row": "st-roll",
+   "kit": "trinket/roll",
+   "colors": {
+    "main": "p05",
+    "accent": "p10"
+   }
+  },
+  {
+   "row": "c-beam-sweep",
+   "kit": "trinket/pen",
+   "colors": {
+    "main": "p03",
+    "accent": "p11"
+   }
+  },
+  {
+   "row": "c-chain-storm",
+   "kit": "trinket/bolt",
+   "colors": {
+    "main": "p12",
+    "accent": "p13"
+   }
+  },
+  {
+   "row": "c-shockwave",
+   "kit": "trinket/shell",
+   "colors": {
+    "main": "p14",
+    "accent": "p15"
+   }
+  },
+  {
+   "row": "c-blink-strike",
+   "kit": "trinket/bomb",
+   "colors": {
+    "main": "p01",
+    "accent": "p12"
+   }
+  },
+  {
+   "row": "c-magnet",
+   "kit": "trinket/magnet",
+   "colors": {
+    "main": "p15",
+    "accent": "p06"
+   }
+  },
+  {
+   "row": "c-bubble",
+   "kit": "trinket/ring",
+   "colors": {
+    "main": "p09",
+    "accent": "p10"
+   }
+  }
+ ]
+}

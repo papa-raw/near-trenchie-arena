@@ -1,0 +1,16 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-beam-sweep",
+ "name": "Sweep Charm",
+ "slot": "trinket",
+ "tier": "common",
+ "stats": {
+  "cooldown": 2,
+  "damage": 3,
+  "hp": 1,
+  "range": 4,
+  "speed": 0
+ },
+ "sig": "beam_sweep",
+ "kit": "trinket/charm"
+}

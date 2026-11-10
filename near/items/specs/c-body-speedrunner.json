@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-body-speedrunner",
+ "name": "Wetsuit",
+ "slot": "body",
+ "tier": "common",
+ "stats": {
+  "damage": 3,
+  "cooldown": 2,
+  "hp": 1,
+  "speed": 4,
+  "range": 0
+ },
+ "tag": "speedrunner",
+ "kit": "body/wetsuit",
+ "colors": {
+  "main": "p01",
+  "accent": "p09"
+ }
+}

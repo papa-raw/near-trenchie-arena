@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "st-bonk",
+ "name": "Driftwood Bonk",
+ "slot": "weapon",
+ "tier": "common",
+ "stats": {
+  "damage": 4,
+  "cooldown": 3,
+  "hp": 0,
+  "speed": 0,
+  "range": 3
+ },
+ "move": "swing",
+ "kit": "weapon/club",
+ "colors": {
+  "main": "p02",
+  "accent": "p03"
+ }
+}

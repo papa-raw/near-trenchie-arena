@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-shockwave",
+ "name": "Thump Shell",
+ "slot": "trinket",
+ "tier": "common",
+ "stats": {
+  "damage": 3,
+  "cooldown": 2,
+  "hp": 4,
+  "speed": 0,
+  "range": 1
+ },
+ "sig": "shockwave",
+ "kit": "trinket/shell",
+ "colors": {
+  "main": "p14",
+  "accent": "p15"
+ }
+}

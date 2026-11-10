@@ -13,6 +13,7 @@ import re
 import shutil
 import sys
 import time
+import unicodedata
 from typing import TYPE_CHECKING, Protocol
 
 if not __package__:
@@ -117,6 +118,25 @@ def copy_data(value):
 
 def error(code):
     return {"type": "error", "code": code, "request_id": None, "retry_after_ms": None}
+
+
+def dev_prefixed(value) -> bool:
+    """True when a name would read as a DEV trenchie: it starts with `dev-` after NFKC, casefolding, any
+    Unicode dash read as `-`, and zero-width and control characters removed. (Look-alike letters from other
+    scripts are not folded; the production gate also refuses anything the view would label DEV by id.)"""
+    text = unicodedata.normalize("NFKC", str(value))
+    text = "".join("-" if unicodedata.category(c) == "Pd" or c == "\u2212" else c
+                   for c in text if unicodedata.category(c) not in ("Cf", "Cc"))
+    return text.lstrip().casefold().startswith("dev-")
+
+
+DEV_FIELDS = ("nft_token_id", "member_id", "slot_id", "grant_id", "session_key_id")
+
+
+def edge_error(rules):
+    """Held at a segment's last ticks: retry once the next segment has opened (a whole input delay)."""
+    return {"type": "error", "code": "rate_limited", "request_id": None,
+            "retry_after_ms": str(rules["input_delay"] * rules["milliseconds_per_second"] // rules["tick_hz"])}
 
 
 def retire_fighter(game, name):
@@ -232,7 +252,7 @@ class Arena:
                  room_factory: Callable[[GameBridge], RoomPort] | None = None,
                  profile_provider=None, identity_resolver=None, receipt_signer=None,
                  admission_gate=None, life_guard=None, pick_resolver=None, sale_adapter=None,
-                 house_runtime=None, server_time_ms=None, rules=sim.DEFAULT_RULES, recover=False):
+                 house_runtime=None, server_time_ms=None, rules=sim.DEFAULT_RULES, recover=False, dev_host=None):
         self.context = copy_data(context)
         if self.context.get("rules_hash") != sim.digest(rules):
             raise ValueError("context rules hash mismatch")
@@ -240,6 +260,11 @@ class Arena:
             raise ValueError("room clock requires 20 Hz and 1200 ticks per segment")
         if not seeds:
             raise ValueError("published seeds are required")
+        # Only a DEV host (the local snap-in host) may seat a `dev-` id. A host says so with dev_host=True; left
+        # unset, it follows the deployment id (`dev-...`), which an operator sets and a player cannot reach.
+        self.dev_host = (str(self.context.get("deployment_id", "")).startswith("dev-")
+                         if dev_host is None else bool(dev_host))
+        self.refusals = deque(maxlen=100)
         self.seeds = tuple(seeds)
         for seed in seeds:
             sim.SplitMix64(seed, rules)
@@ -268,6 +293,7 @@ class Arena:
         self.commands = []
         self.input_events = []
         self.completed_lives = []
+        self.deferred, self.deferred_seq = [], 0     # engine effects held across a segment seal (see at_edge)
         self.initial_state = self.sim.export()
         self.serialisations = 0
         self.dropped_sends = 0
@@ -295,6 +321,82 @@ class Arena:
     @property
     def segment_id(self):
         return "segment:" + str(self.segment_index)
+
+    def at_edge(self):
+        """True on the last input_delay ticks of a segment.
+
+        An input enqueued now applies at tick + input_delay, which is already the next segment, but this
+        segment's record would journal it, and the sealed record would then hold an input at or after its
+        own last tick (portable_records refuses such a segment). So the engine effect (the enqueue and its
+        public row) is held and runs on the next segment's first tick, recorded in that segment. The room
+        sees its bookkeeping change at once and never an error, except an intent, whose receipt names the
+        applied tick: that one is held with rate_limited and re-sent by the client.
+        """
+        r = self.sim.rules
+        return r["segment_ticks"] - r["input_delay"] <= self.sim.state["tick"] - self.segment_start < r["segment_ticks"]
+
+    def dev_label_field(self, binding, profile):
+        """The first identity field that would wear the DEV label on a production host, else None.
+
+        A refusal is logged by field only (never the value) in `refusals` and shown by health(); the wire
+        answer is `banned`. A DEV host seats `dev-` ids by design.
+        """
+        if self.dev_host:
+            return None
+        for field in DEV_FIELDS:
+            if dev_prefixed(binding.get(field, "")):
+                break
+        else:
+            field = "public_name" if dev_prefixed(profile.get("public_name", "")) else None
+        if field is not None:
+            self.refusals.append({"tick": self.sim.state["tick"], "field": field, "reason": "dev_prefix"})
+        return field
+
+    def _boundary_start(self):
+        """The tick an input held now will apply at: the next segment's first tick plus the input delay."""
+        r = self.sim.rules
+        return self.segment_start + r["segment_ticks"] + r["input_delay"]
+
+    def _op(self, entry):
+        """Run or hold one engine effect. Returns the apply tick as a string."""
+        if self.at_edge():
+            entry = dict(entry, id=self.deferred_seq, segment=self.segment_index)
+            self.deferred_seq += 1
+            self._record("deferred", entry)
+            self.deferred.append(entry)
+            return str(self._boundary_start())
+        return str(self._run_op(entry).tick)
+
+    def _run_op(self, e):
+        name, op = e["name"], e["op"]
+        if op == "join":
+            row = self._enqueue("join", name, e["payload"])
+            self._public_event("join", name, e["life_id"], self.bridge._public_fighter(name, None), row.tick)
+        elif op == "loadout":
+            row = self._enqueue("loadout", name, e["payload"])
+        elif op == "spawn":
+            row = self._enqueue("spawn", name, {"life_id": e["life_id"]})
+            self._public_event("life_start", name, e["life_id"], e["lock"], row.tick)
+        elif op == "leave":
+            self._record("cancel_spawn", name)
+            replay_engine.cancel_spawns(self.sim, name)
+            row = self._enqueue("leave", name, {})
+            self._public_event("leave", name, e["life_id"], {"reason": "leave"})
+        else:
+            raise ValueError("unknown held effect")
+        return row
+
+    def _flush_deferred(self):
+        """First thing in a new segment: run what the last two ticks of the old one held, in order."""
+        while self.deferred:
+            e = self.deferred[0]
+            if e["name"] in self.members:
+                row = self._run_op(e)
+                if e["op"] == "spawn" and str(row.tick) != e["start_tick"]:
+                    self.failed = True
+                    raise RuntimeError("held spawn applied at a different tick than announced")
+            self.deferred.pop(0)
+            self._record("flushed", {"id": e["id"]})
 
     def can_admit(self):
         return (not self.failed and self.room is not None and self.profile_provider is not None
@@ -490,7 +592,8 @@ class Arena:
     def _seal(self):
         self._flush_ticks()
         lives = copy_data(self.completed_lives)
-        names = sorted({m["binding"]["nft_token_id"] for m in self.members.values()}
+        held = {e["name"] for e in self.deferred if e["op"] == "join"}      # their join runs in the next segment
+        names = sorted(({m["binding"]["nft_token_id"] for m in self.members.values()} - held)
                        | {life["nft_token_id"] for life in lives})
         predictions = [self.locks[key]["public"] for key in sorted(self.locks)]
         sealed = {"segment_id": self.segment_id, "life_ids": sorted(life["life_id"] for life in lives),
@@ -528,6 +631,7 @@ class Arena:
         active_lives = {m["life_id"] for m in self.members.values()}
         self.locks = {k: self.locks[k] for k in sorted(self.locks) if k in active_lives}
         self._record("open", {"segment_index": next_index, "state": self.initial_state})
+        self._flush_deferred()
 
     def add_published_seeds(self, seeds):
         """Called by the game seed publisher after its commit, never room control."""
@@ -554,6 +658,11 @@ class Arena:
                     self.members[value["name"]] = value["member"]
                     self.ordinal = max(self.ordinal, value["member"]["ordinal"] + 1,
                                        value["member"]["queue_order"] + 1)
+            elif kind == "deferred":
+                self.deferred.append(value)
+                self.deferred_seq = max(self.deferred_seq, value["id"] + 1)
+            elif kind == "flushed":
+                self.deferred = [e for e in self.deferred if e["id"] != value["id"]]
             elif kind == "inventory":
                 self.inventories[value["name"]] = value["inventory"]
             elif kind == "seeds":
@@ -597,6 +706,8 @@ class Arena:
         self.journal_tick = self.sim.state["tick"]
         if self.sim.state["tick"] - self.segment_start == self.sim.rules["segment_ticks"]:
             self._seal()
+        if self.deferred and self.deferred[0]["segment"] < self.segment_index:
+            self._flush_deferred()      # a crash between the next segment's open record and its first effects
 
     def subscribe(self):
         return self.fanout.subscribe()
@@ -647,7 +758,8 @@ class Arena:
         """The transport exposes this projection at its health route."""
         free = shutil.disk_usage(self.store.root).free
         return {"status": "red" if free < 2_000_000_000 else "amber" if free < 5_000_000_000 else "green",
-                "free_disk_bytes": free, "tick": self.sim.state["tick"], "failed": self.failed}
+                "free_disk_bytes": free, "tick": self.sim.state["tick"], "failed": self.failed,
+                "dev_host": self.dev_host, "dev_prefix_refusals": len(self.refusals)}
 
 
 class ArenaBridge:
@@ -703,6 +815,9 @@ class ArenaBridge:
         supplied = a.profile_provider(b)
         fields = ("house", "public_name", "model", "style", "loadout", "bag")
         profile = copy_data({k: supplied[k] for k in fields})
+        reserved_label = a.dev_label_field(b, profile)
+        if reserved_label is not None:
+            return error("banned")
         if profile["house"]:
             profile["house_spend_microusd"] = supplied.get("house_spend_microusd", 0)
         if profile["house"] and name not in a.sim.rules["house"]:
@@ -722,11 +837,10 @@ class ArenaBridge:
         a.ordinal += 1
         a._life_deadline(a.members[name])
         a._member_changed(name)
-        row = a._enqueue("join", name, {"style": profile["style"], "house": profile["house"],
-                         "loadout": profile["loadout"], "bag": profile["bag"],
-                         "managed": True, "waiting": True, "life_id": life})
-        public = self._public_fighter(name, None)
-        a._public_event("join", name, life, public, row.tick)
+        a._op({"op": "join", "name": name, "life_id": life,
+               "payload": {"style": profile["style"], "house": profile["house"],
+                           "loadout": profile["loadout"], "bag": profile["bag"],
+                           "managed": True, "waiting": True, "life_id": life}})
         return {"binding": b, "life_id": life, "prediction_deadline": str(a.members[name]["deadline_ms"])}
 
     def lock_prediction(self, binding: SlotBinding, life_id: str,
@@ -763,7 +877,7 @@ class ArenaBridge:
             a.sim._check_kit(chosen, bag, m["profile"]["house"])
             m["profile"]["loadout"] = chosen
             a._member_changed(binding["nft_token_id"])
-            a._enqueue("loadout", binding["nft_token_id"], chosen)
+            a._op({"op": "loadout", "name": binding["nft_token_id"], "payload": chosen})
         lock = {"life_id": life_id, "lock_ref": sim.digest([life_id, fingerprint]),
                 "state": "none" if pick is None else "prediction", "prediction_hash": None if pick is None else fingerprint,
                 "ledger_index": str(a.store.index), "locked_before_start": True}
@@ -803,12 +917,13 @@ class ArenaBridge:
         if not a.life_guard(slot_binding):
             return error("ownership_unavailable")
         name = slot_binding["nft_token_id"]
-        row = a._enqueue("spawn", name, {"life_id": life_id})
+        announced = a._boundary_start() if a.at_edge() else a.sim.state["tick"] + a.sim.rules["input_delay"]
+        start = a._op({"op": "spawn", "name": name, "life_id": life_id, "lock": locked["lock"],
+                       "start_tick": str(announced)})
         m["spawn_pending"] = True
         m["activation"] = {"binding": copy_data(slot_binding), "life_id": life_id, "fighter_id": name,
-                            "lock_ref": lock_ref, "start_tick": str(row.tick)}
+                            "lock_ref": lock_ref, "start_tick": start}
         a._member_changed(name)
-        a._public_event("life_start", name, life_id, locked["lock"], row.tick)
         return copy_data(m["activation"])
 
     def _public_fighter(self, name, f):
@@ -866,14 +981,14 @@ class ArenaBridge:
             cast = f["cast"]
             if cast is None:
                 continue
-            s = r["signatures"][cast["kind"]]
+            s = cast.get("parameters", r["signatures"][cast["kind"]])
             dx, dy = sim.normalise(cast["x"] - f["x"], cast["y"] - f["y"], r["tile"])
             telegraphs.append({"telegraph_id": "cast:" + name, "fighter_id": name, "item_id": cast["item_id"],
                                "shape": "cone" if cast["kind"] == "beam_sweep" else "circle",
                                "x_milli": cast["x"] if cast["kind"] == "blink_strike" else f["x"],
                                "y_milli": cast["y"] if cast["kind"] == "blink_strike" else f["y"],
                                "direction_x_milli": dx, "direction_y_milli": dy,
-                               "radius_milli": str(s["range"] * f["sig_range_pct"] // r["percent"]),
+                               "radius_milli": str(s["range"] * cast.get("sig_range_pct", f["sig_range_pct"]) // r["percent"]),
                                "width_milli": str(s.get("width", 0)),
                                "arc_millidegrees": str(s.get("half_arc", 0) * 2 * r["tile"]),
                                "start_tick": str(cast["start_tick"]), "end_tick": str(cast["resolve_at"])})
@@ -922,6 +1037,8 @@ class ArenaBridge:
         fingerprint = control_digest(message)
         if prior is not None:
             return copy_data(prior["receipt"]) if prior["request_hash"] == fingerprint else error("request_conflict")
+        if a.at_edge():
+            return edge_error(a.sim.rules)
         if a.sim.state["tick"] - m["last_receive"] < a.sim.rules["intent_interval"]:
             return error("rate_limited")
         payload = {k: message["payload"][k] for k in ("focus", "avoid", "loot", "sig", "leave")}
@@ -944,14 +1061,11 @@ class ArenaBridge:
             return error("stale_slot")
         if not m["released"]:
             name = binding["nft_token_id"]
-            a._record("cancel_spawn", name)
-            replay_engine.cancel_spawns(a.sim, name)
             m["spawn_pending"] = False
             m["activation_requested"] = False
-            a._enqueue("leave", binding["nft_token_id"], {})
-            m["released"] = True
-            a._member_changed(binding["nft_token_id"])
-            a._public_event("leave", binding["nft_token_id"], m["life_id"], {"reason": "leave"})
+            m["released"] = True                  # the room sees the release at once, even on the last two ticks
+            a._op({"op": "leave", "name": name, "life_id": m["life_id"]})
+            a._member_changed(name)
         return {"binding": copy_data(binding), "last_sequence": m.get("last_sequence", "0"), "revoked": True,
                 "boundary": {"kind": "released", "life_id": m["life_id"], "segment_id": a.segment_id, "not_before_ms": None}}
 

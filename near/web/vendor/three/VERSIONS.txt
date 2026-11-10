@@ -1,0 +1,8 @@
+# three 0.186.1 (r186), MIT. Source: registry.npmjs.org/three/-/three-0.186.1.tgz sha1 6d50f70c2c437f844179bbb56d6f5b774e1ca38a (matches the registry's dist.shasum).
+# The package ships no .min build. These two are the package's build/three.module.js and build/three.core.js passed through
+# esbuild 0.25.10 (@esbuild/darwin-arm64 tarball sha1 6af6bb1d05887dac515de1b162b59dc71212ed76) with --minify-syntax --legal-comments=none --format=esm,
+# then every /** ... */ documentation block removed. Identifiers and whitespace are kept, so the leak and names sweeps read it and it diffs
+# against the package source. The import in the module file was rewritten from ./three.core.js to ./three.core.min.js first. LICENSE is the package's.
+74be9d0b096c361549160dc615f3c72f383b08817c8ee8ce84c7006413dccfd3  three.module.min.js
+1813994b581a51521de84e03ac6219229d07cb27e8e6075b4015d0bcad5a7d45  three.core.min.js
+8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc  LICENSE

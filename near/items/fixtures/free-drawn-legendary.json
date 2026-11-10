@@ -1,0 +1,54 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "leg-liquidity-wave",
+ "name": "Liquidity Wave",
+ "slot": "trinket",
+ "tier": "legendary",
+ "stats": {
+  "cooldown": 4,
+  "damage": 6,
+  "hp": 9,
+  "range": 3,
+  "speed": 2
+ },
+ "sig": "shockwave",
+ "nodes": [
+  {
+   "type": "group",
+   "translate": [
+    0,
+    0.4,
+    0
+   ],
+   "children": [
+    {
+     "type": "sphere",
+     "r": 0.25,
+     "color": "p02"
+    },
+    {
+     "type": "tube",
+     "points": [
+      [
+       -0.3,
+       0,
+       0
+      ],
+      [
+       0,
+       0.15,
+       0
+      ],
+      [
+       0.3,
+       0,
+       0
+      ]
+     ],
+     "width": 0.06,
+     "color": "p14"
+    }
+   ]
+  }
+ ]
+}

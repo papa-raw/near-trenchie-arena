@@ -1,0 +1,123 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "leg-hydra-halo",
+ "name": "Hydra Halo",
+ "slot": "trinket",
+ "tier": "legendary",
+ "stats": {
+  "damage": 6,
+  "cooldown": 4,
+  "hp": 3,
+  "speed": 2,
+  "range": 9
+ },
+ "sig": "beam_sweep",
+ "nodes": [
+  {
+   "type": "torus",
+   "color": "p12",
+   "r": 0.1156,
+   "tube": 0.0136,
+   "translate": [
+    0.0,
+    0.22,
+    0.068
+   ],
+   "rotate": [
+    -90.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p09",
+   "r": 0.0272,
+   "translate": [
+    0.1156,
+    0.22,
+    0.0816
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p04",
+   "r": 0.0272,
+   "translate": [
+    0.0816,
+    0.3016,
+    0.0816
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p09",
+   "r": 0.0272,
+   "translate": [
+    0.0,
+    0.3356,
+    0.0816
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p04",
+   "r": 0.0272,
+   "translate": [
+    -0.0816,
+    0.3016,
+    0.0816
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p09",
+   "r": 0.0272,
+   "translate": [
+    -0.1156,
+    0.22,
+    0.0816
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p04",
+   "r": 0.0272,
+   "translate": [
+    -0.0816,
+    0.1384,
+    0.0816
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p09",
+   "r": 0.0272,
+   "translate": [
+    -0.0,
+    0.1044,
+    0.0816
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p04",
+   "r": 0.0272,
+   "translate": [
+    0.0816,
+    0.1384,
+    0.0816
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p10",
+   "r": 0.0408,
+   "translate": [
+    0.0,
+    0.22,
+    0.0816
+   ]
+  }
+ ]
+}

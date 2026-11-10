@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-head-builder",
+ "name": "Hard Hat",
+ "slot": "head",
+ "tier": "common",
+ "stats": {
+  "damage": 2,
+  "cooldown": 3,
+  "hp": 1,
+  "speed": 0,
+  "range": 4
+ },
+ "tag": "builder",
+ "kit": "head/hardhat",
+ "colors": {
+  "main": "p12",
+  "accent": "p13"
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-head-maxi",
+ "name": "Maxi Cap",
+ "slot": "head",
+ "tier": "common",
+ "stats": {
+  "cooldown": 2,
+  "damage": 3,
+  "hp": 4,
+  "range": 1,
+  "speed": 0
+ },
+ "tag": "maxi",
+ "kit": "head/cap"
+}

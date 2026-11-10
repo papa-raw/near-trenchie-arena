@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>W2 spike: mainnet wallet sign-in (Pat)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font:15px/1.5 ui-monospace,Menlo,monospace;margin:16px;max-width:760px;background:#fffaf0;color:#222}
+button{font:inherit;padding:10px 14px;margin:4px 6px 4px 0;cursor:pointer} pre{background:#fff;border:1px solid #bbb;padding:8px;white-space:pre-wrap;word-break:break-all}</style></head><body>
+<h1>Mainnet wallet sign-in check (for Pat's own hands)</h1>
+<p><b>Read-only.</b> Each button opens the wallet's own sign-in on <b>MAINNET</b> and asks for the account name only.
+It sends <b>no transaction</b>, adds <b>no key</b> and moves <b>no money</b>. If a wallet asks you to approve a transaction, cancel.
+Click one wallet at a time. The result appears below as JSON; copy it into the verification log.</p>
+<div id="btns"></div>
+<p>Testnet, the same way: <label><input type="checkbox" id="tn"> use testnet instead</label> (a testnet account is needed; the AddKey step is a separate button, below).</p>
+<p><button id="addkey" disabled>After a TESTNET sign-in: ask this wallet to add ONE guest function-call key (testnet, receiver market label, 0.25 NEAR allowance, no deposit)</button></p>
+<pre id="out">(nothing yet)</pre>
+<script src="../vendor/near-api-js/near-api-js-7.3.1.min.js"></script>
+<script src="../vendor/near-api-js/near-connect-0.12.0.min.js"></script>
+<script src="../wallet.js"></script>
+<script>
+(function () {
+  var W = window.SnapWallet, out = document.getElementById('out'), log = [];
+  function show(o) { log.push(o); out.textContent = JSON.stringify(log.length === 1 ? log[0] : log, null, 1); }
+  show({ importCheck: W.importCheck(), shortlist: W.list(), note: 'wallets are listed as "declares testnet" only; none is marked as working until a sign-in is logged' });
+  W.list().forEach(function (w) {
+    var b = document.createElement('button'); b.textContent = 'Sign in with ' + w.name;
+    b.onclick = async function () {
+      var net = document.getElementById('tn').checked ? 'testnet' : 'mainnet';
+      var r = await W.connect(w.id, { network: net });
+      show({ at: new Date().toISOString(), wallet: w.id, network: net, result: r });
+      if (r.ok && net === 'testnet') document.getElementById('addkey').disabled = false;
+    };
+    document.getElementById('btns').appendChild(b);
+  });
+  document.getElementById('addkey').onclick = async function () {
+    var r = await W.guestKey({ network: 'testnet', receiver: 'market', allowanceNear: '0.25' });
+    show({ at: new Date().toISOString(), step: 'guestKey (testnet AddKey)', result: r });
+  };
+})();
+</script></body></html>

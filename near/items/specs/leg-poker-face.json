@@ -1,0 +1,88 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "leg-poker-face",
+ "name": "Poker Face",
+ "slot": "trinket",
+ "tier": "legendary",
+ "stats": {
+  "damage": 3,
+  "cooldown": 6,
+  "hp": 9,
+  "speed": 2,
+  "range": 4
+ },
+ "sig": "bubble",
+ "nodes": [
+  {
+   "type": "plate",
+   "color": "p04",
+   "h": 0.1496,
+   "w": 0.102,
+   "radius": 0.0136,
+   "t": 0.0102,
+   "translate": [
+    -0.0476,
+    0.22,
+    0.0782
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    21.77
+   ]
+  },
+  {
+   "type": "plate",
+   "color": "p14",
+   "h": 0.1496,
+   "w": 0.102,
+   "radius": 0.0136,
+   "t": 0.0102,
+   "translate": [
+    0.0,
+    0.22,
+    0.0884
+   ]
+  },
+  {
+   "type": "plate",
+   "color": "p04",
+   "h": 0.1496,
+   "w": 0.102,
+   "radius": 0.0136,
+   "t": 0.0102,
+   "translate": [
+    0.0476,
+    0.22,
+    0.0986
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    -21.77
+   ]
+  },
+  {
+   "type": "sphere",
+   "color": "p15",
+   "r": 0.0238,
+   "translate": [
+    0.0,
+    0.2404,
+    0.1224
+   ]
+  },
+  {
+   "type": "box",
+   "color": "p01",
+   "h": 0.034,
+   "w": 0.0136,
+   "d": 0.0068,
+   "translate": [
+    0.0,
+    0.186,
+    0.1224
+   ]
+  }
+ ]
+}

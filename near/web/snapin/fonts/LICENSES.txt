@@ -1,0 +1,10 @@
+Fonts vendored for the game's interface art (2026-11-03). All are from Google Fonts under the SIL Open Font License 1.1
+(https://openfontlicense.org), which allows bundling and redistribution with software; the fonts are not sold on their own.
+Latin subsets, downloaded from fonts.gstatic.com via the fonts.googleapis.com css2 API on 2026-11-03.
+
+LilitaOne-400.woff2       Lilita One      Juan Montoreano            OFL 1.1   https://fonts.google.com/specimen/Lilita+One
+Fredoka-var.woff2         Fredoka         Milena Brandão, Hafontia   OFL 1.1   https://fonts.google.com/specimen/Fredoka
+Anton-400.woff2           Anton           Vernon Adams               OFL 1.1   https://fonts.google.com/specimen/Anton
+ArchivoNarrow-var.woff2   Archivo Narrow  Omnibus-Type               OFL 1.1   https://fonts.google.com/specimen/Archivo+Narrow
+SpaceMono-400/700.woff2   Space Mono      Colophon Foundry           OFL 1.1   https://fonts.google.com/specimen/Space+Mono
+DotGothic16-400.woff2     DotGothic16     Fontworks Inc.             OFL 1.1   https://fonts.google.com/specimen/DotGothic16

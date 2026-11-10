@@ -1,0 +1,88 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "leg-ether-stack",
+ "name": "Ether Stack",
+ "slot": "trinket",
+ "tier": "legendary",
+ "stats": {
+  "damage": 2,
+  "cooldown": 4,
+  "hp": 6,
+  "speed": 9,
+  "range": 3
+ },
+ "sig": "magnet",
+ "nodes": [
+  {
+   "type": "cylinder",
+   "color": "p10",
+   "r": 0.0748,
+   "h": 0.0289,
+   "translate": [
+    0.0,
+    0.1044,
+    0.0884
+   ]
+  },
+  {
+   "type": "cylinder",
+   "color": "p11",
+   "r": 0.068,
+   "h": 0.0289,
+   "translate": [
+    0.0,
+    0.1333,
+    0.0884
+   ]
+  },
+  {
+   "type": "cylinder",
+   "color": "p10",
+   "r": 0.0612,
+   "h": 0.0289,
+   "translate": [
+    0.0,
+    0.1622,
+    0.0884
+   ]
+  },
+  {
+   "type": "cylinder",
+   "color": "p11",
+   "r": 0.0544,
+   "h": 0.0289,
+   "translate": [
+    0.0,
+    0.1911,
+    0.0884
+   ]
+  },
+  {
+   "type": "cone",
+   "color": "p11",
+   "r": 0.051,
+   "h": 0.102,
+   "translate": [
+    0.0,
+    0.3084,
+    0.0884
+   ]
+  },
+  {
+   "type": "cone",
+   "color": "p09",
+   "r": 0.051,
+   "h": 0.0884,
+   "translate": [
+    0.0,
+    0.22,
+    0.0884
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    180.0
+   ]
+  }
+ ]
+}

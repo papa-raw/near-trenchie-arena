@@ -1,0 +1,293 @@
+{
+ "note": "synthetic prediction-log lines for test_quote.py; no real data",
+ "rows": [
+  {
+   "life": 0,
+   "persona": "alpha",
+   "spread_pct": [
+    50,
+    30,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 0
+  },
+  {
+   "life": 1,
+   "persona": "alpha",
+   "spread_pct": [
+    50,
+    30,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 1
+  },
+  {
+   "life": 2,
+   "persona": "alpha",
+   "spread_pct": [
+    50,
+    30,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 0
+  },
+  {
+   "life": 3,
+   "persona": "alpha",
+   "spread_pct": [
+    50,
+    30,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 2
+  },
+  {
+   "life": 4,
+   "persona": "alpha",
+   "spread_pct": [
+    50,
+    30,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 1
+  },
+  {
+   "life": 5,
+   "persona": "alpha",
+   "spread_pct": [
+    50,
+    30,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 0
+  },
+  {
+   "life": 6,
+   "persona": "alpha",
+   "spread_pct": [
+    50,
+    30,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 1
+  },
+  {
+   "life": 7,
+   "persona": "alpha",
+   "spread_pct": [
+    50,
+    30,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 3
+  },
+  {
+   "life": 8,
+   "persona": "alpha",
+   "spread_pct": [
+    50,
+    30,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 0
+  },
+  {
+   "life": 9,
+   "persona": "alpha",
+   "spread_pct": [
+    50,
+    30,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 1
+  },
+  {
+   "life": 10,
+   "persona": "alpha",
+   "spread_pct": [
+    50,
+    30,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 2
+  },
+  {
+   "life": 11,
+   "persona": "alpha",
+   "spread_pct": [
+    50,
+    30,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 0
+  },
+  {
+   "life": 0,
+   "persona": "bravo",
+   "spread_pct": [
+    10,
+    60,
+    20,
+    10
+   ],
+   "zero_pct": 30,
+   "actual": 2
+  },
+  {
+   "life": 1,
+   "persona": "bravo",
+   "spread_pct": [
+    40,
+    40,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 0
+  },
+  {
+   "life": 2,
+   "persona": "bravo",
+   "spread_pct": [
+    20,
+    20,
+    30,
+    30
+   ],
+   "zero_pct": 50,
+   "actual": 1
+  },
+  {
+   "life": 3,
+   "persona": "bravo",
+   "spread_pct": [
+    10,
+    60,
+    20,
+    10
+   ],
+   "zero_pct": 30,
+   "actual": 4
+  },
+  {
+   "life": 4,
+   "persona": "bravo",
+   "spread_pct": [
+    40,
+    40,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 0
+  },
+  {
+   "life": 5,
+   "persona": "bravo",
+   "spread_pct": [
+    20,
+    20,
+    30,
+    30
+   ],
+   "zero_pct": 50,
+   "actual": 3
+  },
+  {
+   "life": 6,
+   "persona": "bravo",
+   "spread_pct": [
+    10,
+    60,
+    20,
+    10
+   ],
+   "zero_pct": 30,
+   "actual": 1
+  },
+  {
+   "life": 7,
+   "persona": "bravo",
+   "spread_pct": [
+    40,
+    40,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 0
+  },
+  {
+   "life": 8,
+   "persona": "bravo",
+   "spread_pct": [
+    20,
+    20,
+    30,
+    30
+   ],
+   "zero_pct": 50,
+   "actual": 2
+  },
+  {
+   "life": 9,
+   "persona": "bravo",
+   "spread_pct": [
+    10,
+    60,
+    20,
+    10
+   ],
+   "zero_pct": 30,
+   "actual": 2
+  },
+  {
+   "life": 10,
+   "persona": "bravo",
+   "spread_pct": [
+    40,
+    40,
+    10,
+    10
+   ],
+   "zero_pct": 40,
+   "actual": 0
+  },
+  {
+   "life": 11,
+   "persona": "bravo",
+   "spread_pct": [
+    20,
+    20,
+    30,
+    30
+   ],
+   "zero_pct": 50,
+   "actual": 5
+  }
+ ]
+}

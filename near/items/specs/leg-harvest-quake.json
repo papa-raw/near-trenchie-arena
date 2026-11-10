@@ -1,0 +1,138 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "leg-harvest-quake",
+ "name": "Harvest Quake",
+ "slot": "trinket",
+ "tier": "legendary",
+ "stats": {
+  "damage": 6,
+  "cooldown": 4,
+  "hp": 9,
+  "speed": 2,
+  "range": 3
+ },
+ "sig": "shockwave",
+ "nodes": [
+  {
+   "type": "box",
+   "color": "p03",
+   "h": 0.204,
+   "w": 0.0204,
+   "d": 0.0204,
+   "translate": [
+    0.0,
+    0.1928,
+    0.0816
+   ]
+  },
+  {
+   "type": "box",
+   "color": "p06",
+   "h": 0.0204,
+   "w": 0.1088,
+   "d": 0.0204,
+   "translate": [
+    0.0,
+    0.2676,
+    0.0816
+   ]
+  },
+  {
+   "type": "cone",
+   "color": "p06",
+   "r": 0.0136,
+   "h": 0.068,
+   "translate": [
+    -0.0476,
+    0.322,
+    0.0816
+   ]
+  },
+  {
+   "type": "cone",
+   "color": "p06",
+   "r": 0.0136,
+   "h": 0.068,
+   "translate": [
+    0.0,
+    0.322,
+    0.0816
+   ]
+  },
+  {
+   "type": "cone",
+   "color": "p06",
+   "r": 0.0136,
+   "h": 0.068,
+   "translate": [
+    0.0476,
+    0.322,
+    0.0816
+   ]
+  },
+  {
+   "type": "cone",
+   "color": "p08",
+   "r": 0.0204,
+   "h": 0.0612,
+   "translate": [
+    0.12,
+    0.1112,
+    0.0816
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    -31.42
+   ]
+  },
+  {
+   "type": "cone",
+   "color": "p08",
+   "r": 0.0204,
+   "h": 0.0612,
+   "translate": [
+    0.036,
+    0.137,
+    0.0816
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    -6.88
+   ]
+  },
+  {
+   "type": "cone",
+   "color": "p08",
+   "r": 0.0204,
+   "h": 0.0612,
+   "translate": [
+    -0.036,
+    0.137,
+    0.0816
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    6.88
+   ]
+  },
+  {
+   "type": "cone",
+   "color": "p08",
+   "r": 0.0204,
+   "h": 0.0612,
+   "translate": [
+    -0.12,
+    0.1112,
+    0.0816
+   ],
+   "rotate": [
+    0.0,
+    0.0,
+    31.42
+   ]
+  }
+ ]
+}

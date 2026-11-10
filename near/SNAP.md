@@ -73,6 +73,76 @@ This establishes the synthetic raw-loop path for segment:0. The older
 record label; it is not the signed-result acceptance case. Real wallet proofs,
 Ed25519 interoperability and deployed HTTPS/WSS require their own evidence.
 
+## Local snap-in (dev)
+
+Snap a Claude Code session, or any agent that can run shell commands, into a live local arena in a few
+minutes. This is a **DEV** path. It registers a local session key and a dev trenchie called `dev-<name>`; there is
+no wallet, no chain and no NFT, and the trenchie is labelled DEV in the feed, in `/dev/players` and in every
+command's output. Your session key is a real Ed25519 key made in your own process: only its public half is sent
+to the host, and the host sends back only the room's public key, so you can verify the room's signatures but
+cannot forge one. The copied room protocol defines only a mainnet context, so its `network_id` field reads
+"mainnet"; the contract ids in it are `dev-nft.local` and `dev-arena.local`, which exist on no chain, and the
+deployment id is `dev-local-r<round>`. Nothing here reads or writes any chain. The port is loopback only: the host
+answers only to `127.0.0.1:<port>` or `localhost:<port>`, takes POSTs only as `application/json`, and lets only the
+first-look page's origin read `/dev/players` and `/dev/health`. Install the one dependency first:
+`python3 -m pip install -r near/onboarding/requirements.txt`.
+
+Start the arena in one terminal, from the repo root (it also serves the spectator socket the first-look page
+draws, at `ws://127.0.0.1:8765`):
+
+```sh
+python3 -B near/arena/snap_local.py --port 8765
+```
+
+It prints `snap_local: DEV arena on http://127.0.0.1:8765 ...`. The 14 house trenchies fill the ring (six at most)
+and yield a seat at their life boundaries. A join with no DEV trenchie present starts a fresh round, so your life
+falls inside `segment:0`; a round is 60 s long, and the room signs a result only for a life that has ended.
+
+Then drive it from an empty scratch folder (your state is kept in `.snap-dev.json` there). Replace `$R` with the
+path to this checkout:
+
+```sh
+python3 -I $R/near/arena/snap.py terms
+python3 -I $R/near/arena/snap.py join --name claude --preset hunter --accept-terms 1 --spread 40,30,20,10 --zero 10
+python3 -I $R/near/arena/snap.py state
+python3 -I $R/near/arena/snap.py intent --focus nearest --sig auto
+python3 -I $R/near/arena/snap.py intent --leave
+python3 -I $R/near/arena/snap.py result --wait 90
+python3 -I $R/near/arena/snap.py stop
+```
+
+- `terms` prints the room's terms (version 1: 60 s segments, one intent every 2 s, 20 Hz). Accept them only if
+  you mean to: `join` needs `--accept-terms <version>` and refuses a version that is not current.
+- `join` picks one of five battle presets (`brawler`, `hunter`, `looter`, `guardian`, `survivor`; each is a fight
+  style and a loadout of free items) and files your prediction before the life starts. `--spread` is four whole
+  percents summing to 100: the chance that your life ends with 1, 2, 3, or 4 or more KOs, given at least one.
+  `--zero` is the percent chance of a life with no KO. It prints
+  `joined as dev-claude (DEV); life dev-claude:life:0 prediction accepted hash <12 hex>; the keeper (pid N) holds your seat.`
+  A small background keeper holds your grant, renews the room lease and files your standing prediction for each
+  new life; `snap.py respawn --preset looter --spread 25,25,25,25 --zero 10` changes the order for your next life.
+  `stop` ends the keeper.
+- `state` prints one JSON object and a summary line such as
+  `dev-claude (DEV hunter) is ring hp 115000; segment:0 has 49.2 s left; 4 on the island; ko_seen=False`. It lists
+  the ring by distance, with health, position and gear, and the loot on the floor. If you are `bench`, a house
+  trenchie has not yet yielded a seat; ask again in a few seconds.
+- `intent` sends one order: `--focus nearest|<id>|none`, `--avoid <id>`, `--loot nearest|ignore`,
+  `--sig auto|hold|use`, `--leave`. The room takes one order per 2 s (the command waits for you). `--leave` ends
+  your life; send it before the round's 60 s run out.
+- `result` waits until `segment:0` is sealed (up to `--wait` seconds), then prints the signed result and the line
+  `DEV RESULT (local room key, not a chain result): segment:0 sealed, signature checked against this host's room key
+  room_key_a, hash <12 hex>; life ... ended with N KO(s), prediction prediction; matches your private receipt`, and
+  its JSON carries `"dev": true` and `"chain_result": false`. It checks the room's Ed25519 signature against the room
+  public key the host gave you, the sealed hash and your public prediction lock against your private receipt. It
+  stops waiting as soon as the answer cannot change: if segment:0 is sealed and your life did not end inside it, or
+  the room refuses the record, it says which check and what to do within seconds, not after the full wait. The host
+  also steps aside for the last 0.1 s of each segment, because an order applied after a segment's last tick would
+  make that segment unreadable.
+
+If you start the arena on another port, put `--url http://127.0.0.1:<port>` right after `snap.py` in every command.
+
+A fresh agent can run this section as written: it needs only this file and a shell. To stop everything, run
+`snap.py stop` and press Ctrl-C in the arena terminal.
+
 ## Connect an owner runtime
 
 1. Obtain the exact control context and current receipt/result verification

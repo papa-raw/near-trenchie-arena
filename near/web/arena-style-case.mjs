@@ -1,0 +1,22 @@
+// Focused client case: metadata is separate from frozen tick frames and never inferred for players.
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { Net } from './arena/net.mjs';
+const statuses = [], styles = [], snapshots = [];
+globalThis.WebSocket = class { constructor(url) { this.url = url; } close() {} };
+const net = new Net('ws://127.0.0.1:8765/?x=kept', { onSnapshot: (s) => snapshots.push(s), onStatus: (s) => statuses.push(s), onStyles: (s) => styles.push(new Map(s)) });
+assert.equal(new URL(net.ws.url).searchParams.get('styles'), '1');
+assert.equal(new URL(net.ws.url).searchParams.get('x'), 'kept');
+const send = (value) => net.ws.onmessage({ data: JSON.stringify(value) });
+const full = { type: 'spectator_styles', version: 1, revision: 1, full: true, styles: { 'sprout-visitor': 'looter', satrenchi: 'hunter' } };
+send(full); assert.equal(styles.length, 1); assert.equal(styles[0].get('sprout-visitor'), 'looter');
+send({ ...full, revision: 2, full: false, styles: { 'sprout-visitor': 'guardian' } });
+assert.equal(styles.length, 2); assert.equal(styles[1].get('sprout-visitor'), 'guardian'); assert.equal(styles[1].get('satrenchi'), 'hunter');
+const snapshot = JSON.parse(await readFile(new URL('./arena/fixtures/tick-recorded.json', import.meta.url), 'utf8'));
+send(snapshot); assert.equal(snapshots.length, 1); assert.equal(snapshots[0].tick, snapshot[1]);
+send({ ...full, revision: 3, full: false, styles: { 'sprout-visitor': null } }); assert.equal(styles[2].has('sprout-visitor'), false);
+const bad = net.bad;
+send({ ...full, version: 2 }); assert.equal(net.bad, bad + 1); assert.equal(styles.length, 3);
+send({ ...full, revision: 4, full: false, styles: { satrenchi: 'unknown' } }); assert.equal(net.bad, bad + 2); assert.equal(styles.length, 3);
+net.close();
+process.stdout.write(JSON.stringify({ ok: true, metadataMessages: styles.length, snapshots: snapshots.length, refused: net.bad }) + '\n');

@@ -25,6 +25,7 @@ names.txt, deny.txt, leak.txt and room-src/; TRENCHIE_NAMES_FILE, TRENCHIE_DENY_
 TRENCHIE_ROOM_SRC override one each.
 """
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -47,6 +48,11 @@ SECRETS = [
     ("env assignment with a literal", r"(?:API_KEY|SECRET|TOKEN|PASSWORD)[A-Z_]*\s*=\s*[\"']?[A-Za-z0-9/+_-]{16,}"),
     ("machine path", r"/(?:Users|home)/[a-z][a-z0-9_-]*/"),
 ]
+# This pinned SDK's public curve parameters resemble hex keys. No other secret shape is exempt.
+PRIVATE_HEX_ALLOW = {
+    "near/web/snapin/vendor/near-api-js/near-api-js-7.3.1.min.js":
+        "c173fa84ea7ea5a2fe66cef819700b183368473e6a978bbac2088cbd74d3652b",
+}
 FAKE = re.compile(r"not-real|not-a-token|must-not|should-not|stubkey|fixture|example|placeholder|synthetic", re.I)
 FAKE_ELIGIBLE = ("env assignment with a literal", "private key hex")
 KEY_FILE = re.compile(r"\.(pem|key|p12)$|(^|/)id_(rsa|ed25519)|(^|/)\.env($|\.)|\.env$|credential|secret", re.I)
@@ -65,8 +71,11 @@ SCANS = ["private", "names", "deny", "leak", "room"]
 LABELS = {"private": "private sweep", "names": "names sweep", "deny": "client deny scan", "leak": "leak check",
           "room": "room copy", "clean-clone": "clean clone"}
 MAX_SHOWN = 200
-# The one place the leak pattern's release-number rule does not apply: the build log's line naming the release.
-LEAK_ALLOW = {("BUILD-LOG.md", re.compile(r"\b0\.2\.19\b"))}
+# Release references in the build log and exact dependency-version lines are public data.
+LEAK_ALLOW = {
+    ("BUILD-LOG.md", re.compile(r"\b0\.2\.19\b")),
+    ("near/contracts/Cargo.lock", re.compile(r'^version = "[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?"$')),
+}
 HELP = ("The pattern files are kept outside this repository. Point TRENCHIE_GATE_DIR at the folder that holds "
         "names.txt, deny.txt, leak.txt and room-src/ (default {default}).")
 
@@ -145,6 +154,12 @@ def pattern_lines(kind):
 
 def check_private(root, files):
     out = []
+    curve_paths = set()
+    for path in files:
+        if path in PRIVATE_HEX_ALLOW:
+            with open(os.path.join(root, path), "rb") as source:
+                if hashlib.sha256(source.read()).hexdigest() == PRIVATE_HEX_ALLOW[path]:
+                    curve_paths.add(path)
     for p in files:
         if KEY_FILE.search(p):
             out.append(hit("private", p, 0, "key-like file name"))
@@ -153,6 +168,8 @@ def check_private(root, files):
     for label, rx in SECRETS:
         crx = re.compile(rx)
         for p in files:
+            if label == "private key hex" and p in curve_paths:
+                continue
             for n, t in text_lines(root, p):
                 m = crx.search(t)
                 if not m:

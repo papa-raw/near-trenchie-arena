@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-head-degen",
+ "name": "Party Cone",
+ "slot": "head",
+ "tier": "common",
+ "stats": {
+  "damage": 4,
+  "cooldown": 3,
+  "hp": 0,
+  "speed": 2,
+  "range": 1
+ },
+ "tag": "degen",
+ "kit": "head/cone",
+ "colors": {
+  "main": "p11",
+  "accent": "p12"
+ }
+}

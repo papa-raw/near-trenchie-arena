@@ -1,0 +1,21 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-swing",
+ "name": "Oar Swipe",
+ "slot": "weapon",
+ "tier": "common",
+ "stats": {
+  "damage": 4,
+  "cooldown": 2,
+  "hp": 3,
+  "speed": 1,
+  "range": 0
+ },
+ "move": "swing",
+ "tag": "maxi",
+ "kit": "weapon/oar",
+ "colors": {
+  "main": "p05",
+  "accent": "p10"
+ }
+}

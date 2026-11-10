@@ -1,0 +1,19 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "st-tee",
+ "name": "Beach Tee",
+ "slot": "body",
+ "tier": "common",
+ "stats": {
+  "damage": 0,
+  "cooldown": 3,
+  "hp": 4,
+  "speed": 3,
+  "range": 0
+ },
+ "kit": "body/tee",
+ "colors": {
+  "main": "p05",
+  "accent": "p09"
+ }
+}

@@ -1,0 +1,23 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Replay status clearance</title>
+<link rel="icon" href="data:,"><script type="importmap">{"imports":{"three":"./vendor/three/three.module.min.js"}}</script>
+<div id="hud"></div><div id="status" class="replay">Recorded arena</div><pre id="result" style="position:fixed;right:8px;top:8px;z-index:10"></pre>
+<script type="module">
+import { Hud } from './arena/hud.mjs';
+import { ROSTER } from './art/roster.js';
+const markup = await (await fetch('./arena.html')).text(), parsed = new DOMParser().parseFromString(markup, 'text/html');
+const style = document.createElement('style'); style.textContent = parsed.querySelector('style').textContent; document.head.appendChild(style); document.body.style.background = '#F7F0DC';
+window.KITS = { roster: ROSTER };
+await new Promise((resolve, reject) => { const script = document.createElement('script'); script.src = './hud-art/hud-art.js'; script.onload = resolve; script.onerror = reject; document.head.appendChild(script); });
+const status = document.getElementById('status'), host = document.getElementById('hud');
+const fighters = ROSTER.slice(0, 3).map((r, i) => ({ tag: r.tag, name: r.name, x: 80 + i * 100, y: 280, hp: 1, kos: i }));
+const measured = await window.HUDART.mount(host, { concept: 'candle', draft: 'a', w: innerWidth, h: innerHeight, fighters,
+  feed: [{ kind: 'ko', a: fighters[0].tag, b: fighters[1].tag }, { kind: 'ko', a: fighters[2].tag, b: fighters[0].tag }] });
+const hud = { w: innerWidth, h: innerHeight, rects: Object.fromEntries(measured.rects.map((r) => [r.id, r])), statusEl: status };
+Hud.prototype.placeStatus.call(hud);
+function check() {
+  const pill = status.getBoundingClientRect(), feed = host.querySelector('[data-panel="feed"]').getBoundingClientRect();
+  return { width: innerWidth, feedOverlap: pill.left < feed.right && pill.right > feed.left && pill.top < feed.bottom && pill.bottom > feed.top,
+    statusTop: pill.top, statusBottom: pill.bottom, feedTop: feed.top, inViewport: pill.top >= 0 && pill.bottom <= innerHeight };
+}
+window.STATUS_FIXTURE = { hud, check }; document.getElementById('result').textContent = JSON.stringify(check());
+</script></html>

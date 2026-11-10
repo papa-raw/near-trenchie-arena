@@ -66,11 +66,15 @@ def scenarios(rules: Mapping) -> list[Scenario]:
         for style in styles:
             for mirror in (False, True):
                 result.append(Scenario("rares_newcomers", crowd, style, "rares", mirror=mirror))
+    for crowd in (6, 10, 16):                      # P4's cheapest outliers: one stack or top72 wearer among random kits
+        for style in styles:
+            result.extend(Scenario("minority", crowd, style, build) for build in ("stack", "top72"))
     for row in sorted(rules["items"]):
         if rules["items"][row]["tier"] == "legendary":
             for style in styles:
                 for arm in ("legendary", "rare"):
-                    result.append(Scenario("legendary_lift", 6, style, "rares", left=row, right=arm))
+                    result.append(Scenario("legendary_lift", 6, style, "rares", left=row, right=arm,
+                                           density=-(-6 // 3)))
     for crowd in (6, 10, 16):
         for density in (0, 4, 14, (crowd + 2) // 3):
             for bounty in (False, True):
@@ -131,6 +135,8 @@ def roster(case: Scenario, rules: Mapping, seed: int) -> list[dict]:
             build = "default"
         if case.family == "rares_newcomers" and i:
             build = "default"
+        if case.family == "minority":
+            build = case.build if i == 0 else "random"
         if case.family == "pick_pressure" and i == size - 1:
             build = "mean52"
         if case.family == "legendary_lift" and i == 1:
@@ -138,9 +144,10 @@ def roster(case: Scenario, rules: Mapping, seed: int) -> list[dict]:
         loadout = kit(rules, rng, build, weapon, signature)
         if case.family == "legendary_lift" and i == 1 and case.right == "legendary":
             loadout["trinket"] = case.left
-        if case.family == "legendary_lift" and i == 2:
-            loadout["trinket"] = next(row for row in sorted(rules["items"])
-                                       if rules["items"][row]["tier"] == "legendary" and row != case.left)
+        if case.family == "legendary_lift" and 2 <= i < 2 + case.density:
+            others = [row for row in sorted(rules["items"])
+                      if rules["items"][row]["tier"] == "legendary" and row != case.left]
+            loadout["trinket"] = others[i - 2]
         if case.family == "density":
             style = rules["house"].get(name, {}).get("style", case.style)
         bag = {row: {"serial": 0, "born_batch": 0, "kos": 0, "hands": 0, "flags": 0}
@@ -237,10 +244,24 @@ class Measure:
                            "worn_legendary": bool(hunters), "kos": event["life_kos"],
                            "ticks": self.game.state["tick"] - self.starts.pop(name, 0),
                            "style": f["style"], "items_kept": len(f["bag"]),
+                           "loadout": before.get(name, {}).get("labels", {}).get("loadout"),
                            "points": before.get(name, {}).get("points", 0)})
 
+    def censored(self) -> list:
+        """Lives still running at the end: they count in survival per life (their ticks, no completed life)."""
+        rows, items = [], self.game.rules["items"]
+        for name in sorted(self.starts):
+            f = self.game.state["fighters"].get(name)
+            if f is None or f["state"] != "alive":
+                continue
+            rows.append({"fighter": name, "style": f["style"], "ticks": self.game.state["tick"] - self.starts[name],
+                         "loadout": sim.digest(f["equipped"])[:16],
+                         "worn_legendary": any(items[r]["tier"] == "legendary" for r in f["equipped"].values()),
+                         "points": sum(sum(items[r]["stats"].values()) for r in f["equipped"].values())})
+        return rows
+
     def result(self) -> dict:
-        return {"shares": {key: shares(self.exposure[key], self.kos[key]) for key in self.exposure},
+        return {"censored_lives": self.censored(), "shares": {key: shares(self.exposure[key], self.kos[key]) for key in self.exposure},
                 "survival_ticks": dict(self.exposure["fighter"]), "damage": dict(self.damage),
                 "lives": self.lives, "max_hunted_streak": max(self.max_streak.values(), default=0),
                 "grabs": self.grabs, "floor_losses": self.losses,
@@ -508,7 +529,8 @@ def _checkpoint_state(previous_source: Path | None = None) -> tuple[str, tuple[s
 def report(rules: Mapping, seeds: list[int], ticks: int, matrix: list[Scenario] | None = None,
            progress: bool = False, checkpoint: Path | None = None, workers: int = 1,
            controls: list[str] | None = None, previous_source: Path | None = None,
-           density_ticks: int | None = None) -> dict:
+           density_ticks: int | None = None, reverse: bool = False,
+           family_ticks: dict | None = None) -> dict:
     matrix = scenarios(rules) if matrix is None else matrix
     variants = ["baseline"] + sorted(rules["knobs"]) if controls is None else controls
     if set(variants) - {"baseline", *rules["knobs"]}:
@@ -524,10 +546,13 @@ def report(rules: Mapping, seeds: list[int], ticks: int, matrix: list[Scenario] 
         current = sim.rules_dict(rules)
         current["knobs"] = {key: key == variant for key in current["knobs"]}
         runs = []
+        family_ticks = family_ticks or {}
         tasks = [(case, current, seed,
-                  density_ticks if density_ticks is not None and case.family == "density" and case.density else ticks,
+                  family_ticks.get(case.family) or (density_ticks if density_ticks is not None and case.family == "density" and case.density else ticks),
                   checkpoint, source_hash if case.family in invalidated_families else measurement_hash)
                  for case in matrix for seed in seeds]
+        if reverse:
+            tasks.reverse()    # a second process meets the first in the middle through the shared checkpoints
         if workers > 1:
             with ProcessPoolExecutor(max_workers=workers) as pool:
                 for index, run in enumerate(pool.map(measure_cached, tasks)):
@@ -546,6 +571,7 @@ def report(rules: Mapping, seeds: list[int], ticks: int, matrix: list[Scenario] 
             "invalidated_families": list(invalidated_families),
             "ticks_per_run": ticks, "seeds": seeds, "scenario_count": len(matrix),
             "density_ticks": ticks if density_ticks is None else density_ticks,
+            "family_ticks": dict(family_ticks or {}),
             "matrix": [asdict(case) for case in matrix], "variants": output,
             "limits": ["Tick policy only; no model, chain, stake settlement or hosted-load evidence.",
                        "Right-censored lives are counted separately; rates show their denominators.",
@@ -565,6 +591,10 @@ def main() -> None:
     parser.add_argument("--comparison-variance", type=int, default=20)
     parser.add_argument("--resume-source", type=Path)
     parser.add_argument("--density-ticks", type=int, default=4800)
+    parser.add_argument("--lift-ticks", type=int, help="ticks per run for the legendary_lift family (P1 needs 30 rare KOs a cell)")
+    parser.add_argument("--set-ticks", type=int, help="ticks per run for the rares_newcomers family (P2 censors above 25 percent)")
+    parser.add_argument("--reverse", action="store_true", help="run the tasks last to first (a second process on the same checkpoints)")
+    parser.add_argument("--controls", nargs="+", help="baseline and/or knob names (default: all at the comparison variance)")
     args = parser.parse_args()
     if args.seeds < 1 or args.ticks < 1 or args.density_ticks < args.ticks:
         parser.error("positive seeds and ticks required")
@@ -579,8 +609,10 @@ def main() -> None:
         current["hitVarPct"] = variance
         results[str(variance)] = report(current, list(range(1, args.seeds + 1)), args.ticks,
                                          progress=True, checkpoint=args.checkpoint, workers=args.workers,
-                                         controls=None if variance == args.comparison_variance else ["baseline"],
-                                         previous_source=args.resume_source, density_ticks=args.density_ticks)
+                                         controls=args.controls or (None if variance == args.comparison_variance else ["baseline"]),
+                                         previous_source=args.resume_source, density_ticks=args.density_ticks,
+                                         reverse=args.reverse,
+                                         family_ticks={k: v for k, v in (('legendary_lift', args.lift_ticks), ('rares_newcomers', args.set_ticks)) if v})
     result = {"format": 1, "base_rules_hash": sim.digest(rules), "variances": results,
               "comparison_variance": args.comparison_variance}
     args.output.write_text(json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n")

@@ -1,0 +1,21 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-beam",
+ "name": "Trout",
+ "slot": "weapon",
+ "tier": "common",
+ "stats": {
+  "damage": 3,
+  "cooldown": 2,
+  "hp": 1,
+  "speed": 0,
+  "range": 4
+ },
+ "move": "beam",
+ "tag": "builder",
+ "kit": "weapon/fish",
+ "colors": {
+  "main": "p09",
+  "accent": "p10"
+ }
+}

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>W2 spike: login doors, fake keys</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font:14px/1.4 ui-monospace,Menlo,monospace;margin:16px;background:#fffaf0;color:#222}
+h1{font-size:16px} table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{border:1px solid #bbb;padding:4px 6px;vertical-align:top;text-align:left;word-break:break-word}
+th{background:#eee} .ok{color:#0a6b2d} .bad{color:#a11}
+</style></head><body>
+<h1>W2 spike: every door's function, FAKE keys only (no key can bill)</h1>
+<p>Origin: <b id="origin"></b>. Snap stub: <b id="stub"></b> (a STUB, not the real endpoint).</p>
+<table id="t"><thead><tr><th>#</th><th>door / function</th><th>request URL</th><th>response type</th><th>status</th><th>access-control headers visible to script</th><th>parsed result</th></tr></thead><tbody></tbody></table>
+<pre id="extra"></pre>
+<script src="../providers.js"></script>
+<script src="../vendor/near-api-js/near-api-js-7.3.1.min.js"></script>
+<script src="../vendor/near-api-js/near-connect-0.12.0.min.js"></script>
+<script src="../wallet.js"></script>
+<script>
+(function () {
+  var P = window.SnapProviders, params = new URLSearchParams(location.search);
+  var STUB = params.get('stub') || 'http://127.0.0.1:8832';
+  document.getElementById('origin').textContent = location.origin;
+  document.getElementById('stub').textContent = STUB;
+  var rows = [], n = 0, tbody = document.querySelector('#t tbody');
+
+  // A recording fetch: passed to providers.js as {fetch}, it keeps what a script can see of each response.
+  function recorder(label) {
+    var log = [];
+    var f = async function (url, init) {
+      var rec = { url: String(url), method: (init && init.method) || 'GET', mode: (init && init.mode) || 'cors' };
+      log.push(rec);
+      try {
+        var res = await fetch(url, init);
+        rec.type = res.type; rec.status = res.status;
+        var h = [];
+        res.headers.forEach(function (v, k) { h.push(k + ': ' + v); });
+        rec.visible = h;
+        rec.acHeaders = h.filter(function (x) { return /^access-control-/i.test(x); });
+        return res;
+      } catch (e) { rec.type = 'failed'; rec.error = e.name + ': ' + e.message; throw e; }
+    };
+    f.log = log; return f;
+  }
+
+  function add(label, rec, parsed) {
+    n++;
+    var row = { n: n, door: label, url: rec && rec.url, type: rec && rec.type, status: rec && rec.status,
+      acHeaders: rec && rec.acHeaders, visibleHeaderNames: rec && rec.visible ? rec.visible.map(function (x) { return x.split(':')[0]; }) : null,
+      error: rec && rec.error, parsed: parsed };
+    rows.push(row);
+    var tr = document.createElement('tr');
+    var ac = row.acHeaders && row.acHeaders.length ? row.acHeaders.join('\n') : (row.type === 'failed' ? '(none: ' + row.error + ')' : '(none visible)');
+    [n, label, row.url || '', row.type || '', row.status == null ? '' : row.status, ac, JSON.stringify(parsed)].forEach(function (v, i) {
+      var td = document.createElement('td'); td.textContent = v; if (i === 3) td.className = v === 'cors' ? 'ok' : 'bad'; tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+
+  // The first logged request of a call is the real one; later ones are the keyless no-cors probe.
+  async function door(label, fn) {
+    var f = recorder(label), r = await fn(f);
+    add(label, f.log[0], r);
+    if (f.log[1]) add(label + ' (probe)', f.log[1], { note: 'keyless no-cors GET to the origin, only to tell cors from network' });
+    return r;
+  }
+
+  async function run() {
+    await door('NEAR AI Cloud: nearai.test', function (f) { return P.nearai.test('sk-fake-r3-nearai', { fetch: f }); });
+    await door('Claude Console key: claude.test (with opt-in header)', function (f) { return P.claude.test('sk-' + 'ant-fake-r3-claude', { fetch: f }); });
+    await door('Claude Console key: claude.test WITHOUT the opt-in header', function (f) { return P.claude.test('sk-' + 'ant-fake-r3-claude', { fetch: f, optIn: false }); });
+    await door('OpenRouter: openrouter.test', function (f) { return P.openrouter.test('sk-or-v1-fake-r3-openrouter', { fetch: f }); });
+    await door('OpenRouter: openrouter.finish (fake code)', function (f) { return P.openrouter.finish({ code: 'fake-code-r3', verifier: 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk' }, { fetch: f }); });
+
+    var b = await P.openrouter.begin({ callbackUrl: location.origin + '/spike/doors.html', state: 'st-r3' });
+    var chal = new URL(b.url).searchParams.get('code_challenge');
+    add('OpenRouter: openrouter.begin (no network)', { url: b.url, type: '(local)', status: '' },
+      { ok: b.ok, verifierLen: b.verifier.length, challengeMatchesS256: chal === await P.openrouter.pkceChallenge(b.verifier), storedInSessionStorage: !!sessionStorage.getItem('trenchie.snap.orVerifier') });
+
+    var base = { baseUrl: STUB };
+    var cc, cx;
+    var f1 = recorder('cc'); cc = await P.snap.requestCode({ agent: 'claude-code', name: 'Pebble' }, Object.assign({ fetch: f1 }, base));
+    add('Claude Code hand-off: snap.requestCode', f1.log[0], { ok: cc.ok, code: cc.code, expiresInS: Math.round((cc.expiresAt - Date.now()) / 1000), stub: cc.stub, command: cc.command, link: cc.link, promptLen: cc.prompt && cc.prompt.length });
+    var f2 = recorder('cx'); cx = await P.snap.requestCode({ agent: 'codex', name: 'Pebble' }, Object.assign({ fetch: f2 }, base));
+    add('Codex hand-off: snap.requestCode', f2.log[0], { ok: cx.ok, code: cx.code, command: cx.command, link: cx.link, promptLen: cx.prompt && cx.prompt.length });
+    var f3 = recorder('p1'); var p1 = await P.snap.poll(cc.code, Object.assign({ fetch: f3 }, base));
+    add('snap.poll (before the agent arrives)', f3.log[0], p1);
+    await fetch(STUB + '/snap/_join', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: cc.code }) });
+    var f4 = recorder('p2'); var p2 = await P.snap.poll(cc.code, Object.assign({ fetch: f4 }, base));
+    add('snap.poll (after the stub marks it joined)', f4.log[0], p2);
+    var f5 = recorder('p3'); var p3 = await P.snap.poll('NOPE-000', Object.assign({ fetch: f5 }, base));
+    add('snap.poll (unknown code)', f5.log[0], p3);
+    var f6 = recorder('nb'); var nb = await P.snap.requestCode({ agent: 'codex' }, { fetch: f6, baseUrl: '' });
+    add('snap.requestCode against same origin (no endpoint exists)', f6.log[0], nb);
+
+    var wl = window.SnapWallet;
+    var chk = wl.importCheck();
+    document.getElementById('extra').textContent = 'SnapWallet.list(): ' + JSON.stringify(wl.list()) + '\nSnapWallet.importCheck(): ' + JSON.stringify(chk);
+    window.__RESULTS = { origin: location.origin, rows: rows, wallet: { list: wl.list(), importCheck: chk }, userAgent: navigator.userAgent };
+    window.__DONE = true;
+  }
+  run().catch(function (e) { window.__RESULTS = { error: String(e && e.stack || e) }; window.__DONE = true; });
+})();
+</script></body></html>

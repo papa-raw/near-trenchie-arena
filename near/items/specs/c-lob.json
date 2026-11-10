@@ -1,0 +1,21 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-lob",
+ "name": "Coconut Mortar",
+ "slot": "weapon",
+ "tier": "common",
+ "stats": {
+  "damage": 4,
+  "cooldown": 2,
+  "hp": 1,
+  "speed": 0,
+  "range": 3
+ },
+ "move": "lob",
+ "tag": "builder",
+ "kit": "weapon/mortar",
+ "colors": {
+  "main": "p03",
+  "accent": "p12"
+ }
+}

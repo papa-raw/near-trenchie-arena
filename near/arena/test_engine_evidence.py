@@ -125,9 +125,18 @@ class EngineEvidence(unittest.TestCase):
         self.assertEqual(pending.join("late")["state"], "accepted")
         drive(pending, 1, [], [])
         archive = pending.arena.store.segment("segment:0")
-        self.assertEqual(archive["sealed"]["nft_token_ids"], ["late"])
+        # Contract changed on purpose (segment-edge fix): a join accepted on the last two ticks is held and
+        # runs on the next segment's first tick, so segment:0 no longer lists or journals it...
+        self.assertEqual(archive["sealed"]["nft_token_ids"], [])
         self.assertNotIn("late", pending.arena.sim.state["fighters"])
         self.assertEqual(self.module.replay_evidence(archive)["lives"], [])
+        # ...and segment:1 does, with its join at the flush tick (boundary + input delay).
+        drive(pending, 1200, [], [])
+        later = pending.arena.store.segment("segment:1")
+        self.assertEqual(later["sealed"]["nft_token_ids"], ["late"])
+        joins = [c["value"] for c in later["commands"] if c["kind"] == "input" and c["value"]["kind"] == "join"]
+        self.assertEqual([(j["fighter_id"], j["tick"]) for j in joins], [("late", 1202)])
+        self.assertEqual(self.module.replay_evidence(later)["final_state_hash"], later["sealed"]["final_state_hash"])
 
 
 if __name__ == "__main__":

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Legendaries</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg: #F6F0E2; --card: #FFFBF2; --ink: #3B2F25; --mute: #8A7A66; --line: #E6DCC8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 ui-rounded, "SF Pro Rounded", system-ui, sans-serif; }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 32px 40px 80px; }
+  .eyebrow { font: 600 11px/1 ui-monospace, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+  h1 { font-size: 30px; margin: 8px 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); margin: 26px 0 10px; font-weight: 700; }
+  .lede { color: #6B5D4C; margin: 0 0 12px; max-width: 880px; }
+  #summary { font: 13px/1.5 ui-monospace, Menlo, monospace; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; }
+  .strip { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px; overflow-x: auto; margin-bottom: 8px; }
+  .strip .row { display: flex; gap: 2px; width: max-content; }
+  .strip canvas { width: 60px; height: 60px; display: block; flex: none; }
+  .strip .cap { font-size: 12px; color: var(--mute); margin: 6px 4px 0; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px 8px 10px; min-width: 0; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pair canvas { width: 100%; aspect-ratio: 1 / 1; height: auto; display: block; border-radius: 10px; }
+  .card b { display: block; font-size: 16px; margin: 7px 2px 0; }
+  .card small { display: block; font: 11px/1.4 ui-monospace, Menlo, monospace; color: var(--mute); margin: 1px 2px; }
+  .tier { display: inline-block; font: 600 10px/1 ui-monospace, Menlo, monospace; text-transform: uppercase; letter-spacing: .08em; border-radius: 999px; padding: 3px 7px; margin-left: 6px; vertical-align: 2px; background: #E4E4E4; color: #555; }
+  .tier.rare { background: #D6E6F7; color: #2D5E94; } .tier.legendary { background: #F7E3A8; color: #8A6410; }
+  .item { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px 16px; margin: 14px 0; }
+  .item h3 { margin: 0 0 2px; font-size: 20px; } .item h3 small { font: 11px/1 ui-monospace, Menlo, monospace; color: var(--mute); margin-left: 10px; font-weight: 400; }
+  .item p { margin: 0 0 10px; color: #6B5D4C; max-width: 900px; }
+  .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .item .sig { font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--mute); }
+  .col { display: flex; flex-direction: column; gap: 8px; } .colhead { font: 700 12px/1 ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+  #sheet { display: flex; flex-wrap: wrap; gap: 10px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+  .sc { display: flex; flex-direction: column; gap: 2px; align-items: center; } .sc canvas { width: 60px; height: 60px; display: block; } .sc i { font: 11px/1.2 ui-monospace, Menlo, monospace; color: var(--mute); font-style: normal; max-width: 70px; text-align: center; }
+  .col.ref { opacity: .92; }
+  .tile { position: relative; } .tile canvas { width: 100%; aspect-ratio: 1 / 1; height: auto; display: block; border-radius: 10px; }
+  .tile.px60 canvas { width: 60px; height: 60px; aspect-ratio: auto; } .tile i { display: block; font: 11px/1.4 ui-monospace, Menlo, monospace; color: var(--mute); margin-top: 2px; font-style: normal; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+  @media (max-width: 720px) { .wrap { padding: 20px 16px 80px; } h1 { font-size: 24px; } .grid { grid-template-columns: 1fr; } }
+</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">the 14 named legendaries</div>
+  <h1>Legendaries: worn, at game size, on the floor</h1>
+  <p class="lede">One legendary for each house trenchie, drawn freely (no kit base), each a re-skin of one of the six shared signatures. Per card: the trenchie wearing it at 60 px as in the arena, a 300 px close look at its hip, the item lying on the floor in gold glow, and the emblem alone on its gold plate.</p>
+  <div id="summary">rendering…</div>
+  <h2>Game size, 60 px: worn in the arena (above), lying on the floor (below)</h2><div id="sheet"></div>
+  <div id="items"></div>
+</div>
+<script type="module" src="legendary.js"></script>
+</body>
+</html>

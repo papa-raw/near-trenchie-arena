@@ -1,0 +1,20 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "st-roll",
+ "name": "Dodge Roll",
+ "slot": "trinket",
+ "tier": "common",
+ "stats": {
+  "damage": 0,
+  "cooldown": 4,
+  "hp": 3,
+  "speed": 3,
+  "range": 0
+ },
+ "sig": "dodge_roll",
+ "kit": "trinket/roll",
+ "colors": {
+  "main": "p05",
+  "accent": "p10"
+ }
+}

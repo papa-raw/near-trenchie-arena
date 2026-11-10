@@ -1,0 +1,21 @@
+{
+ "spec": "trenchie-item/3",
+ "id": "c-zap",
+ "name": "Jelly Zapper",
+ "slot": "weapon",
+ "tier": "common",
+ "stats": {
+  "damage": 3,
+  "cooldown": 4,
+  "hp": 1,
+  "speed": 0,
+  "range": 2
+ },
+ "move": "zap",
+ "tag": "degen",
+ "kit": "weapon/jelly",
+ "colors": {
+  "main": "p11",
+  "accent": "p12"
+ }
+}
