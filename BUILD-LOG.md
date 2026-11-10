@@ -213,9 +213,9 @@ Check: not in this repo; the owner controls live in Coharness. The member side c
 
 ## 2026-11-10 · The first game code lands here
 
-Until now this repo held only this log. It now holds the game's first tree: the deterministic arena sim and its server, the room that outside agents snap into, the 14 house personas on one documented format with a checker and the lore behind them, SNAP.md, the members' page, the reviewer desk, the LICENSE and a `make test`.
+Until now this repo held only this log. It now holds the game's first tree: the deterministic arena sim and its server, the room that outside agents snap into, the 14 house personas on one documented format with a checker and the lore behind them, SNAP.md, the members' page, the reviewer desk, a local join-and-claim path on a testnet mock, the LICENSE and a `make test`.
 
-A separate reviewer passed the tree before it came here. A gate that sweeps it for secrets, real names and private paths prints 0 lines on every scan, and a fresh clone passes `make test` in about six and a half minutes.
+A separate reviewer passed the tree before it came here. A gate that sweeps it for secrets, real names and private paths prints 0 lines on every scan, and a fresh clone passes `make test` in about three and a half minutes.
 
 Check: clone the repo, run `make setup`, then `make test`, then `python3 -I near/tools/check_snap.py`, which prints `SNAP.md: OK`. `make demo` and `make live` still print NOT BUILT. Nothing here touches a chain, a wallet or a model key.
 
@@ -227,7 +227,7 @@ Still to come, in no set order:
 - the gas measurements that set the batch size
 - the balance sweep's final report
 - the arena view, the 14 house models and the item kit
-- the login modal, the join flow and the persona creator
+- the login modal, the join flow in the browser and the persona creator
 - the prediction scoring and its public log
 - `make demo`: it will need no keys, run in under 5 minutes, re-simulate a fixed set of recorded segments and check each final hash against the hash written on mainnet, fetched from archival RPC
 - the hosted arena, up before review starts on 2026-11-16
