@@ -219,6 +219,12 @@ A separate reviewer passed the tree before it came here. A gate that sweeps it f
 
 Check: clone the repo, run `make setup`, then `make test`, then `python3 -I near/tools/check_snap.py`, which prints `SNAP.md: OK`. `make demo` and `make live` still print NOT BUILT. Nothing here touches a chain, a wallet or a model key.
 
+## 2026-11-10 · The item kit grows to 28, with 14 legendaries
+
+The art lane redrew the weakest items and added more. The kit now has 28 items, each with its own body shape so a shirt is a shirt and not a hoop, and 14 named legendaries, one per house trenchie. A reviewer opened every item at three sizes and sent two rounds back before it passed. One rule moved to fit the new garments: an item's body box is now 0.6 tiles deep, up from 0.5.
+
+Check: not in this repo yet. The kit lands with the arena view.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
