@@ -233,6 +233,16 @@ The installer went through a red team before it touched the box. The review foun
 
 Check: not in this repo. The installer and its read-only verifier live with the room source; the verifier passes on the host and prints `DEPLOYMENT CLOSED`.
 
+## 2026-11-10 · Gear you can see, and quirks that show their reach
+
+Every fighter in the arena now wears its kit: hat, shirt, weapon and trinket, each glowing grey, blue or gold by tier, and anything knocked loose lies on the floor until someone grabs it. Putting all that gear on sixteen fighters at once cut the frame rate in half. Sharing geometry between identical items and painting the score panels once instead of every update brought it back to 60 frames a second on a laptop screen at full resolution.
+
+Each of the 14 legendaries also got a quirk: a small trade inside its existing move, such as a longer beam with a narrower sweep. The warning shape on the floor is drawn from the quirk's real reach, so nobody gets hit outside what they were shown. Hover over a fighter to read its quirk.
+
+A reviewer sent the work back four times before it passed: twice for warning shapes that didn't match the quirks, once for frame rate and once for score panels that hid their own numbers.
+
+Check: not in this repo yet. It lands with the arena view.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
