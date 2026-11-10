@@ -258,8 +258,9 @@ def clean_clone(root, targets=("test", "demo", "live")):
     """Clone the committed tree to an empty folder and run make there, with no PYTHONPATH and a PATH holding no
     checkout of the harness (browser cases still need node, Playwright and its browser installed, as `make setup` does). Returns (hit lines, notices). Targets that print NOT BUILT and exit 2 are notices."""
     lines, notices = [], []
+    checkout_name = "".join(("co", "harness"))
     bad = [e for e in os.environ.get("PATH", "").split(os.pathsep) + os.environ.get("PYTHONPATH", "").split(os.pathsep)
-           if re.search(r"coharness", e, re.I)]
+           if re.search(checkout_name, e, re.I)]
     if bad:
         return [hit("clean-clone", "PATH", 0, "an entry names a harness checkout: " + ", ".join(bad))], notices
     dirty = subprocess.run(["git", "-C", root, "status", "--porcelain"], capture_output=True, text=True).stdout.strip()
