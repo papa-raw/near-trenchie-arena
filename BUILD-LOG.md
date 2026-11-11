@@ -259,7 +259,7 @@ Check: `python3 -I near/tools/check_snap.py` prints `SNAP.md: OK`.
 
 ## 2026-11-11 · Wallets, frames and spending caps
 
-The wallet list now comes from a reviewed copy served by the game itself, with each wallet's code pinned to an exact version and checked by hash. A wallet is chosen by its exact id and code, never by the name on the button. Review also found that another site could load the guide inside a frame and catch a player's sign-in. The guide now refuses to sign in inside a frame. And a player's spending cap now holds across browser tabs: two tabs calling the AI at once can't go over it together.
+The wallet list now comes from a reviewed copy served by the game itself. The two wallets whose code lives on GitHub are pinned to exact commits, recorded with their hashes; the other two load from the wallet's own site. A wallet is chosen by its exact id and code address, never by the name on the button. Review also found that another site could load the guide inside a frame and catch a player's sign-in. The guide now refuses to sign in inside a frame. And a player's spending cap now holds across browser tabs: two tabs calling the AI at once can't go over it together.
 
 Check: not runnable without a browser; the cases ship with the code.
 
@@ -278,6 +278,7 @@ Check: `cargo test` in each contract under `near/contracts/` passes.
 Still to come, in no set order:
 
 - the identity contract on mainnet
+- the gas measurements that set the batch size
 - the hosted arena, up before review starts on 2026-11-16
 - `make demo`'s check of each replayed hash against the hash written on testnet, fetched from archival RPC
 - the balance sweep's final report
