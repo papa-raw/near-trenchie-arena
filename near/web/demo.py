@@ -74,7 +74,7 @@ def main() -> None:
     print('Synthetic local run: no model, wallet, hosted service or chain.')
     print('Replay checked locally: ' + facts['recorded_hash'])
     print('Chain check pending. Public full forecast and score remain pending.')
-    print('Open the desk: make -C near desk')
+    print('Open the desk: (cd near && make desk)')
 
 
 if __name__ == '__main__':

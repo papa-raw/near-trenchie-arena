@@ -1,0 +1,295 @@
+{
+ "about": "Real ack() outputs of near/arena/behaviour.py @ 66b84e8 (generated for chat_case.cjs; the case shows them verbatim).",
+ "applied": {
+  "type": "behaviour_ack",
+  "v": 1,
+  "fighter": "a",
+  "seq": 1,
+  "status": "applied",
+  "receive_tick": 18400,
+  "apply_tick": 18402,
+  "applies_in_ms": 100,
+  "behaviour": {
+   "v": 1,
+   "drives": {
+    "chase": 3,
+    "hold": 0,
+    "hold_at": "center",
+    "hold_radius": 2,
+    "keep_away": 8,
+    "keep_away_radius": 5,
+    "loot": 10,
+    "protect": 0,
+    "protect_ally": null
+   },
+   "gate": {
+    "match": "all",
+    "target_hp_below_pct": 40,
+    "target_busy": true
+   },
+   "target": "auto",
+   "reflexes": []
+  },
+  "clipped": [],
+  "refused": [],
+  "notes": [],
+  "summary": "New behaviour recorded: loot 10 · keep_away 8 (radius 5) · chase 3 · attack gate: hp below 40% and busy · target auto · no reflexes · applies at tick 18,402 (in 0.1 s) · persists across respawns",
+  "rules_hash": "5b2415eec53d7ddcf3027f463ce34a8f0c989d054fe8a7477e9e1269ad03a2a8"
+ },
+ "four_reflex": {
+  "type": "behaviour_ack",
+  "v": 1,
+  "fighter": "a",
+  "seq": 2,
+  "status": "applied",
+  "receive_tick": 18400,
+  "apply_tick": 18402,
+  "applies_in_ms": 100,
+  "behaviour": {
+   "v": 1,
+   "drives": {
+    "chase": 4,
+    "hold": 0,
+    "hold_at": "center",
+    "hold_radius": 2,
+    "keep_away": 0,
+    "keep_away_radius": 4,
+    "loot": 6,
+    "protect": 0,
+    "protect_ally": null
+   },
+   "gate": {
+    "match": "all"
+   },
+   "target": "auto",
+   "reflexes": [
+    {
+     "if": {
+      "self_hp_below_pct": 30
+     },
+     "then": {
+      "drives": {
+       "keep_away": 10
+      }
+     }
+    },
+    {
+     "if": {
+      "self_hp_below_pct": 60
+     },
+     "then": {
+      "drives": {
+       "loot": 10
+      }
+     }
+    },
+    {
+     "if": {
+      "self_hp_below_pct": 80
+     },
+     "then": {
+      "drives": {
+       "chase": 8
+      }
+     }
+    },
+    {
+     "if": {
+      "self_hp_below_pct": 90
+     },
+     "then": {
+      "drives": {
+       "chase": 6
+      }
+     }
+    }
+   ]
+  },
+  "clipped": [],
+  "refused": [],
+  "notes": [],
+  "summary": "New behaviour recorded: loot 6 · chase 4 · attack gate: any target · target auto · reflex 1: if hp < 30% then keep_away 10 · reflex 2: if hp < 60% then loot 10 · reflex 3: if hp < 80% then chase 8 · reflex 4: if hp < 90% then chase 6 · applies at tick 18,402 (in 0.1 s) · persists across respawns",
+  "rules_hash": "5b2415eec53d7ddcf3027f463ce34a8f0c989d054fe8a7477e9e1269ad03a2a8"
+ },
+ "clipped": {
+  "type": "behaviour_ack",
+  "v": 1,
+  "fighter": "a",
+  "seq": 3,
+  "status": "clipped",
+  "receive_tick": 100,
+  "apply_tick": 102,
+  "applies_in_ms": 100,
+  "behaviour": {
+   "v": 1,
+   "drives": {
+    "chase": 10,
+    "hold": 0,
+    "hold_at": "center",
+    "hold_radius": 2,
+    "keep_away": 4,
+    "keep_away_radius": 12,
+    "loot": 0,
+    "protect": 0,
+    "protect_ally": null
+   },
+   "gate": {
+    "match": "all"
+   },
+   "target": "auto",
+   "reflexes": [
+    {
+     "if": {
+      "self_hp_below_pct": 25
+     },
+     "then": {
+      "drives": {
+       "keep_away": 10
+      }
+     }
+    },
+    {
+     "if": {
+      "self_hp_below_pct": 25
+     },
+     "then": {
+      "drives": {
+       "keep_away": 10
+      }
+     }
+    },
+    {
+     "if": {
+      "self_hp_below_pct": 25
+     },
+     "then": {
+      "drives": {
+       "keep_away": 10
+      }
+     }
+    },
+    {
+     "if": {
+      "self_hp_below_pct": 25
+     },
+     "then": {
+      "drives": {
+       "keep_away": 10
+      }
+     }
+    },
+    {
+     "if": {
+      "self_hp_below_pct": 25
+     },
+     "then": {
+      "drives": {
+       "keep_away": 10
+      }
+     }
+    },
+    {
+     "if": {
+      "self_hp_below_pct": 25
+     },
+     "then": {
+      "drives": {
+       "keep_away": 10
+      }
+     }
+    },
+    {
+     "if": {
+      "self_hp_below_pct": 25
+     },
+     "then": {
+      "drives": {
+       "keep_away": 10
+      }
+     }
+    },
+    {
+     "if": {
+      "self_hp_below_pct": 25
+     },
+     "then": {
+      "drives": {
+       "keep_away": 10
+      }
+     }
+    }
+   ]
+  },
+  "clipped": [
+   {
+    "path": "drives.keep_away_radius",
+    "sent": 40,
+    "set": 12,
+    "fix": "keep_away_radius 40 > max 12 tiles: set to 12"
+   },
+   {
+    "path": "reflexes",
+    "sent": 9,
+    "set": 8,
+    "fix": "9 reflexes > max 8: kept the first 8"
+   }
+  ],
+  "refused": [],
+  "notes": [],
+  "summary": "New behaviour recorded: keep_away 4 (radius 12, clipped from 40) · chase 10 · attack gate: any target · target auto · reflex 1: if hp < 25% then keep_away 10 · reflex 2: if hp < 25% then keep_away 10 · reflex 3: if hp < 25% then keep_away 10 · reflex 4: if hp < 25% then keep_away 10 · reflex 5: if hp < 25% then keep_away 10 · reflex 6: if hp < 25% then keep_away 10 · reflex 7: if hp < 25% then keep_away 10 · reflex 8: if hp < 25% then keep_away 10 · clipped: 9 reflexes > max 8: kept the first 8 · applies at tick 102 (in 0.1 s) · persists across respawns",
+  "rules_hash": "5b2415eec53d7ddcf3027f463ce34a8f0c989d054fe8a7477e9e1269ad03a2a8"
+ },
+ "refused": {
+  "type": "behaviour_ack",
+  "v": 1,
+  "fighter": "a",
+  "seq": 4,
+  "status": "refused",
+  "receive_tick": 100,
+  "apply_tick": null,
+  "applies_in_ms": null,
+  "behaviour": null,
+  "clipped": [
+   {
+    "path": "reflexes[2].if.self_hp_below_pct",
+    "sent": 150,
+    "set": 99,
+    "fix": "self_hp_below_pct 150 > max 99%: set to 99"
+   }
+  ],
+  "refused": [
+   {
+    "path": "reflexes[1].if",
+    "code": "unknown_condition",
+    "fix": "unknown condition 'hp_low'; use one of self_hp_below_pct, self_hp_above_pct, enemy_within, enemies_at_least, hit_recently, ally_hit_recently, loot_within, legendary_on_floor, target_hp_below_pct, no_target"
+   }
+  ],
+  "notes": [],
+  "summary": "Refused: reflexes[1].if: unknown condition 'hp_low'; use one of self_hp_below_pct, self_hp_above_pct, enemy_within, enemies_at_least, hit_recently, ally_hit_recently, loot_within, legendary_on_floor, target_hp_below_pct, no_target · nothing changed; your last behaviour stays",
+  "rules_hash": "5b2415eec53d7ddcf3027f463ce34a8f0c989d054fe8a7477e9e1269ad03a2a8"
+ },
+ "rate": {
+  "type": "behaviour_ack",
+  "v": 1,
+  "fighter": "a",
+  "seq": 5,
+  "status": "refused",
+  "receive_tick": 100,
+  "apply_tick": null,
+  "applies_in_ms": null,
+  "behaviour": null,
+  "clipped": [],
+  "refused": [
+   {
+    "path": "",
+    "code": "order_rate",
+    "fix": "one order per 0.5 s: send it again at tick 103 or later"
+   }
+  ],
+  "notes": [
+   "every drive is 0: the fighter stands its ground and fights what the gate lets into reach"
+  ],
+  "summary": "Refused: one order per 0.5 s: send it again at tick 103 or later · nothing changed; your last behaviour stays",
+  "rules_hash": "5b2415eec53d7ddcf3027f463ce34a8f0c989d054fe8a7477e9e1269ad03a2a8"
+ }
+}

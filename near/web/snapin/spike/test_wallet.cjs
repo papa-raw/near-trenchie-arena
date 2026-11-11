@@ -7,26 +7,29 @@ const W = require('../wallet.js');
 let fails = 0;
 const ok = (n, c, d) => { if (!c) fails++; console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  -> ' + d)); };
 
+// the reviewed list's Meteor entry (wallets-manifest.json): wallet.js opens a wallet only by its manifest id and executor URL
+const METEOR = JSON.parse(fs.readFileSync(path.join(__dirname, '../wallets-manifest.json'), 'utf8')).wallets.find((w) => w.id === 'meteor-wallet');
 function fakeLib({ reject, noAccounts, mainnetOnly } = {}) {
   const sent = [];
+  class SandboxWallet {   // the selector's own sandboxed wallet, built from a manifest entry
+    constructor(connector, manifest) { this.connector = connector; this.manifest = manifest; }
+    async getAccounts() { const net = this.connector.network; return noAccounts ? [] : [{ accountId: net === 'testnet' ? 'tester.testnet' : 'tester.near' }]; }
+    async signAndSendTransaction(p) { sent.push(p); if (reject) throw new Error('User rejected the request'); return { transaction: { hash: 'FAKEHASH' } }; }
+  }
   class NearConnector {
     constructor(o) {
-      this.network = o.network;
+      this.network = o.network; this.given = o.manifest;
       this.manifest = { version: '1', wallets: [
-        { id: 'meteor-wallet', name: 'Meteor Wallet', features: { mainnet: true, testnet: !mainnetOnly } },
-        { id: 'hot-wallet', name: 'HOT Wallet', features: { mainnet: true } },
+        Object.assign({}, METEOR, { features: Object.assign({}, METEOR.features, { mainnet: true, testnet: !mainnetOnly }) }),
+        { id: 'hot-wallet', name: 'HOT Wallet', type: 'sandbox', executor: 'https://example.invalid/hot.js', features: { mainnet: true } },
       ] };
+      this.wallets = this.manifest.wallets.map((m) => new SandboxWallet(this, m));
       this.whenManifestLoaded = Promise.resolve();
     }
-    async connect({ walletId }) {
-      const net = this.network;
-      return {
-        async getAccounts() { return noAccounts ? [] : [{ accountId: net === 'testnet' ? 'tester.testnet' : 'tester.near' }]; },
-        async signAndSendTransaction(p) { sent.push(p); if (reject) throw new Error('User rejected the request'); return { transaction: { hash: 'FAKEHASH' } }; },
-      };
-    }
+    async wallet(id) { const w = this.wallets.find((x) => x.manifest.id === id); if (!w) throw new Error('Wallet not found'); return w; }
+    async connect({ walletId }) { return this.wallet(walletId); }
   }
-  return { NearConnectLib: { NearConnector }, NearApi, sent };
+  return { NearConnectLib: { NearConnector, SandboxWallet }, NearApi, sent, manifest: 'fake://reviewed-list' };   // wallet.js never runs without a list
 }
 
 (async () => {
@@ -55,10 +58,12 @@ function fakeLib({ reject, noAccounts, mainnetOnly } = {}) {
   await W.connect('meteor', { network: 'testnet' }, o);
   r = await W.guestKey({ accountId: 'tester.testnet', network: 'testnet', receiver: 'market', allowanceNear: '0.25' }, o);
   const a = o.sent[0] && o.sent[0].actions[0];
-  ok('guestKey ok: publicKey, label receiver, no secret in result', r.ok && /^ed25519:/.test(r.publicKey) && r.receiver === 'market.tester.testnet' && r.receiverIsLabel === true && !/secret|private/i.test(JSON.stringify(r)), JSON.stringify(r));
+  const MARKET = require('../chain.js').marketAccount;
+  ok('with no console edit, the receiver is the deployed testnet market from chain.js (' + MARKET + ')', W.config.marketAccount === MARKET && MARKET === 'market.trenchie-r4b-20261111.testnet' && W.config.rpc === require('../chain.js').rpc, JSON.stringify(W.config));
+  ok('guestKey ok: publicKey, the chain.js market as receiver, no secret in result', r.ok && /^ed25519:/.test(r.publicKey) && r.receiver === MARKET && r.receiverIsLabel === false && !/secret|private/i.test(JSON.stringify(r)), JSON.stringify(r));
   ok('exactly ONE AddKey, function-call permission, receiver market only, allowance 0.25 NEAR in yocto, no deposit',
     o.sent.length === 1 && o.sent[0].actions.length === 1 && a.type === 'AddKey' && a.params.publicKey === r.publicKey &&
-    a.params.accessKey.permission.receiverId === 'market.tester.testnet' && a.params.accessKey.permission.allowance === '250000000000000000000000' &&
+    a.params.accessKey.permission.receiverId === MARKET && a.params.accessKey.permission.allowance === '250000000000000000000000' &&
     !('deposit' in a.params) && o.sent[0].receiverId === 'tester.testnet', JSON.stringify(o.sent));
   ok('secret key never in the wallet request', !/secret|ed25519:[1-9A-HJ-NP-Za-km-z]{80,}/.test(JSON.stringify(o.sent)), '');
   const sig = W.guestSign(new Uint8Array([1, 2, 3]));
@@ -71,6 +76,9 @@ function fakeLib({ reject, noAccounts, mainnetOnly } = {}) {
   r = await W.guestKey({ network: 'testnet', receiver: 'market' }, o);
   ok('configured market account is used, not a label', r.ok && r.receiver === 'market.trenchie-village.testnet' && r.receiverIsLabel === false, JSON.stringify(r));
   W.config.marketAccount = null;
+  r = await W.guestKey({ network: 'testnet', receiver: 'market' }, o);
+  ok('config.marketAccount = null falls back to the old receiver label (tests only)', r.ok && r.receiver === 'market.tester.testnet' && r.receiverIsLabel === true, JSON.stringify(r));
+  W.config.marketAccount = MARKET;
   r = await W.guestKey({ network: 'mainnet' }, o);
   ok('guestKey on mainnet refused', !r.ok && r.kind === 'wrong-network', JSON.stringify(r));
   r = await W.guestKey({ network: 'testnet', accountId: 'someone.else.testnet' }, o);
@@ -82,6 +90,13 @@ function fakeLib({ reject, noAccounts, mainnetOnly } = {}) {
   await W.connect('meteor', { network: 'testnet' }, o);
   r = await W.guestKey({ network: 'testnet' }, o);
   ok('wallet rejects AddKey -> rejected, and no key kept', !r.ok && r.kind === 'rejected' && W.guestPublicKey() === null, JSON.stringify(r));
+
+  // Test my key: refused plainly with no guest key in the page; the live call is spike/test-key-live.mjs (testnet)
+  W._reset();
+  r = await W.testKey({}, { NearApi });
+  ok('testKey with no guest key -> no-key, nothing sent', !r.ok && r.kind === 'no-key', JSON.stringify(r));
+  r = await W.testKey({}, { NearApi: {} });
+  ok('testKey without the near-api-js bundle -> no-lib', !r.ok && r.kind === 'no-lib', JSON.stringify(r));
 
   console.log(fails ? `\n${fails} FAIL` : '\nall PASS');
   process.exit(fails ? 1 : 0);

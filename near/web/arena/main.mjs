@@ -2,13 +2,16 @@
 import * as THREE from 'three';
 import { SnapshotBuffer, TICK_MS } from './buffer.mjs';
 import { Net } from './net.mjs';
+import { Social } from './social.mjs';
+import { Moments } from './moments.mjs';
+import { ChainHold } from './chain-hold.mjs';
 import { createStage } from './scene.mjs';
 import { CastDetails } from './quirks.mjs';
 import { ActorInstances } from './instances.mjs';
 import { guardedFrame } from './guard.mjs';
 import { Actors } from './actors.mjs';
 import { Effects } from './fx.mjs';
-import { milliToWorld, lerpAngle, pickMilli } from './frame.mjs';
+import { milliToWorld, lerpAngle, pickMilli, ARENA_RADIUS_MILLI, MILLI } from './frame.mjs';
 import { Hud } from './hud.mjs';
 import { Budget, FrameGate, measureIdle } from './budget.mjs';
 import { BudgetReplay, budgetEffects } from './budget-replay.mjs';
@@ -18,6 +21,7 @@ import { Sound, soundForEvent } from './sound.mjs';
 import { Leaderboard } from './leaderboard.mjs';
 import { Inset, pickFighter } from './inset.mjs';
 import { Slowmo } from './slowmo.mjs';
+import { RosterFeed, rosterUrl } from './roster.mjs';
 import { LOOK3, ROSTER, ITEMS } from '../art/index.js';
 
 const $ = (id) => document.getElementById(id);
@@ -35,6 +39,8 @@ function loadScript(src) {
 async function main() {
   const KITS = window.KITS = { roster: ROSTER }; // the HUD art looks short tags up here
   await loadScript('./hud-art/hud-art.js');
+  window.THREE = THREE; window.LOOK3 = LOOK3;
+  await loadScript('./snapin/art/parts-s3.js');
   const stage = createStage($('stage'), LOOK3, { dprCap: qs.has('dpr') ? +qs.get('dpr') : 2, shadowMap: qs.has('shadow') ? +qs.get('shadow') : 1024, dprForce: qs.has('dprforce') ? +qs.get('dprforce') : 0 });
   const { renderer, scene, camera, view } = stage;
   const itemRenderer = await loadItems(ITEMS);
@@ -48,14 +54,22 @@ async function main() {
   if (qs.has('replay')) {
     const response = await fetch(qs.get('replay'));
     if (!response.ok) throw new Error('Recording: HTTP ' + response.status);
-    replay = new BudgetReplay(await response.json(), buffer, { crowd: +(qs.get('crowd') || 0), onMetadata: (message) => details.apply(message) });
+    replay = new BudgetReplay(await response.json(), buffer, { crowd: +(qs.get('crowd') || 0), teleN: Math.max(0, +(qs.get('tele_n') || 0)), onMetadata: (message) => details.apply(message) });
     stress = budgetEffects(scene);
     setStatus('Recorded arena', 'replay');
   }
   const budgetWarmUntil = performance.now() + 4000;
+  let teleMin = Infinity, teleMax = 0;   // live telegraphs over the measured frames (the budget log states both)
   const hud = new Hud({ stage, actors, KITS, ITEMS, root: $('world'), status: statusEl }); hud.details = details;
+  const social = new Social(KITS, $('world'));
+  const moments = new Moments(ITEMS, (id) => hud.tagOf(id)); // big moments for the ticker (Battle mode)
+  const chainHold = new ChainHold($('chain-hold'));
+  if (!replay) chainHold.startHealth('/dev/health');
+  addEventListener('pagehide', () => chainHold.stopHealth());
+  addEventListener('pageshow', () => { if (!replay) chainHold.startHealth('/dev/health'); });
   if (replay) hud.styles = new Map(Object.entries(replay.record.styles));
   if (qs.has('nohud')) hud.remount = function () {}; // diagnostics only: the budget test with the panel art's 4 Hz redraw switched off
+  if (!replay) window.ROSTER_FEED = new RosterFeed(rosterUrl(WS_URL), (r) => { hud.roster = r; }).start(); // the host's public roster
   const inset = new Inset({ stage, tagOf: (id) => hud.tagOf(id) }), slowmo = new Slowmo(buffer);
   let lastPos = new Map(), lastLead = null;
   $('stage').addEventListener('click', (ev) => {
@@ -64,12 +78,18 @@ async function main() {
     if (id) inset.follow(id); else inset.clear();
     hud.followed = inset.followId;
   });
+  // ?follow=<fighter id> (the snap-in guide's "Watch your trenchie"): open the follow view on it once it is in the ring
+  const followWant = qs.get('follow');
+  if (followWant) { const t = setInterval(() => { const p = lastPos.get(followWant); if (p && p.state === 'alive') { inset.follow(followWant); hud.followed = inset.followId; clearInterval(t); } }, 400); setTimeout(() => clearInterval(t), 60000); }
+  // the ring's outline on screen, its edge projected at 64 points: the page's own panels (the order box) keep off it
+  window.__arenaRingOutline = () => { const r = ARENA_RADIUS_MILLI / MILLI + 0.3, out = []; for (let i = 0; i < 64; i++) { const a = i * Math.PI / 32, p = hud.toScreen(Math.cos(a) * r, 0, Math.sin(a) * r); out.push([p.x, p.y]); } return out; };
   const board = new Leaderboard({ isHouse: (id) => ROSTER.some((r) => r.trenchieId === id) }); hud.board = board;
   const sound = new Sound(); hud.soundState = sound.state; sound.onChange = (st) => { hud.soundState = st; }; hud.onMute = () => sound.toggle();
   const pan = (p) => (p ? Math.max(-0.8, Math.min(0.8, (hud.toScreen(p.x, 0.5, p.z).x - innerWidth / 2) / (innerWidth / 2))) : 0);
   const kos = new Map(), seenDrops = new Set();
   let netState = { state: 'connecting' }, firedTick = -1, lookTick = -1, lastNow = performance.now(), frames = 0, dropped = 0;
   const net = replay ? { frames: 0, bad: 0 } : new Net(WS_URL, {
+    onSocial: (message) => social.apply(message),
     onMetadata: (message) => { if (message) details.apply(message); else { details.records.clear(); details.rules = null; details.revision = -1; details.tick = -1; } },
     onStyles: (styles) => { hud.styles = styles; },
     onSnapshot: (s) => { buffer.push(s, performance.now()); },
@@ -92,7 +112,7 @@ async function main() {
     const dt = Math.min(100, nowMs - lastNow); lastNow = nowMs; frames++;
     if (!replay) slowmo.update(nowMs);
     const s = buffer.sample(nowMs);
-    if (!s) { renderer.render(scene, camera); return; }
+    if (!s) { renderer.render(scene, camera); chainHold.layout(); return; }
     const rt = s.tick, a = s.a, b = s.b, k = s.k;
 
     // events: anything the viewer has not yet seen. Attacks are read ahead (up to 3 ticks) so the wind-up leads the strike.
@@ -107,6 +127,8 @@ async function main() {
       }
       if (snap.tick > firedTick && snap.tick <= rt) {
         firedTick = snap.tick;
+        for (const ev of snap.events) for (const m of moments.onEvent(ev, snap)) social.moment(m);
+        for (const m of moments.onSnapshot(snap)) social.moment(m);
         for (const ev of snap.events) {
           if (ev.kind === 'hit') {
             actors.onHit(ev, snap.tick, nowMs, posOf(snap, ev.source), posOf(snap, ev.target));
@@ -162,11 +184,15 @@ async function main() {
     instances.sync(actors);
     const r0 = performance.now();
     renderer.render(scene, camera);
-    if (budget && nowMs > budgetWarmUntil) budget.sample(performance.now() - r0, nowMs, renderer, { fighters: fighters.length, fxPeak: fx.counts.peak, bufferDelayMs: +buffer.delayMs.toFixed(1), jitterMs: +buffer.jitter.toFixed(1), late: buffer.late, lever: qs.get('lever') || 'none', fpsCap: fps, recordingSeed: replay ? replay.record.seed : null, crowdSeed: replay ? replay.crowd : null, effectShapes: stress ? 150 : fx.liveShapes, primitiveTypes: replay ? replay.record.primitiveTypes : null });
+    if (budget && nowMs > budgetWarmUntil) teleMin = Math.min(teleMin, fx.tele.size), teleMax = Math.max(teleMax, fx.tele.size);
+    if (budget && nowMs > budgetWarmUntil) budget.sample(performance.now() - r0, nowMs, renderer, { teleLook: fx.teleLook, teleStress: replay ? replay.teleN : 0, telegraphsLive: { min: teleMin, max: teleMax }, fighters: fighters.length, fxPeak: fx.counts.peak, bufferDelayMs: +buffer.delayMs.toFixed(1), jitterMs: +buffer.jitter.toFixed(1), late: buffer.late, lever: qs.get('lever') || 'none', fpsCap: fps, recordingSeed: replay ? replay.record.seed : null, crowdSeed: replay ? replay.crowd : null, effectShapes: stress ? 150 : fx.liveShapes, primitiveTypes: replay ? replay.record.primitiveTypes : null });
     lastLead = lead;
     if (inset.followId !== null && !pos.get(inset.followId)) { inset.clear(); hud.followed = null; }
     inset.render(inset.followId !== null ? pos.get(inset.followId) : null); // the follow view, drawn after the main pass
+    hud.speakers = social.speaking(nowMs);
     hud.frame({ pos, kos, lead, rt, nowMs, snap: b });
+    social.frame(lastPos, hud, nowMs);
+    chainHold.layout();
 
     if (diagEl && document.body.classList.contains('diag')) {
       diagEl.textContent = 'tick ' + rt.toFixed(1) + ' | delay ' + buffer.delayMs.toFixed(0) + ' ms | jitter ' + buffer.jitter.toFixed(1) + ' | late ' + buffer.late + ' | frames ' + net.frames + ' | bad ' + net.bad + '\n' +
@@ -174,7 +200,7 @@ async function main() {
     }
   }, requestAnimationFrame, console.error, () => setStatus('Render error', 'warn'));
   requestAnimationFrame(frame);
-  window.ARENA = { details, instances, itemRenderer, replay, budget, stress, stage, actors, fx, buffer, net, hud, kos, sound, board, inset, slowmo, THREE, LOOK3, KITS, ITEMS, pick: (nx, ny) => pickMilli(nx, ny, camera) };
+  window.ARENA = { social, chainHold, details, instances, itemRenderer, replay, budget, stress, stage, actors, fx, buffer, net, hud, kos, sound, board, inset, slowmo, THREE, LOOK3, KITS, ITEMS, pick: (nx, ny) => pickMilli(nx, ny, camera) };
 }
 
 main().catch((e) => { console.error(e); setStatus('Could not start: ' + (e && e.message || e), 'warn'); });

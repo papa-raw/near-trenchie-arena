@@ -34,6 +34,7 @@ sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import check_sheets as ks   # noqa: E402  (the kits.json checker and the roster constants)
+import emoji as emoji_rules  # noqa: E402  (the emoji set's rules, shared with the house feed and the creator)
 
 SCHEMA = os.path.join(HERE, "persona.schema.json")
 KITS = os.path.join(HERE, "kits.json")
@@ -145,7 +146,8 @@ def render(g):
     Cosmetics and the keyed reactions are not rendered; the reactions are fallback output."""
     parts = [f"{g.get('temperament', '')}", " ".join(g.get("tics", [])), "never: " + "; ".join(g.get("never_hooks", [])),
              "not " + ", ".join(g.get("banned_registers", [])), (g.get("belief") or {}).get("line", ""),
-             "; ".join(f"{r.get('kind')}: {r.get('name')}" for r in g.get("rivalries", [])), " | ".join(g.get("voice", []))]
+             "; ".join(f"{r.get('kind')}: {r.get('name')}" for r in g.get("rivalries", [])), " | ".join(g.get("voice", [])),
+             ("emoji: " + " ".join(emoji_rules.resolve(g)[0])) if g.get("temperament") else ""]
     return "\n".join(p for p in parts if p.strip())
 
 
@@ -218,6 +220,10 @@ def check_game(doc, names):
     for stem in STYLE_STEMS:
         if g["temperament"].lower().startswith(stem):
             out.append(f"temperament {g['temperament']!r} reuses the fight-style stem {stem!r}")
+    if "emoji" in g:
+        reason = emoji_rules.check_set(g["emoji"])
+        if reason:
+            out.append(f"game.emoji: {reason}")
     if g.get("preset") not in (None, g["fight_style"]):
         out.append("preset must equal fight_style at version 2")
     lines = list(g["voice"]) + list(g["reactions"].values()) + list(g.get("tics", [])) + list(g.get("never_hooks", [])) \
@@ -261,7 +267,7 @@ def check_house(doc, slug, kits):
     for k in ("ko_by_rival", "lost_legendary", "missed_prediction", "hit_prediction"):
         if k not in g["reactions"]:
             out.append(f"missing keyed reaction {k}")
-    for k in ("tics", "banned_registers", "belief", "never_hooks"):
+    for k in ("tics", "banned_registers", "belief", "never_hooks", "emoji"):
         if not g.get(k):
             out.append(f"a house sheet needs {k}")
     want = []

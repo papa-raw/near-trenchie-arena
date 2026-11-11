@@ -14,6 +14,7 @@ th{background:#eee} .ok{color:#0a6b2d} .bad{color:#a11}
 <script src="../providers.js"></script>
 <script src="../vendor/near-api-js/near-api-js-7.3.1.min.js"></script>
 <script src="../vendor/near-api-js/near-connect-0.12.0.min.js"></script>
+<script src="../chain.js"></script>
 <script src="../wallet.js"></script>
 <script>
 (function () {
@@ -65,11 +66,11 @@ th{background:#eee} .ok{color:#0a6b2d} .bad{color:#a11}
   }
 
   async function run() {
-    await door('NEAR AI Cloud: nearai.test', function (f) { return P.nearai.test('sk-fake-r3-nearai', { fetch: f }); });
-    await door('Claude Console key: claude.test (with opt-in header)', function (f) { return P.claude.test('sk-' + 'ant-fake-r3-claude', { fetch: f }); });
-    await door('Claude Console key: claude.test WITHOUT the opt-in header', function (f) { return P.claude.test('sk-' + 'ant-fake-r3-claude', { fetch: f, optIn: false }); });
-    await door('OpenRouter: openrouter.test', function (f) { return P.openrouter.test('sk-or-v1-fake-r3-openrouter', { fetch: f }); });
-    await door('OpenRouter: openrouter.finish (fake code)', function (f) { return P.openrouter.finish({ code: 'fake-code-r3', verifier: 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk' }, { fetch: f }); });
+    await door('NEAR AI Cloud: nearai.test', function (f) { return P.nearai.test('sk-test-key-nearai', { fetch: f }); });
+    await door('Claude Console key: claude.test (with opt-in header)', function (f) { return P.claude.test('sk-' + 'ant-test-key-claude', { fetch: f }); });
+    await door('Claude Console key: claude.test WITHOUT the opt-in header', function (f) { return P.claude.test('sk-' + 'ant-test-key-claude', { fetch: f, optIn: false }); });
+    await door('OpenRouter: openrouter.test', function (f) { return P.openrouter.test('sk-or-v1-test-key-openrouter', { fetch: f }); });
+    await door('OpenRouter: openrouter.finish (fake code)', function (f) { return P.openrouter.finish({ code: 'fake-code-test', verifier: 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk' }, { fetch: f }); });
 
     var b = await P.openrouter.begin({ callbackUrl: location.origin + '/spike/doors.html', state: 'st-r3' });
     var chal = new URL(b.url).searchParams.get('code_challenge');

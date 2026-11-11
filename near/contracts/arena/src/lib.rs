@@ -1,4 +1,4 @@
-//! `arena`: operator-only fight records (F5, C2, C5, C6, F84; prd §4.3).
+//! `arena`: operator-only fight records.
 //!
 //! - No user methods (C2): joins and intents are signed server inputs. Every
 //!   write is the arena operator's; the owner may only rotate the operator.
@@ -37,6 +37,7 @@ enum Key {
     Queue,
     Commits,
     Secrets,
+    Ids,
 }
 
 /// One 60 s segment's hashes, as the room's sealed result carries them.
@@ -45,7 +46,7 @@ enum Key {
 pub struct Segment {
     pub segment_id: String,
     /// The committed seed this segment ran on: `commit_id`'s seed `seed_index`.
-    /// Seeds are consumed one each, strictly in commit order (critic M2).
+    /// Seeds are consumed one each, strictly in commit order.
     pub commit_id: U64,
     pub seed_index: u16,
     pub seed_hash: String,
@@ -61,6 +62,9 @@ pub struct Segment {
 pub enum Status {
     Pending,
     Applied,
+    /// the owner's key gave up on a pending batch that can never apply; its seq is
+    /// reused by the next batch, and its seeds stay used.
+    Abandoned,
 }
 
 #[near(serializers = [borsh, json])]
@@ -75,6 +79,8 @@ pub struct BatchRecord {
     pub status: Status,
     pub hops: u32,
     pub posted_at: U64,
+    /// Its place in the order trenchie_nft applies batches in.
+    pub seq: U64,
 }
 
 #[near(serializers = [borsh, json])]
@@ -99,6 +105,9 @@ pub struct ArenaState {
     pub commits: U64,
     /// The next seed a posted segment must use.
     pub next_seed: SeedRef,
+    /// The seq the next new batch gets, and the batch still pending, if any.
+    pub next_seq: U64,
+    pub pending: Option<String>,
 }
 
 #[near(serializers = [json])]
@@ -121,7 +130,7 @@ pub struct SeedView {
 
 #[ext_contract(ext_nft)]
 pub trait TrenchieNftRows {
-    fn apply_rows(&mut self, batch_id: String, rows: Vec<Row>);
+    fn apply_rows(&mut self, batch_id: String, seq: U64, rows: Vec<Row>);
 }
 
 #[near(contract_state)]
@@ -138,9 +147,15 @@ pub struct Arena {
     manifest_records: u64,
     commits: LookupMap<u64, Commit>,
     next_commit: u64,
-    secrets: LookupSet<String>,
+    /// 8 bytes of each committed secret's sha256 (a repeated secret is refused).
+    secrets: LookupSet<[u8; 8]>,
+    /// Every batch id ever posted (8 bytes of its sha256), never pruned, so a
+    /// pruned record's id can't be posted again with new content.
+    ids: LookupSet<[u8; 8]>,
     seed_commit: u64,
     seed_index: u16,
+    next_seq: u64,
+    pending: Option<String>,
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -181,9 +196,14 @@ pub fn seed_u64(seed: &[u8; 32]) -> u64 {
 }
 
 /// The sealed record's seed_hash: sha256 of the canonical JSON string of the
-/// u64 seed, quotes included (agreed with the room, board 02:35).
+/// u64 seed, quotes included (agreed with the room).
 pub fn seed_hash(value: u64) -> String {
     hex(&env::sha256_array(format!("\"{value}\"").as_bytes()))
+}
+
+/// The 8-byte key a batch id is remembered by: the first 8 bytes of its sha256.
+fn id_key(batch_id: &str) -> [u8; 8] {
+    env::sha256_array(batch_id.as_bytes())[..8].try_into().unwrap()
 }
 
 fn emit(event: &str, data: serde_json::Value) {
@@ -212,8 +232,11 @@ impl Arena {
             commits: LookupMap::new(Key::Commits),
             next_commit: 0,
             secrets: LookupSet::new(Key::Secrets),
+            ids: LookupSet::new(Key::Ids),
             seed_commit: 0,
             seed_index: 0,
+            next_seq: 1,
+            pending: None,
         }
     }
 
@@ -223,7 +246,7 @@ impl Arena {
         self.assert_operator();
         require!(count >= 1 && count <= MAX_SEEDS_PER_COMMIT, "count must be 1 to 1440");
         let secret_bytes = from_hex32(&secret);
-        require!(self.secrets.insert(secret.clone()), "secret already committed");
+        require!(self.secrets.insert(id_key(&secret)), "secret already committed");
         let random = env::random_seed_array();
         let seeds: Vec<String> = (0..count as u32).map(|i| hex(&derive_seed(&secret_bytes, &random, i))).collect();
         let commit = Commit {
@@ -269,11 +292,21 @@ impl Arena {
                     emit("post_batch", json!({"batch_id": batch_id, "already_applied": true}));
                     return None;
                 }
+                require!(existing.status == Status::Pending, "batch was abandoned: post its rows under a new id");
                 existing
             }
             None => {
+                // One batch in flight at a time: rows are absolute, so a newer
+                // batch must never land before an older one.
+                if let Some(p) = &self.pending {
+                    env::panic_str(&format!("batch {p} is pending: retry it until it applies, then post the next"));
+                }
+                require!(
+                    self.ids.insert(id_key(&batch_id)),
+                    "batch id was used before (its record was pruned): post under a new id"
+                );
                 // Bind every segment to the next committed seed, one use each,
-                // in commit order, so the operator can't choose among seeds (M2).
+                // in commit order, so the operator can't choose among seeds.
                 for s in &segments {
                     require!(
                         s.commit_id.0 == self.seed_commit && s.seed_index == self.seed_index,
@@ -287,6 +320,11 @@ impl Arena {
                     let value = seed_u64(&self.seed_bytes(self.seed_commit, self.seed_index));
                     require!(s.seed_hash == seed_hash(value), "seed_hash is not the committed seed's");
                     if self.seed_index + 1 == count {
+                        // Every seed of this commit is used: drop the record.
+                        // Its secret and random seed stay in its commit_seeds
+                        // event, on archival.
+                        self.commits.remove(&self.seed_commit);
+                        emit("commit_used", json!({"commit_id": U64(self.seed_commit)}));
                         self.seed_commit += 1;
                         self.seed_index = 0;
                     } else {
@@ -303,7 +341,10 @@ impl Arena {
                     status: Status::Pending,
                     hops: 0,
                     posted_at: U64(env::block_timestamp()),
+                    seq: U64(self.next_seq),
                 };
+                self.next_seq += 1;
+                self.pending = Some(batch_id.clone());
                 self.remember(&batch_id, manifest);
                 record
             }
@@ -311,15 +352,16 @@ impl Arena {
         record.hops += 1;
         emit(
             "post_batch",
-            json!({"batch_id": batch_id, "fight_hash": record.fight_hash, "segments": record.segments,
+            json!({"batch_id": batch_id, "seq": record.seq, "fight_hash": record.fight_hash, "segments": record.segments,
                    "kos": record.kos, "rows": record.rows, "manifest": manifest, "hop": record.hops}),
         );
+        let seq = record.seq;
         self.batches.insert(batch_id.clone(), record);
         Some(
             ext_nft::ext(self.nft.clone())
                 .with_static_gas(Gas::from_tgas(0))
                 .with_unused_gas_weight(1)
-                .apply_rows(batch_id.clone(), rows)
+                .apply_rows(batch_id.clone(), seq, rows)
                 .then(
                     Self::ext(env::current_account_id())
                         .with_static_gas(GAS_FOR_ON_APPLY)
@@ -334,9 +376,12 @@ impl Arena {
     pub fn on_apply(&mut self, batch_id: String, #[callback_result] result: Result<serde_json::Value, PromiseError>) -> bool {
         let applied = result.is_ok();
         if let Some(mut record) = self.batches.get(&batch_id).cloned() {
-            if applied {
+            if applied && record.status != Status::Applied {
                 record.status = Status::Applied;
                 self.batches.insert(batch_id.clone(), record);
+                if self.pending.as_deref() == Some(batch_id.as_str()) {
+                    self.pending = None;
+                }
             }
         }
         emit(
@@ -344,6 +389,30 @@ impl Arena {
             json!({"batch_id": batch_id, "status": if applied { "applied" } else { "pending" }}),
         );
         applied
+    }
+
+    /// the owner's key: give up on the pending batch when it can never apply (its
+    /// content is refused by trenchie_nft). Its seq is skipped (trenchie_nft
+    /// only needs each seq above the last), its seeds stay used, and its rows
+    /// go again, as they stand then, in the next batch. If its hop lands after
+    /// all, `on_apply` records that, and order still holds.
+    #[payable]
+    pub fn abandon_pending(&mut self, batch_id: String) {
+        require!(env::attached_deposit().as_yoctonear() == ONE_YOCTO, "Requires attached deposit of exactly 1 yoctoNEAR");
+        require!(env::predecessor_account_id() == self.owner, "owner only");
+        require!(self.pending.as_deref() == Some(batch_id.as_str()), "that batch is not the pending one");
+        let mut record = self.batches.get(&batch_id).cloned().unwrap_or_else(|| env::panic_str("no such batch"));
+        record.status = Status::Abandoned;
+        self.batches.insert(batch_id.clone(), record);
+        self.pending = None;
+        emit("abandon", json!({"batch_id": batch_id}));
+    }
+
+    /// Upgrade entry; see trenchie_nft's `migrate`.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate() -> Self {
+        env::state_read().unwrap_or_else(|| env::panic_str("no state to migrate"))
     }
 
     #[payable]
@@ -357,6 +426,10 @@ impl Arena {
 
     pub fn get_batch(&self, batch_id: String) -> Option<BatchRecord> {
         self.batches.get(&batch_id).cloned()
+    }
+
+    pub fn batch_id_used(&self, batch_id: String) -> bool {
+        self.ids.contains(&id_key(&batch_id))
     }
 
     pub fn get_commit(&self, commit_id: U64) -> Option<Commit> {
@@ -383,13 +456,17 @@ impl Arena {
             manifest_records: U64(self.manifest_records),
             commits: U64(self.next_commit),
             next_seed: SeedRef { commit_id: U64(self.seed_commit), seed_index: self.seed_index },
+            next_seq: U64(self.next_seq),
+            pending: self.pending.clone(),
         }
     }
 }
 
 impl Arena {
     fn seed_bytes(&self, commit_id: u64, index: u16) -> [u8; 32] {
-        let commit = self.commits.get(&commit_id).unwrap_or_else(|| env::panic_str("no such commit"));
+        let commit = self.commits.get(&commit_id).unwrap_or_else(|| {
+            env::panic_str("no such commit, or its seeds are all used: read its commit_seeds event on archival")
+        });
         require!(index < commit.count, "index past the commit's count");
         derive_seed(&from_hex32(&commit.secret), &from_hex32(&commit.random_seed), index as u32)
     }

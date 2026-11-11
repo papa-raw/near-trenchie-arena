@@ -41,7 +41,8 @@ class RoomHost:
                  admission_open: Callable[[], bool] | None = None,
                  records: PublicRecords | None = None, house_tokens: Iterable[str] = (),
                  policy: GuestPolicy | None = None, owner_state: dict | None = None,
-                 owner_member_name: Callable[[dict], str] | None = None) -> None:
+                 owner_member_name: Callable[[dict], str] | None = None,
+                 battle_mode: bool = False, battle_speech: Callable[[dict, dict], dict] | None = None) -> None:
         validate("MainnetContext", context)
         if slots.room_id != context["room_id"] or slots.capacity != 16:
             raise BoundaryError("context_mismatch")
@@ -61,6 +62,9 @@ class RoomHost:
         self._policy = policy
         self._owner_state = deepcopy(owner_state)
         self._owner_member_name = owner_member_name
+        if battle_mode and battle_speech is None:
+            raise ValueError('battle mode needs a shared guarded speech callback')
+        self._battle_mode, self._battle_speech = battle_mode, battle_speech
         self.identity: IdentityAuthority | None = None
         self.service: RoomService | None = None
 
@@ -89,11 +93,19 @@ class RoomHost:
         identity = IdentityAuthority(self._context, bridge, now_ms=self.now_ms,
             sign=self._sign, verify_session=self._verify_session, key_id=self.key_id,
             proof_methods=self._proof_methods, ready=self.is_ready, consume_nonce=self._consume_nonce)
-        service = RoomService(self.slots, bridge, identity, now_ms=self.now_ms,
+        service_type, battle_options = RoomService, {}
+        if self._battle_mode:
+            try:
+                from .battle_room import BattleRoomService
+            except ImportError:
+                from battle_room import BattleRoomService
+            service_type = BattleRoomService
+            battle_options = dict(battle_sign=self._sign, battle_key_id=self.key_id, battle_speech=self._battle_speech)
+        service = service_type(self.slots, bridge, identity, now_ms=self.now_ms,
             ready=self.is_ready, admission_open=self.admission_ready,
             security_event=self._security_event, records=self._records,
             house_tokens=self._house_tokens, policy=self._policy,
-            owner_state=self._owner_state, owner_member_name=self._owner_member_name)
+            owner_state=self._owner_state, owner_member_name=self._owner_member_name, **battle_options)
         self.identity, self.service = identity, service
         return service
 

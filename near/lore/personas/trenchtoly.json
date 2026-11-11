@@ -120,6 +120,14 @@
     "tag": "Trenchtoly",
     "loadout": "commons",
     "temperament": "Restless",
+    "emoji": [
+      "⚡",
+      "🏎️",
+      "⏱️",
+      "💨",
+      "🔁",
+      "😤"
+    ],
     "voice": [
       "Finalized before you swung.",
       "Lag is a choice.",

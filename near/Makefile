@@ -1,4 +1,7 @@
 # make test: every check that needs nothing outside this repo (runs from a clean clone).
+# GNU make 4 prints "Entering/Leaving directory" for -C and for sub-makes; README shows the output without them,
+# so README runs (cd near && make …) and every recursive call below passes --no-print-directory.
+MAKEFLAGS += --no-print-directory
 PY ?= python3
 DEMO_DIR ?= .demo
 
@@ -12,7 +15,7 @@ desk:
 test-desk:
 	$(PY) -B web/test_desk.py ReviewerDesk.test_four_actions_follow_real_local_agent_forecast_and_checked_replay
 
-.PHONY: test test-arena test-room test-members test-arrival
+.PHONY: test test-arena test-room test-members test-arrival test-chain
 test:
 	$(PY) -I tools/check_deps.py
 	$(PY) -I tools/check_snap.py
@@ -22,10 +25,11 @@ test:
 	$(PY) -I lore/check_sheets.py --selftest
 	$(PY) -I lore/check_personas.py
 	$(PY) -I lore/check_personas.py --selftest
-	$(MAKE) test-arena
-	$(MAKE) test-room
-	$(MAKE) test-members
-	$(MAKE) test-arrival
+	$(MAKE) --no-print-directory test-arena
+	$(MAKE) --no-print-directory test-room
+	$(MAKE) --no-print-directory test-members
+	$(MAKE) --no-print-directory test-arrival
+	$(MAKE) --no-print-directory test-chain
 	@echo "old-names: private mode only (needs the TRENCHIE_DENY_FILE env var; the retired-name list is not in this repo)"
 
 test-arena:
@@ -44,12 +48,20 @@ test-arena:
 	$(PY) -B arena/test_returns.py
 	$(PY) -B arena/test_balance.py
 
+test-chain:
+	$(PY) -I chain/test_chain.py
+
+# Read every pinned settled batch back from archival RPC (no key; network only).
+.PHONY: verify-batches
+verify-batches:
+	$(PY) -I chain/archival.py
+
 test-room:
 	cd .. && $(PY) -B -m unittest room.test_room room.test_identity room.test_policy room.test_recovery
 
 test-members:
 	$(PY) -B members/test_members.py MemberBoards.test_approved_b_flows_use_real_room_and_keep_recorded_answers
-	$(MAKE) test-members-source
+	$(MAKE) --no-print-directory test-members-source
 
 # Focused cases for fault exits, applied timing and current-render captures.
 .PHONY: test-members-repair

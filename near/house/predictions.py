@@ -25,8 +25,9 @@ def digest(value):
 
 
 class PredictionLog:
-    def __init__(self, directory):
+    def __init__(self, directory, on_line=None):
         self.dir = Path(directory)
+        self.on_line = on_line                                   # called once per public line, after it is written
         self.path = self.dir / "predictions.jsonl"
         self.locks = {}
         for row in self.rows():                                  # a restart keeps every sealed life closed
@@ -72,6 +73,8 @@ class PredictionLog:
             f.flush()
             os.fsync(f.fileno())
         entry["resolved"] = True
+        if self.on_line is not None:
+            self.on_line({k: row[k] for k in FIELDS})
         return row
 
     def log_hash(self):

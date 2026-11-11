@@ -21,13 +21,16 @@
   .tag.bench { opacity: .55; }
   .atag { position: absolute; left: 0; top: 0; will-change: transform; white-space: nowrap; font: 600 11px/1.15 "Fredoka", ui-rounded, system-ui, sans-serif; letter-spacing: .01em; color: var(--ink); background: rgba(255,248,234,.92); border-radius: 5px; padding: 1px 5px 2px; box-shadow: 0 0 0 1px rgba(59,47,37,.55); transition: opacity .15s; }
   .atag.lead { background: var(--mint); } .atag.lead::before { content: "\2605 "; color: #8A6A12; }
-  .atag.bench { opacity: .6; } .atag.far { opacity: .3; } .atag.narrow { font-size: 10px; padding: 0 4px 1px; }
+  .atag.bench { opacity: .6; } .atag.tag-hidden { opacity: 0; pointer-events: none; } .atag.narrow { font-size: 10px; padding: 0 4px 1px; }
   .inset { position: fixed; right: 18px; bottom: 86px; width: 280px; height: 210px; z-index: 4; border: 3px solid var(--ink); border-radius: 12px; box-shadow: 0 4px 0 rgba(59,47,37,.3); pointer-events: none; }
   .inset .cap { position: absolute; left: 8px; top: -13px; font: 600 12px/1.2 "Fredoka", ui-rounded, system-ui, sans-serif; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); border-radius: 6px; padding: 0 7px; }
   .inset .x { position: absolute; right: -2px; top: -14px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--ink); background: var(--paper); color: var(--ink); font: 700 18px/1 system-ui, sans-serif; cursor: pointer; pointer-events: auto; padding: 0; }
   .inset .x:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; }
   .atag .dev { margin-left: 5px; padding: 0 4px; border-radius: 3px; background: var(--ink); color: var(--paper); font-size: 9px; font-weight: 700; letter-spacing: .06em; vertical-align: 1px; }
   .atag.collabel { z-index: 3; pointer-events: none; opacity: .92; }
+  .atag .focus-mark { display: block; font-weight: 700; color: #20553f; }
+  .atag .name-notice { display: block; max-width: 220px; white-space: normal; font-size: 10px; line-height: 1.2; }
+  .atag.focus-target { box-shadow: 0 0 0 2px #3E8E73; }
   .atag .style-word, .atag .quirk-line { display: none; }
   .atag:hover .style-word, .atag:focus .style-word, .atag.bounty .style-word { display: inline; }
   .atag .quirk-line { position:absolute;left:0;top:100%;width:230px;max-width:calc(100vw - 16px);box-sizing:border-box;white-space:normal;overflow-wrap:anywhere;padding:7px 9px;background:#FFF8EA;color:#3B2F25;border:1px solid #3B2F25;border-radius:5px;box-shadow:0 2px 5px #3B2F2540;font-weight:500;line-height:1.4; }
@@ -38,16 +41,238 @@
   @media (max-width: 700px) { .inset { width: 150px; height: 150px; right: 10px; bottom: 150px; } }
   #status { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); background: var(--paper); border: 2px solid var(--ink); border-radius: 12px; padding: 3px 12px; font-size: 13px; z-index: 5; pointer-events: none; }
   #status.live { display: none; }
+  #chain-hold { position:fixed;left:0;top:0;transform:translate(-9999px,0);z-index:5;max-width:calc(100vw - 16px);box-sizing:border-box;padding:4px 8px;color:var(--ink);background:var(--paper);border:1px solid var(--ink);border-radius:5px;font:700 14px/1.3 "Space Mono",monospace;overflow-wrap:anywhere;pointer-events:none; }
+  @media(max-width:599px) { #chain-hold { font-size:11px; } }
   #status.warn { background: #FFD98F; }
   #diag { position: fixed; right: 8px; top: 8px; font: 11px/1.3 ui-monospace, monospace; background: rgba(255,248,234,.85); padding: 3px 6px; border-radius: 6px; z-index: 5; display: none; }
   body.diag #diag { display: block; }
+  /* The snap-in call to action (W18): always on screen in watch mode. The HUD owns three corners (board top-left, feed
+     bottom-left, buttons bottom-right) and a follow view; the hook below puts the button in the first free spot.
+     Satrenchi, the welcome guide, points his spear at it. */
+  #snapin-cta { position: fixed; left: 0; top: 0; transform: translate(var(--cta-x, -9999px), var(--cta-y, 0)); z-index: 6; display: flex; align-items: flex-end; gap: 4px; color: var(--ink); text-decoration: none; -webkit-tap-highlight-color: transparent; }
+  #snapin-cta img { width: 70px; height: auto; display: block; margin-bottom: -2px; filter: drop-shadow(0 3px 2px rgba(59,47,37,.25)); }
+  #snapin-cta .say { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
+  #snapin-cta .cue { position: relative; background: var(--paper); border: 2px solid var(--ink); border-radius: 12px; padding: 4px 10px 5px; font: 500 13px/1.25 "Fredoka", ui-rounded, system-ui, sans-serif; box-shadow: 0 2px 0 rgba(59,47,37,.25); white-space: nowrap; }
+  #snapin-cta .cue b { font-weight: 700; margin-right: 4px; }
+  /* the cue's tail: an inline SVG drawn by drawTail() from the bubble's bottom-left corner toward Satrenchi's face. It sits in
+     a wrapper beside the bubble, not inside it, so the bubble's own box (and its text's scroll box) never grows with the tail */
+  #snapin-cta .cue-wrap { position: relative; display: block; }
+  #snapin-cta .cue-wrap > .cue { display: block; }   /* as the flex item it was before: a block box */
+  #snapin-cta .cue-wrap > .tail { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 1; }
+  #snapin-cta .go { display: inline-block; background: var(--gold); border: 2px solid var(--ink); border-radius: 10px; padding: 7px 16px 8px; font: 400 21px/1 "Lilita One", "Fredoka", ui-rounded, system-ui, sans-serif; letter-spacing: .01em; box-shadow: 0 3px 0 var(--ink); transition: transform .08s, box-shadow .08s; white-space: nowrap; }
+  #snapin-cta:hover .go { transform: translateY(-1px); box-shadow: 0 4px 0 var(--ink); }
+  #snapin-cta:active .go { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+  #snapin-cta:focus { outline: none; }
+  #snapin-cta:focus-visible .go { outline: 3px solid #6FA3D6; outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { #snapin-cta .go { transition: none; } }
+  /* the owner's compact order box, above the call to action while the player's own fighter is in (hidden where it does not fit) */
+  #order-mini { position: fixed; left: 0; top: 0; z-index: 6; width: 300px; max-width: calc(100vw - 20px); background: var(--paper); border: 2px solid var(--ink); border-radius: 12px; padding: 8px 10px; box-shadow: 0 3px 0 rgba(59,47,37,.25); font: 500 12px/1.3 "Fredoka", ui-rounded, system-ui, sans-serif; }
+  #order-mini[hidden] { display: none; }
+  #order-mini .chat { display: grid; gap: 4px; margin: 0; }
+  #order-mini .field { font-weight: 600; }
+  #order-mini textarea { width: 100%; height: 38px; resize: none; font: 13px/1.35 "Fredoka", ui-rounded, system-ui, sans-serif; color: var(--ink); background: #F3E8D2; border: 1px solid #A68A62; border-radius: 6px; padding: 6px 8px; }
+  #order-mini .chat-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #order-mini { max-height: 168px; overflow: hidden; }   /* capped: the box never grows over the fight */
+  #order-mini .chat-send { font: 400 15px/1 "Lilita One", "Fredoka", sans-serif; background: var(--paper); border: 2px solid var(--ink); border-radius: 8px; padding: 6px 12px; min-height: 44px; cursor: pointer; }
+  #order-mini .chat-reply.one-line, #order-mini .chat-receipt.folded { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #order-mini .chat-receipt:not(.folded) { max-height: 64px; overflow-y: auto; }
+  #order-mini .chat-more { justify-self: start; font: 600 12px/1 "Fredoka", sans-serif; background: none; border: 0; padding: 4px 0; min-height: 28px; text-decoration: underline; cursor: pointer; color: var(--ink); }
+  #order-mini .chat-more:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; }
+  #order-mini .chat-door .eyebrow { font: 600 12px/1.2 "Fredoka", sans-serif; }
+  #order-mini .chat-door p { margin: 0; font: 13px/1.35 "Fredoka", ui-rounded, system-ui, sans-serif; }
+  #order-mini .chat-door a { padding: 14px 0; color: #1f5e4a; font-weight: 600; text-decoration: underline; }
+  #order-mini .chat-door a:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; }
+  #order-mini .chat-send:disabled { opacity: .55; cursor: default; }
+  #order-mini textarea:focus-visible, #order-mini .chat-send:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; }
+  #order-mini .chat-reply { font: 400 15px/1.25 "Lilita One", "Fredoka", sans-serif; }
+  #order-mini .chat-receipt, #order-mini .chat-fixes { font: 11px/1.4 ui-monospace, "Space Mono", monospace; color: #5B5145; overflow-wrap: anywhere; margin: 0; }
+  #order-mini .chat-receipt.refused, #order-mini .chat-fixes { color: #7A2E22; }
+  #order-mini .chat-receipt.clipped { color: #7A5A12; }
+  #order-mini .chat-fixes { padding-left: 16px; }
+  #order-mini .sub { color: #5B5145; }
+  @media (max-width: 599px) {
+    #snapin-cta img { width: 50px; }
+    #snapin-cta .say { gap: 6px; }
+    #snapin-cta .cue { font-size: 12px; padding: 3px 8px 4px; }
+    #snapin-cta .go { font-size: 18px; padding: 11px 14px 11px; }  /* 44 px tall: a thumb-sized target */
+  }
 </style>
 </head>
 <body>
 <canvas id="stage" aria-label="Live arena"></canvas>
 <div id="world"></div>
 <div id="status" class="warn">Loading</div>
+<div id="chain-hold" hidden></div>
 <pre id="diag"></pre>
+<a id="snapin-cta" href="./snapin/index.html?step=wallet" aria-describedby="snapin-cue">
+  <img src="./snapin/img/satrenchi.png" alt="" width="144" height="149">
+  <span class="say"><span class="cue-wrap"><span class="cue" id="snapin-cue"><b>Satrenchi:</b>Washed ashore? I’ll walk you in.</span></span><span class="go">Snap in your trenchie</span></span>
+</a>
+<script>
+  // The guide talks to the same arena this page watches: carry its ?ws= along, and say where "Keep watching" returns.
+  (function () {
+    var a = document.getElementById('snapin-cta'), q = new URLSearchParams(location.search), u = new URL(a.getAttribute('href'), location.href);
+    if (q.get('ws')) u.searchParams.set('ws', q.get('ws'));
+    u.searchParams.set('from', 'arena');
+    a.href = u.pathname + u.search;
+    // Placement: the first spot in this list that touches none of the HUD's fixed pieces. Re-checked twice a second,
+    // because the feed grows with each KO and the follow view comes and goes.
+    var GAP = 10, last = '', forceSpot = /^[0-4]$/.test(q.get('ctaspot') || '') ? +q.get('ctaspot') : null;
+    function rects() {
+      var host = document.getElementById('world'), out = [];
+      var add = function (el) { var r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden') out.push(r); };
+      if (host) host.querySelectorAll('[data-panel]:not([data-kind="world"]), .collabel').forEach(add);
+      // the feed grows with each KO, up to three lines (two on a phone): reserve its full size from the start, so the button never jumps
+      var feed = host && host.querySelector('[data-panel="feed"]');
+      if (feed) { var f = feed.getBoundingClientRect(), nw = innerWidth < 600; out.push({ left: f.left, right: Math.max(f.right, f.left + (nw ? 300 : 440)), top: Math.min(f.top, f.bottom - (nw ? 52 : 100)), bottom: f.bottom }); }
+      // the speech ticker above it (Battle mode) grows to three lines (two on a phone), each wrapping: reserve its full size too
+      var say = sayReserve(); if (say) out.push(say);
+      var layers = host ? [].filter.call(host.children, function (c) { return c.classList.contains('ha-layer'); }) : [];
+      if (layers.length) [].forEach.call(layers[layers.length - 1].children, add);   // the players' leaderboard cards
+      document.querySelectorAll('.inset:not([hidden]), #status:not(.live), #chain-hold:not([hidden])').forEach(add);
+      return out;
+    }
+    // The speech ticker's whole block, from geometry that does not change while the page runs: its bottom stands on the
+    // frozen feed's full reserved top (social.mjs tickerBottom), its width is its max width, its height its full
+    // three lines (two on a phone, wrapped). So the button picks its final spot at load and never hops.
+    function sayReserve() {
+      var s = document.querySelector('.arena-say-feed');
+      if (!s || !s.style.bottom || !document.querySelector('#world [data-panel="feed"]')) return null;   // until the HUD mounts, as the frozen feed
+      var nw = innerWidth < 600, left = s.getBoundingClientRect().left, bottom = innerHeight - parseFloat(s.style.bottom);
+      var width = parseFloat(s.style.maxWidth) || s.getBoundingClientRect().width;
+      return { left: left, right: left + width, top: bottom - (nw ? 130 : 120), bottom: bottom };
+    }
+    // The cue's tail. The bubble is a pill, so the tail leaves its rounded bottom-left corner: the border opens along the
+    // corner's arc and a short wedge points at Satrenchi's face. It is drawn from both elements' boxes, so it holds at every
+    // placement and size. FACE: satrenchi.png's hood opening spans x 17-54%, y 30-60% of the sprite (measured): aim at its
+    // right edge, half-way down, and stop short of it.
+    var FACE = { x: 0.542, y: 0.452 }, NS = 'http://www.w3.org/2000/svg', ARC = [112, 166];   // the opening, in degrees (90 = bottom, 180 = left)
+    function drawTail() {
+      var cue = a.querySelector('.cue'), img = a.querySelector('img'); if (!cue || !img) return;
+      var c = cue.getBoundingClientRect(), im = img.getBoundingClientRect(); if (!c.width || !im.width) return;
+      var cs = getComputedStyle(cue), bw = parseFloat(cs.borderBottomWidth) || 2, H = c.height, R = Math.min(parseFloat(cs.borderBottomLeftRadius) || 12, H / 2);
+      var cx = R, cy = H - R, at = function (deg, rad) { var t = deg * Math.PI / 180; return [cx + rad * Math.cos(t), cy + rad * Math.sin(t)]; };
+      var mid = at((ARC[0] + ARC[1]) / 2, R - bw / 2);
+      var fx = im.left + im.width * FACE.x - c.left, fy = im.top + im.height * FACE.y - c.top;   // the face, in the bubble's own coordinates
+      var dx = fx - mid[0], dy = fy - mid[1], d = Math.hypot(dx, dy) || 1, len = Math.max(9, Math.min(d - 4, 15));
+      var tip = [mid[0] + dx / d * len, mid[1] + dy / d * len];
+      var wrap = cue.parentNode, svg = wrap.querySelector('svg.tail');   // beside the bubble in .cue-wrap, never inside it
+      if (!svg) { svg = document.createElementNS(NS, 'svg'); svg.setAttribute('class', 'tail'); svg.setAttribute('aria-hidden', 'true');
+        var f = document.createElementNS(NS, 'path'), s2 = document.createElementNS(NS, 'path'); f.setAttribute('class', 'fill'); s2.setAttribute('class', 'edge'); svg.append(f, s2); wrap.appendChild(svg); }
+      svg.setAttribute('width', Math.ceil(c.width)); svg.setAttribute('height', Math.ceil(H));
+      var r = function (v) { return Math.round(v * 10) / 10; }, pt = function (q) { return r(q[0]) + ',' + r(q[1]); };
+      var ri = R - bw - 0.6, ro = R + 0.6, a0i = at(ARC[0], ri), a1i = at(ARC[1], ri), a0o = at(ARC[0], ro), a1o = at(ARC[1], ro);
+      // paper: the border band along the arc between the two base points (the opening) and the wedge out to the tip
+      var fill = svg.querySelector('.fill');
+      fill.setAttribute('d', 'M' + pt(a0i) + 'L' + pt(a0o) + 'L' + pt(tip) + 'L' + pt(a1o) + 'L' + pt(a1i) + 'A' + r(ri) + ',' + r(ri) + ' 0 0 0 ' + pt(a0i) + 'Z');
+      fill.setAttribute('fill', cs.backgroundColor);
+      // ink: two edges from the border's mid-line to the tip
+      var b0 = at(ARC[0], R - bw / 2), b1 = at(ARC[1], R - bw / 2), e = svg.querySelector('.edge');
+      e.setAttribute('d', 'M' + pt(b0) + 'L' + pt(tip) + 'L' + pt(b1));
+      e.setAttribute('fill', 'none'); e.setAttribute('stroke', cs.borderBottomColor); e.setAttribute('stroke-width', bw); e.setAttribute('stroke-linejoin', 'round'); e.setAttribute('stroke-linecap', 'butt');
+      svg.dataset.corner = [r(cx), r(cy), r(R), bw].join(','); svg.dataset.arc = ARC.join(','); svg.dataset.base = pt(b0) + ';' + pt(b1); svg.dataset.tip = pt(tip); svg.dataset.face = r(fx) + ',' + r(fy);   // read by the tail case
+    }
+    function place() {
+      var W = innerWidth, H = innerHeight, me = a.getBoundingClientRect(), w = me.width, h = me.height, m = W < 600 ? 10 : 16, hud = rects();
+      var feed = document.querySelector('#world [data-panel="feed"]'), btn = document.querySelector('#world [data-panel="btn1"]');
+      var feedTop = feed ? Math.min(feed.getBoundingClientRect().top, feed.getBoundingClientRect().bottom - (W < 600 ? 52 : 100)) : H - m, btnTop = btn ? btn.getBoundingClientRect().top : H - m;
+      var say = sayReserve(); if (say) feedTop = Math.min(feedTop, say.top);   // stack above the speech ticker as well
+      var spots = [[(W - w) / 2, H - h - m], [m, feedTop - h - GAP], [(W - w) / 2, Math.min(feedTop, btnTop) - h - GAP], [W - w - m, btnTop - h - GAP], [W - w - m, m]];
+      var freeBox = function (x, y, bw, bh) {
+        if (x < m - 1 || y < m - 1 || x + bw > W - m + 1 || y + bh > H) return false;
+        return !hud.some(function (r) { return x < r.right + GAP && x + bw > r.left - GAP && y < r.bottom + GAP / 2 && y + bh > r.top - GAP / 2; });
+      };
+      var free = function (s) { return freeBox(s[0], s[1], w, h); };
+      var pick = spots.filter(free)[0] || spots[2], key = Math.round(pick[0]) + ',' + Math.round(pick[1]);
+      if (forceSpot != null && spots[forceSpot]) pick = spots[forceSpot];   // ?ctaspot=N: show placement N, for review
+      if (key !== last || forceSpot != null) { last = key; a.style.setProperty('--cta-x', Math.round(pick[0]) + 'px'); a.style.setProperty('--cta-y', Math.round(pick[1]) + 'px'); }
+      drawTail();
+      // the compact order box: the first spot that touches nothing of the HUD, the call to action or the ring (its outline
+      // as the arena draws it); above the call to action, then the free corners. Nowhere free: hidden, and Satrenchi points
+      // to Your trenchie, where the full box is.
+      if (mini && miniWanted && W < 600) {
+        // a phone never gets the compact box: the cue sends the owner to Your trenchie, where the full box is
+        mini.hidden = true; if (miniFits !== false) { miniFits = false; if (onMiniFit) onMiniFit(); }
+      } else if (mini && miniWanted) {
+        // nothing shows until the finder has run against a HUD whose panels have all arrived and a ring that held still
+        // between two runs, and has picked the same spot twice: before that the HUD is still arriving, spots look free that
+        // are not, and the box would flash over the fight
+        var panels = document.querySelectorAll('#world [data-panel]:not([data-kind="world"])'), ring = window.__arenaRingOutline ? window.__arenaRingOutline() : null, sized = function (el) { var r = el && el.getBoundingClientRect(); return !!(r && r.width > 0 && r.height > 0); };
+        var rk = ring ? ring.filter(function (q, i) { return i % 8 === 0; }).map(function (q) { return Math.round(q[0]) + ':' + Math.round(q[1]); }).join(',') : '';
+        // the HUD has arrived once no panel has drawn for the first time in two runs (the banner comes and goes with events and
+        // the leaderboard resizes as numbers change: the overlap test re-measures every panel on each run)
+        [].forEach.call(panels, function (el) { if (sized(el) && !seenPanels[el.dataset.panel]) { seenPanels[el.dataset.panel] = 1; hudQuiet = 0; } });
+        hudQuiet++;
+        var wait = !(sized(feed) && sized(btn)) ? 'hud' : !ring ? 'ring' : rk !== lastRing ? 'ring-moving' : hudQuiet < 3 ? 'hud-arriving' : ''; lastRing = rk;
+        mini.dataset.wait = wait;   // why the box is not shown yet (read by the first-load case)
+        var holding = !mini.hidden && mini.contains(document.activeElement);   // the owner is typing: a settling HUD never takes the box away
+        if (wait) { if (!holding) mini.hidden = true; return; }
+        mini.style.visibility = 'hidden'; mini.hidden = false;   // measured unseen
+        var mr = mini.getBoundingClientRect(), bw = mr.width, bh = mr.height;
+        var cta = { left: pick[0], top: pick[1], right: pick[0] + w, bottom: pick[1] + h };
+        var inPoly = function (x, y) { var c = false; for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) { var a = ring[i], b = ring[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
+        var offRing = function (x, y) {
+          if (!ring) return false;   // the ring is not drawn yet: wait rather than guess
+          var corners = [[x, y], [x + bw, y], [x, y + bh], [x + bw, y + bh], [x + bw / 2, y], [x + bw / 2, y + bh], [x, y + bh / 2], [x + bw, y + bh / 2]];
+          return !corners.some(function (c) { return inPoly(c[0], c[1]); }) && !ring.some(function (q) { return q[0] > x && q[0] < x + bw && q[1] > y && q[1] < y + bh; });
+        };
+        var clearCta = function (x, y) { return x + bw <= cta.left - 4 || x >= cta.right + 4 || y + bh <= cta.top - 4 || y >= cta.bottom + 4; };
+        var tries = [[Math.max(m, Math.min(pick[0], W - bw - m)), pick[1] - bh - 8], [m, feedTop - bh - GAP], [W - bw - m, btnTop - bh - GAP], [W - bw - m, m + 60], [m, H / 2 - bh / 2], [W - bw - m, H / 2 - bh / 2]];
+        var spot = tries.filter(function (t) { return freeBox(t[0], t[1], bw, bh) && clearCta(t[0], t[1]) && offRing(t[0], t[1]); })[0], fits = !!spot;
+        var sk = fits ? Math.round(spot[0]) + ',' + Math.round(spot[1]) : 'none', same = sk === lastSpot; lastSpot = sk;
+        if (!same && !holding) { mini.dataset.wait = 'spot'; mini.hidden = true; mini.style.visibility = ''; return; }   // the same answer twice before it shows or changes
+        mini.hidden = !fits; mini.style.visibility = ''; if (fits) mini.style.transform = 'translate(' + Math.round(spot[0]) + 'px,' + Math.round(spot[1]) + 'px)';
+        if (fits !== miniFits) { miniFits = fits; if (onMiniFit) onMiniFit(); }
+      } else if (mini) mini.hidden = true;
+    }
+    var mini = null, miniWanted = false, miniFits = null, onMiniFit = null, lastRing = '', seenPanels = {}, hudQuiet = 0, lastSpot = '';
+    a.querySelector('img').addEventListener('load', place);
+    addEventListener('resize', place);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(place);
+    place(); setInterval(place, 500);
+
+    // A visitor who already snapped in: this page keeps driving their fighter (its lease is renewed while a page is
+    // open) and the call to action becomes theirs. The arena client is the guide's own (snapin/room.js).
+    var s = document.createElement('script'); s.src = './snapin/room.js';
+    s.onload = function () {
+      // the player's AI (snapin/brain.js) drives the fighter from whichever page is open; it starts itself and is optional
+      var br = document.createElement('script'); br.src = './snapin/brain.js'; document.body.appendChild(br);
+      var ch = document.createElement('script'); ch.src = './snapin/chat.js'; document.body.appendChild(ch);
+      var R = window.SnapRoom; if (!R) return;
+      mini = document.createElement('div'); mini.id = 'order-mini'; mini.hidden = true; mini.setAttribute('aria-label', 'Orders for your trenchie'); document.body.appendChild(mini);
+      var drawMini = function () {
+        if (!window.SnapChat || !miniWanted) return;
+        var f = document.activeElement, keep = f && f.id === 'order' ? [f.selectionStart, f.selectionEnd] : null;
+        mini.innerHTML = window.SnapChat.html({ compact: true, name: mineName }); window.SnapChat.wire(mini, drawMini);
+        if (keep) { var t = mini.querySelector('#order'); if (t) { t.focus({ preventScroll: true }); try { t.setSelectionRange(keep[0], keep[1]); } catch (e) { /* none */ } } }
+        place();
+      };
+      var mineName = '';
+      setInterval(function () {   // the brain and chat scripts arrive after this one: start the box once both are there
+        var want = !!(window.SnapBrain && typeof window.SnapBrain.tell === 'function' && window.SnapChat && mineName);
+        if (want !== miniWanted) { miniWanted = want; if (want) drawMini(); else { mini.hidden = true; mini.innerHTML = ''; } place(); }
+      }, 1000);
+      var cue = a.querySelector('.cue'), go = a.querySelector('.go'), say = function (who, line, label, step) {
+        cue.innerHTML = ''; var b = document.createElement('b'); b.textContent = 'Satrenchi:'; cue.append(b, document.createTextNode(line));
+        go.textContent = label; var g = new URL(a.href, location.href); g.searchParams.set('step', step); g.searchParams.delete('from'); a.href = g.pathname + g.search; place();
+      };
+      var lastSt = null, handle = function (st) {
+        lastSt = st;
+        var f = st.fighter, nm = f ? 'DEV ' + f.name : 'Your trenchie';
+        mineName = st.phase === 'in' && f ? nm : '';
+        if (st.phase === 'in' && f) say(nm, nm + (miniWanted && miniFits === false ? ' is in the ring. Give orders in Your trenchie.' : ' is in the ring. Go get ’em.'), 'Your trenchie', 'ring');
+        else if (st.phase === 'joining') say(nm, 'Reconnecting ' + nm + '…', 'Your trenchie', 'ring');
+        else if (st.phase === 'elsewhere') say(nm, nm + ' is driven from another tab.', 'Your trenchie', 'ring');
+        else if (st.phase === 'offline') say(nm, 'Lost the arena for a moment. Retrying…', 'Your trenchie', 'ring');
+        else if (st.phase === 'ended' || st.phase === 'error') say(nm, 'Your trenchie swam home. Back in?', 'Snap in again', 'ring');
+      };
+      R.on(handle);
+      onMiniFit = function () { if (lastSt) handle(lastSt); };
+      R.resume();
+    };
+    document.body.appendChild(s);
+  })();
+</script>
 <script type="module" src="./arena/main.mjs"></script>
 </body>
 </html>

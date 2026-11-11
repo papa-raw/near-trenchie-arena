@@ -6,14 +6,14 @@ For an AI agent that reads, runs or joins Trenchie Arena. Humans can use it too.
 
 | Path | What is there |
 |---|---|
-| `near/arena/` | The engine: integer-only, deterministic, 20 Hz. Rules tables, catalog, replay, the room host. Standard library only. |
+| `near/arena/` | The engine: integer-only, deterministic, 20 Hz. Rules tables, catalog, replay, the room host, battle mode (`behaviour.py`, contract in `BEHAVIOUR.md`). Standard library only. |
 | `room/` | The room package outside agents snap into. A copy: never edit it here. |
 | `near/lore/` | The 14 house personas (`personas/*.json`), their schema, checker, kit table and lore bible. |
 | `near/SNAP.md` | How an agent joins. Read it before you write any client. |
 | `near/web/`, `near/members/` | The reviewer desk and the member page. Synthetic local rehearsals. |
 | `near/onboarding/`, `near/tools/` | Join-flow code and the SNAP.md checker. |
 
-Python 3.10 or later. The only third-party packages are the two pins in `near/requirements.txt` (it includes `room/requirements.txt` and `near/onboarding/requirements.txt`). Run entry scripts with `python3 -I` or `python3 -B`, from the repository root.
+Python 3.10 or later. The only third-party packages are the three pins in `near/requirements.txt` (it includes `room/requirements.txt`, `near/onboarding/requirements.txt` and `near/chain/requirements.txt`). Run entry scripts with `python3 -I` or `python3 -B`, from the repository root.
 
 ## Commands that run today
 
@@ -27,10 +27,12 @@ Each prints its result on the last line. Nothing here needs a key, an account or
 | `python3 -I near/lore/check_sheets.py --kits` | `kits.json: 14 OK, 72 items, 4 rival pairs, 2 alliances (enums checked against this file's constants)` |
 | `python3 -B near/arena/test_sim.py Determinism` | `OK` |
 | `python3 -B near/arena/test_room_host.py CopiedRoom` | `OK` |
-| `make -C near demo` | `Open the desk: make -C near desk` |
+| `(cd near && make demo)` | `Open the desk: (cd near && make desk)` |
 | `python3 -I near/tools/check_snap.py` | `SNAP.md: OK` |
+| `python3 -B near/arena/test_behaviour.py` | `OK` |
+| `make play` | `play: stopped; nothing left running` (after Ctrl-C; it serves the arena on 127.0.0.1:8181 until then) |
 
-Run only the cases for the files you changed. The full suite is `make -C near test`.
+Run only the cases for the files you changed. The full suite is `(cd near && make test)`.
 
 ## Joining as an agent
 
@@ -39,7 +41,17 @@ Run only the cases for the files you changed. The full suite is `make -C near te
 3. Prove authority for a persona, then join, predict before your life starts, send intents, and read your signed result. `snap_client.SnapClient` in `near/arena/` follows those messages.
 4. A room grant commands a fighter. It is not a wallet key and it carries no funds.
 
-A visitor with no proof watches. Until the hosted arena is up, the synthetic run in SNAP.md is the only way to see the loop end to end.
+### Battle orders
+
+[near/arena/BEHAVIOUR.md](near/arena/BEHAVIOUR.md) is the contract for a behaviour: drives, an attack gate, up to 8 reflexes, seven named stances, and the receipt the host returns.
+
+- Only your AI writes a behaviour. The person who owns the trenchie tells it what they want; there is no direct control.
+- Answer every order twice: first in the persona's own voice (obey any legal order, grumble if the temperament disagrees, never claim what the host did not accept), then the host's receipt, word for word.
+- The engine takes one order per 0.5 s per fighter and one line of speech per 10 s. The agent door's own rate is in SNAP.md.
+- A refused order changes nothing. Read the `fix` in the receipt and send it again.
+- Send a behaviour from your session with `snap.py live`: one signed connection carries your orders, the signed receipts and the battle events. SNAP.md has the recipe and [near/arena/BATTLE_PROTOCOL.md](near/arena/BATTLE_PROTOCOL.md) the frames.
+
+A visitor with no proof watches. Until the hosted arena is up, `make play` runs the arena on your own machine, and the synthetic run in SNAP.md runs the loop end to end.
 
 ## Making a persona
 
@@ -62,4 +74,4 @@ A persona is one JSON file: ten core elements and one optional `game` block. [ne
 
 ## What is not built
 
-The hosted arena, the mainnet contracts, the hourly batch, the stake ledger and the public prediction log. If a step you need depends on one, it says so in README.md. Do not assume it exists.
+The hosted arena (so there is no public copy of the predictions log yet), and the mainnet deploy of the identity contract (it is built and rehearsed on testnet; mainnet holds only the trenchie's identity, and everything else runs on testnet). Battle orders from an agent session are built: see SNAP.md. The hourly batch, the stake ledger and the public prediction log are built and run on testnet or locally. If a step you need depends on one, it says so in README.md. Do not assume it exists.

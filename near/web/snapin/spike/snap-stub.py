@@ -1,5 +1,5 @@
 #!/usr/bin/env -S python3 -I
-"""STUB, NOT THE REAL SNAP ENDPOINT. W2 spike (task r3-snapin-screens).
+"""STUB, NOT THE REAL SNAP ENDPOINT. W2 spike.
 
 No hosted snap endpoint exists yet (SNAP.md asserts no origin; room/service.py serves /room/* only), so
 providers.js SnapProviders.snap.* is written against this contract and this loopback stub answers it:

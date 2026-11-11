@@ -176,8 +176,11 @@ fn one_batch_resolves_and_the_pot_balances() {
         e.call(who, 0, fc_key());
         m.stake(U128(10 * STAKE));
     }
-    let before: Vec<u128> =
-        ["alice.testnet", "bob.testnet", "carol.testnet"].iter().map(|a| m.balance_of(acc(a)).0).collect();
+    // Each balance as it was, plus its stake record's storage, which comes back at resolve.
+    let before: Vec<u128> = ["alice.testnet", "bob.testnet", "carol.testnet"]
+        .iter()
+        .map(|a| m.balance_of(acc(a)).0 + m.stake_of(acc(a)).unwrap().storage_fee.0)
+        .collect();
     // Bob loses 3 zero-KO lives whole (0.03) to the pot; alice and carol are paid 0.02 + 0.01 from it.
     let results = vec![
         StakeResult { account_id: acc("alice.testnet"), net: I128(2 * STAKE as i128) },
@@ -185,6 +188,7 @@ fn one_batch_resolves_and_the_pot_balances() {
         StakeResult { account_id: acc("carol.testnet"), net: I128(STAKE as i128) },
     ];
     e.call("resolver.testnet", 0, fc_key());
+    m.close_batch();
     let rec = m.resolve(U64(0), results, I128(0), [4000, 3500, 1500, 700, 300], "ab".repeat(32));
     assert_eq!(rec.results, 3);
     assert_eq!(rec.pot_after.0, 0);
@@ -202,6 +206,7 @@ fn one_batch_resolves_and_the_pot_balances() {
     e.call("bob.testnet", 0, fc_key());
     m.stake(U128(STAKE));
     e.call("resolver.testnet", 0, fc_key());
+    m.close_batch();
     let rec = m.resolve(
         U64(1),
         vec![StakeResult { account_id: acc("bob.testnet"), net: I128(-(STAKE as i128)) }],
@@ -214,10 +219,15 @@ fn one_batch_resolves_and_the_pot_balances() {
 }
 
 fn resolve_panics(m: &Market, e: &mut Env, who: &str, batch: u64, results: Vec<StakeResult>, pot: i128) -> String {
+    // The resolver closed the open batch first (in-memory, as close_batch does).
+    let mut c = clone_market(m);
+    if c.closed.is_none() {
+        c.closed = Some(Closed { batch: U64(c.open_batch), stakes: c.open_count, opened_at: U64(c.batch_opened_at) });
+        c.open_batch += 1;
+        c.open_count = 0;
+    }
     e.call(who, 0, fc_key());
-    probe(e, || {
-        clone_market(m).resolve(U64(batch), results, I128(pot), [4000, 3500, 1500, 700, 300], "ef".repeat(32))
-    })
+    probe(e, move || c.resolve(U64(batch), results, I128(pot), [4000, 3500, 1500, 700, 300], "ef".repeat(32)))
     .expect_err("resolve should refuse")
 }
 
@@ -237,7 +247,7 @@ fn resolve_refusals() {
     };
     let s = STAKE as i128;
     assert!(resolve_panics(&m, &mut e, "mallory.testnet", 0, ok(0, 0), 0).contains("only the stake resolver"));
-    assert!(resolve_panics(&m, &mut e, "resolver.testnet", 1, ok(0, 0), 0).contains("not the open stake batch"));
+    assert!(resolve_panics(&m, &mut e, "resolver.testnet", 1, ok(0, 0), 0).contains("not the closed stake batch"));
     assert!(resolve_panics(&m, &mut e, "resolver.testnet", 0, ok(s, 0), 0).contains("sum to zero"));
     assert!(resolve_panics(&m, &mut e, "resolver.testnet", 0, ok(-2 * s, 2 * s), 0).contains("lose more than itself"));
     assert!(resolve_panics(&m, &mut e, "resolver.testnet", 0, ok(s, 0), -s).contains("below zero"));
@@ -260,6 +270,8 @@ fn stake_refunds_on_timeout() {
     e.call("alice.testnet", 0, fc_key());
     m.stake(U128(5 * STAKE));
     let after_stake = m.balance_of(acc("alice.testnet")).0;
+    let record_fee = m.stake_of(acc("alice.testnet")).unwrap().storage_fee.0;
+    assert!(record_fee > 0);
     // Too early: refused.
     e.now += DEFAULT_STAKE_TIMEOUT_NS - 1;
     e.call("anyone.testnet", 0, fc_key());
@@ -268,13 +280,17 @@ fn stake_refunds_on_timeout() {
     e.now += 1;
     e.call("anyone.testnet", 0, fc_key());
     assert_eq!(m.refund_stake(acc("alice.testnet")).0, 5 * STAKE);
-    assert_eq!(m.balance_of(acc("alice.testnet")).0, after_stake + 5 * STAKE);
+    assert_eq!(m.balance_of(acc("alice.testnet")).0, after_stake + 5 * STAKE + record_fee, "stake plus its record's storage");
     assert_eq!(m.state().open_count, 0);
     assert!(get_logs().iter().any(|l| l.contains("stake_refund") && l.contains("no result within the timeout")));
     assert!(m.solvency().solvent);
-    // The batch then resolves empty.
+    // The refund voided batch 0: no result for it lands any more; batch 1 is open.
+    assert_eq!(m.state().open_batch.0, 1);
+    let late = resolve_panics(&m, &mut e, "resolver.testnet", 0, vec![], 0);
+    assert!(late.contains("not the closed stake batch"), "{late}");
     e.call("resolver.testnet", 0, fc_key());
-    m.resolve(U64(0), vec![], I128(0), [4000, 3500, 1500, 700, 300], "00".repeat(32));
+    m.close_batch();
+    m.resolve(U64(1), vec![], I128(0), [4000, 3500, 1500, 700, 300], "00".repeat(32));
 }
 
 #[test]
@@ -325,33 +341,184 @@ fn withdraw_over_balance_refused() {
 fn stake_across_batches_refused_until_resolved() {
     let (mut m, mut e) = setup();
     funded(&mut m, &mut e, "alice.testnet", NEAR);
-    funded(&mut m, &mut e, "bob.testnet", NEAR);
     e.call("alice.testnet", 0, fc_key());
     m.stake(U128(STAKE));
-    e.call("bob.testnet", 0, fc_key());
-    m.stake(U128(STAKE));
-    // alice's stake times out and is refunded; bob's resolves; then a stale bob stake is impossible,
-    // but alice re-staking into batch 1 is fine. Force the stale case: resolve batch 0 without bob.
-    e.now += DEFAULT_STAKE_TIMEOUT_NS;
-    e.call("x.testnet", 0, fc_key());
-    m.refund_stake(acc("alice.testnet"));
-    e.call("resolver.testnet", 0, fc_key());
-    m.resolve(
-        U64(0),
-        vec![StakeResult { account_id: acc("bob.testnet"), net: I128(0) }],
-        I128(0),
-        [4000, 3500, 1500, 700, 300],
-        "11".repeat(32),
-    );
-    // A stake left over from an older batch: simulate by staking in batch 1 then rolling the batch.
-    e.call("alice.testnet", 0, fc_key());
-    m.stake(U128(STAKE));
+    // A stake left over from an older batch: simulate by rolling the batch.
     m.open_batch += 1; // the resolver moved on without alice (never happens through resolve)
     e.call("alice.testnet", 0, fc_key());
     m.stake(U128(STAKE));
 }
 
+/// When the resolver is late past the timeout, a loser who can see
+/// a losing life must not refund alone while the winners are later paid from
+/// the pot. The first refund voids the whole batch: no result for it lands,
+/// every other stake in it refunds at once, and the pot is untouched.
+#[test]
+fn l11_a_timeout_refund_voids_the_whole_batch_and_the_pot_is_untouched() {
+    let (mut m, mut e) = setup();
+    for who in ["alice.testnet", "bob.testnet", "carol.testnet"] {
+        funded(&mut m, &mut e, who, NEAR);
+    }
+    // Batch 0: carol's 0-KO life feeds the pot.
+    e.call("carol.testnet", 0, fc_key());
+    m.stake(U128(STAKE));
+    e.call("resolver.testnet", 0, fc_key());
+    m.close_batch();
+    m.resolve(U64(0), vec![StakeResult { account_id: acc("carol.testnet"), net: I128(-(STAKE as i128)) }],
+        I128(STAKE as i128), [4000, 3500, 1500, 700, 300], "aa".repeat(32));
+    assert_eq!(m.state().pot.0, STAKE);
+    // Batch 1: alice (who will lose) and bob (who will win) stake; the resolver goes quiet.
+    for who in ["alice.testnet", "bob.testnet"] {
+        e.call(who, 0, fc_key());
+        m.stake(U128(STAKE));
+    }
+    e.now += DEFAULT_STAKE_TIMEOUT_NS;
+    e.call("alice.testnet", 0, fc_key());
+    m.refund_stake(acc("alice.testnet"));
+    // The resolver comes back with bob's win paid from the pot: refused.
+    let late = resolve_panics(&m, &mut e, "resolver.testnet", 1,
+        vec![StakeResult { account_id: acc("bob.testnet"), net: I128(STAKE as i128) }], -(STAKE as i128));
+    assert!(late.contains("not the closed stake batch"), "{late}");
+    // Bob refunds at once, no second wait; the pot never moved.
+    e.call("anyone.testnet", 0, fc_key());
+    assert_eq!(m.refund_stake(acc("bob.testnet")).0, STAKE);
+    assert_eq!(m.state().pot.0, STAKE);
+    assert!(m.solvency().solvent);
+    // A fresh stake goes to the new open batch.
+    e.call("bob.testnet", 0, fc_key());
+    assert_eq!(m.stake(U128(STAKE)).batch.0, 2);
+}
+
+/// A stake record's storage is paid by the staker and comes back
+/// when the record goes. A full-access stake (no key-use record) that nets 0
+/// returns the balance to exactly where it was, plus the 1 yoctoNEAR it attached.
+#[test]
+fn l12_a_resolved_or_refunded_stake_returns_its_record_storage() {
+    let (mut m, mut e) = setup();
+    for who in ["alice.testnet", "bob.testnet"] {
+        funded(&mut m, &mut e, who, NEAR);
+    }
+    let a0 = m.balance_of(acc("alice.testnet")).0;
+    let b0 = m.balance_of(acc("bob.testnet")).0;
+    e.call("alice.testnet", 1, other_key());
+    m.stake(U128(STAKE));
+    e.call("resolver.testnet", 0, fc_key());
+    m.close_batch();
+    m.resolve(U64(0), vec![StakeResult { account_id: acc("alice.testnet"), net: I128(0) }],
+        I128(0), [4000, 3500, 1500, 700, 300], "bb".repeat(32));
+    assert_eq!(m.balance_of(acc("alice.testnet")).0, a0 + 1, "resolve returns the record's storage");
+    e.call("bob.testnet", 1, other_key());
+    m.stake(U128(STAKE));
+    e.now += DEFAULT_STAKE_TIMEOUT_NS;
+    e.call("anyone.testnet", 0, fc_key());
+    m.refund_stake(acc("bob.testnet"));
+    assert_eq!(m.balance_of(acc("bob.testnet")).0, b0 + 1, "a refund returns it too");
+    assert!(m.solvency().solvent);
+}
+
 /// A copy for panic probes; `probe` restores the storage the copy may have flushed.
 fn clone_market(m: &Market) -> Market {
     near_sdk::borsh::from_slice(&near_sdk::borsh::to_vec(m).unwrap()).unwrap()
+}
+
+/// The resolver closes the batch before it reads it, so a stake
+/// that lands in between goes to the next batch and can't fail the resolve;
+/// a 1-yoctoNEAR stake is refused.
+#[test]
+fn m3_a_late_stake_joins_the_next_batch_and_dust_stakes_are_refused() {
+    let (mut m, mut e) = setup();
+    for who in ["a.testnet", "b.testnet"] {
+        funded(&mut m, &mut e, who, NEAR);
+    }
+    e.call("a.testnet", 0, fc_key());
+    m.stake(U128(STAKE));
+    e.call("mallory.testnet", 0, fc_key());
+    assert!(probe(&e, || clone_market(&m).close_batch()).unwrap_err().contains("only the stake resolver"));
+    e.call("resolver.testnet", 0, fc_key());
+    let closed = m.close_batch();
+    assert_eq!((closed.batch.0, closed.stakes), (0, 1));
+    // b stakes after the close: it joins batch 1; dust is refused.
+    e.call("b.testnet", 0, fc_key());
+    assert!(probe(&e, || clone_market(&m).stake(U128(1))).unwrap_err().contains("at least 0.01 NEAR"));
+    e.call("b.testnet", 0, fc_key());
+    assert_eq!(m.stake(U128(STAKE)).batch.0, 1);
+    // A second close waits for the resolve; then batch 0 resolves with a's result alone.
+    e.call("resolver.testnet", 0, fc_key());
+    assert!(probe(&e, || clone_market(&m).close_batch()).unwrap_err().contains("resolve the closed batch first"));
+    e.call("resolver.testnet", 0, fc_key());
+    m.resolve(U64(0), vec![StakeResult { account_id: acc("a.testnet"), net: I128(0) }], I128(0),
+        [4010, 3470, 1570, 640, 310], "ab".repeat(32));
+    assert_eq!(m.stake_of(acc("b.testnet")).unwrap().batch.0, 1);
+    assert_eq!(m.state().closed, None);
+    assert!(m.solvency().solvent);
+}
+
+/// For the resolver (for the stake resolver): the stakes of a batch are listed
+/// in staking order, each with every part as it landed (a top-up keeps its own
+/// time); the list goes with the resolve, and its storage came from the stakers.
+#[test]
+fn l15_batch_stakes_list_every_stake_and_each_part_with_its_time() {
+    let (mut m, mut e) = setup();
+    for who in ["a.testnet", "b.testnet"] {
+        funded(&mut m, &mut e, who, NEAR);
+    }
+    let b0 = m.balance_of(acc("b.testnet")).0;
+    e.call("a.testnet", 0, fc_key());
+    m.stake(U128(STAKE));
+    e.now += 600 * 1_000_000_000;
+    e.call("b.testnet", 1, other_key());
+    m.stake(U128(STAKE));
+    e.now += 600 * 1_000_000_000;
+    e.call("a.testnet", 0, fc_key());
+    m.stake(U128(2 * STAKE));
+    let list = m.batch_stakes(U64(0), None, None);
+    assert_eq!(list.iter().map(|s| s.account_id.as_str()).collect::<Vec<_>>(), ["a.testnet", "b.testnet"]);
+    let a = &list[0].stake;
+    assert_eq!(a.amount.0, 3 * STAKE);
+    assert_eq!(a.parts, vec![
+        StakePart { amount: U128(STAKE), at: U64(T0) },
+        StakePart { amount: U128(2 * STAKE), at: U64(T0 + 1_200 * 1_000_000_000) },
+    ]);
+    assert_eq!(m.batch_stakes(U64(0), Some(1), Some(5)).len(), 1);
+    e.call("resolver.testnet", 0, fc_key());
+    m.close_batch();
+    e.call("resolver.testnet", 0, fc_key());
+    m.resolve(U64(0), vec![
+        StakeResult { account_id: acc("a.testnet"), net: I128(0) },
+        StakeResult { account_id: acc("b.testnet"), net: I128(0) },
+    ], I128(0), [4010, 3470, 1570, 640, 310], "ab".repeat(32));
+    assert!(m.batch_stakes(U64(0), None, None).is_empty(), "the list goes with the resolve");
+    assert_eq!(m.balance_of(acc("b.testnet")).0, b0 + 1, "b's record and list storage came back");
+    assert!(m.solvency().solvent);
+}
+
+/// Each refund credits exactly the storage it frees. The first staker
+/// used to be charged the batch list's own entry too, so its refund credited
+/// storage still in use while other stakes stayed in the list. (c refunds
+/// first so the batch's void entry exists before the measured refunds.)
+#[test]
+fn n2_a_refund_credits_exactly_the_storage_it_frees() {
+    let (mut m, mut e) = setup();
+    for who in ["a.testnet", "b.testnet", "c.testnet"] {
+        funded(&mut m, &mut e, who, NEAR);
+        e.call(who, 0, fc_key());
+        m.stake(U128(STAKE));
+    }
+    e.now += DEFAULT_STAKE_TIMEOUT_NS;
+    e.call("anyone.testnet", 0, fc_key());
+    m.refund_stake(acc("c.testnet"));
+    for who in ["a.testnet", "b.testnet"] {
+        e.call("anyone.testnet", 0, fc_key());
+        m.assert_solvent();
+        let fee = m.stake_of(acc(who)).unwrap().storage_fee.0;
+        let before = env::storage_usage();
+        m.refund_stake(acc(who));
+        let freed = (before - env::storage_usage()) as u128 * env::storage_byte_cost().as_yoctonear();
+        if who == "a.testnet" {
+            assert_eq!(fee, freed, "the first staker's refund credits only what it frees");
+        } else {
+            assert!(freed > fee, "the last refund also frees the list and void entries, which were the contract's");
+        }
+    }
+    assert!(m.solvency().solvent);
 }

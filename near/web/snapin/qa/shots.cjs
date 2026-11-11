@@ -11,7 +11,7 @@ const server = http.createServer((req, res) => { const u = new URL(req.url, 'htt
   if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.statusCode = 404; return res.end('nf'); } res.setHeader('content-type', MIME[path.extname(f)] || 'application/octet-stream'); res.end(fs.readFileSync(f)); });
 let base = '';
 const CASES = [
-  ['flow-watch', ''], ['flow-wallet', '?step=wallet'], ['flow-presets', '?step=presets'], ['flow-build', '?step=build'], ['flow-personality', '?step=personality'],
+  ['flow-wallet', '?step=wallet'], ['flow-presets', '?step=presets'], ['flow-build', '?step=build'], ['flow-personality', '?step=personality'],
   ['flow-doors', '?step=doors'], ['flow-agree', '?step=agree'], ['flow-ring', '?step=ring'], ['flow-claimed', '?step=claimed'],
   ['login-doors', '?mode=login'], ['login-claude', '?mode=login&ai=claude&door=Claude'], ['login-handoff', '?mode=login&ai=handoff&door=Codex&route=plan'],
   ['login-near', '?mode=login&ai=near&door=NEAR%20AI%20Cloud'], ['login-credits', '?mode=login&ai=credits&door=Claude'], ['login-router', '?mode=login&ai=router&door=OpenRouter'],

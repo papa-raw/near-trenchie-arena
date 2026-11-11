@@ -252,12 +252,20 @@ class Arena:
                  room_factory: Callable[[GameBridge], RoomPort] | None = None,
                  profile_provider=None, identity_resolver=None, receipt_signer=None,
                  admission_gate=None, life_guard=None, pick_resolver=None, sale_adapter=None,
-                 house_runtime=None, server_time_ms=None, rules=sim.DEFAULT_RULES, recover=False, dev_host=None):
+                 house_runtime=None, server_time_ms=None, rules=sim.DEFAULT_RULES, recover=False, dev_host=None,
+                 prediction_log=None, chain=None):
         self.context = copy_data(context)
         if self.context.get("rules_hash") != sim.digest(rules):
             raise ValueError("context rules hash mismatch")
         if rules["tick_hz"] != 20 or rules["segment_ticks"] != 1200:
             raise ValueError("room clock requires 20 Hz and 1200 ticks per segment")
+        # A chain writer (near/chain) replaces the given seeds with its committed, unused ones, in commit order.
+        self.chain = chain
+        if chain is not None and recover:
+            raise ValueError("a chain-attached arena does not recover a journal: start a fresh arena (an interrupted "
+                             "segment is never settled); the chain writer resumes from its own state")
+        if chain is not None:
+            seeds = chain.claim_seeds(self)
         if not seeds:
             raise ValueError("published seeds are required")
         # Only a DEV host (the local snap-in host) may seat a `dev-` id. A host says so with dev_host=True; left
@@ -277,9 +285,17 @@ class Arena:
         self.receipt_signer = receipt_signer
         self.admission_gate = admission_gate or (lambda: False)
         self.life_guard = life_guard or (lambda b: False)
+        if chain is not None:      # a chain token's owner is re-read from chain before each new life
+            guard = self.life_guard
+            self.life_guard = lambda b: guard(b) and chain.owner_ok(b)
         self.pick_resolver = pick_resolver
         self.sale_adapter = sale_adapter
         self.house_runtime = house_runtime
+        # The public per-AI predictions log (F79, house/predictions.py). At each seal its log_hash() is journalled
+        # beside the segment (the sealed record itself is unchanged), for the batch writer to carry.
+        self.prediction_log = prediction_log
+        self.prediction_log_hashes = {}
+        self.prediction_log_refusals = deque(maxlen=100)
         self.server_time_ms = server_time_ms or (lambda: time.time_ns() // (rules["nanoseconds_per_second"] // rules["milliseconds_per_second"]))
         self.members = {}
         self.inventories = {}
@@ -378,6 +394,11 @@ class Arena:
             row = self._enqueue("spawn", name, {"life_id": e["life_id"]})
             self._public_event("life_start", name, e["life_id"], e["lock"], row.tick)
         elif op == "leave":
+            # Leave sorts before loadout at the same apply tick. A released
+            # activation must drop its equipment command before it closes bench.
+            if any(row["kind"] == "loadout" and row["fighter_id"] == name for row in self.sim.state["inputs"]):
+                self._record("cancel_loadout", name)
+                replay_engine.cancel_loadouts(self.sim, name)
             self._record("cancel_spawn", name)
             replay_engine.cancel_spawns(self.sim, name)
             row = self._enqueue("leave", name, {})
@@ -410,7 +431,7 @@ class Arena:
         except Exception:
             self.failed = True
             raise
-        if kind in ("input", "advance", "retire", "cancel_spawn"):
+        if kind in ("input", "advance", "retire", "cancel_spawn", "cancel_loadout"):
             self.commands.append({"kind": kind, "value": copy_data(value)})
         return index
 
@@ -512,6 +533,33 @@ class Arena:
                 lock = self.locks[m["life_id"]]["lock"]
                 self.bridge.activate(m["binding"], m["life_id"], lock["lock_ref"])
 
+    def _log_key(self, life_id):
+        return str(self.context.get("deployment_id", "")) + "/" + life_id
+
+    def _log_player_lock(self, m, life_id, pick):
+        """F79 for a player's AI: its lock (or explicit no-prediction) goes in the public log. A house life is logged
+        by the house driver. A spread that is not whole percents is logged as no prediction, never rounded."""
+        if self.prediction_log is None or m["profile"]["house"]:
+            return
+        spread = zero = None
+        if pick is not None:
+            bps = pick["payload"]["spread_bps"]
+            values = [bps.get(k, 0) for k in ("one", "two", "three", "four_plus")] + [pick["payload"]["zero_bps"]]
+            if all(v % 100 == 0 for v in values):
+                spread, zero = [v // 100 for v in values[:4]], values[4] // 100
+        try:
+            self.prediction_log.lock(self._log_key(life_id), self.sim.rules_hash, m["binding"]["nft_token_id"],
+                                     m["binding"]["account_id"], m["profile"]["model"], spread, zero)
+        except ValueError as exc:                       # an already-sealed life after recovery: the log keeps the first
+            self.prediction_log_refusals.append({"life_id": life_id, "reason": str(exc)[:120]})
+
+    def _log_player_end(self, m, life_id, kos):
+        if self.prediction_log is None or m["profile"]["house"]:
+            return
+        entry = self.prediction_log.locks.get(self._log_key(life_id))
+        if entry is not None and not entry["resolved"]:
+            self.prediction_log.resolve(self._log_key(life_id), kos)
+
     def _collect_events(self) -> list[str]:
         """Record the whole tick before returning grants to notify externally."""
         boundaries = []
@@ -526,6 +574,8 @@ class Arena:
                 m["awaiting_life"] = False
                 self._member_changed(name)
             if event["kind"] in ("ko", "leave"):
+                if self.chain is not None:
+                    self.chain.life_ended(name)
                 lock = self.locks.get(m["life_id"])
                 if lock is not None:
                     f = self.sim.state["fighters"][name]
@@ -534,6 +584,7 @@ class Arena:
                               "inventory_hash": sim.digest(f["bag"]), "completed": True}
                     self.completed_lives.append(record)
                     self._record("life_end", record)
+                    self._log_player_end(m, m["life_id"], f["life_kos"])
                 if event["kind"] == "ko":
                     m["life_number"] += 1
                     m["life_id"] = name + ":life:" + str(m["life_number"])
@@ -610,9 +661,19 @@ class Arena:
         except Exception:
             self.failed = True
             raise
+        if self.prediction_log is not None and self.prediction_log_hashes.get(self.segment_id) != self.prediction_log.log_hash():
+            log_hash = self.prediction_log.log_hash()      # a re-seal of the same segment journals only a changed hash
+            self._record("house_predictions", {"segment_id": self.segment_id, "log_hash": log_hash})
+            self.prediction_log_hashes[self.segment_id] = log_hash
+        if self.chain is not None:
+            self.chain.sealed(self, self.segment_id, record)
 
     def _open_next_segment(self):
         next_index = self.segment_index + 1
+        if self.chain is not None:
+            new = self.chain.take_seeds(self)
+            if new:
+                self.add_published_seeds(new)
         if next_index >= len(self.seeds):
             self.failed = True
             raise RuntimeError("published seed batch exhausted; admission closed")
@@ -689,7 +750,9 @@ class Arena:
                 self.receipts = {}
                 active_lives = {m["life_id"] for m in self.members.values()}
                 self.locks = {k: self.locks[k] for k in sorted(self.locks) if k in active_lives}
-            elif kind in ("input", "advance", "retire", "cancel_spawn"):
+            elif kind == "house_predictions":
+                self.prediction_log_hashes[value["segment_id"]] = value["log_hash"]
+            elif kind in ("input", "advance", "retire", "cancel_spawn", "cancel_loadout"):
                 if kind != "advance":
                     self.commands.append(entry)
                 if kind == "input":
@@ -701,6 +764,8 @@ class Arena:
                         self.commands.append({"kind": "advance", "value": 1})
                 elif kind == "cancel_spawn":
                     replay_engine.cancel_spawns(self.sim, value)
+                elif kind == "cancel_loadout":
+                    replay_engine.cancel_loadouts(self.sim, value)
                 else:
                     retire_fighter(self.sim, value)
         self.journal_tick = self.sim.state["tick"]
@@ -759,7 +824,8 @@ class Arena:
         free = shutil.disk_usage(self.store.root).free
         return {"status": "red" if free < 2_000_000_000 else "amber" if free < 5_000_000_000 else "green",
                 "free_disk_bytes": free, "tick": self.sim.state["tick"], "failed": self.failed,
-                "dev_host": self.dev_host, "dev_prefix_refusals": len(self.refusals)}
+                "dev_host": self.dev_host, "dev_prefix_refusals": len(self.refusals),
+                **({"chain": self.chain.health()} if self.chain is not None else {})}
 
 
 class ArenaBridge:
@@ -823,11 +889,24 @@ class ArenaBridge:
         if profile["house"] and name not in a.sim.rules["house"]:
             return error("proof_required")
         saved = a.inventories.get(name)
-        if saved is not None and saved["owner"] != b["account_id"]:
+        if saved is not None and saved["owner"] != b["account_id"] and not self._owner_read_decides(b):
             return error("ownership_unavailable")
         number = 0 if saved is None else saved["life_number"] + 1
         if saved is not None:
             profile["bag"] = copy_data(saved["bag"])
+            if self._owner_read_decides(b):
+                # a saved bag older than the chain (another host filed this token since this arena's base) starts
+                # from the chain's bag plus this arena's own moves instead
+                newer = a.chain.saved_bag_update(name, saved["bag"], a.sim.rules["items"])
+                if newer is not None:
+                    profile["bag"] = newer
+        elif self._owner_read_decides(b):
+            # No life of this token here yet: its gear is what the chain's inventory holds under the token id, whoever
+            # owns it now. The read rides with the owner read; until it lands, ask again (as the owner read does).
+            chain_bag = a.chain.inventory_bag(name, a.sim.rules["items"])
+            if chain_bag is None:
+                return error("ownership_unavailable")
+            profile["bag"] = chain_bag
         life = name + ":life:" + str(number)
         a.members[name] = {"binding": b, "profile": profile, "life_id": life, "life_number": number,
                            "ordinal": a.ordinal, "queue_order": a.ordinal, "spawn_pending": False, "ever_started": False,
@@ -842,6 +921,15 @@ class ArenaBridge:
                            "loadout": profile["loadout"], "bag": profile["bag"],
                            "managed": True, "waiting": True, "life_id": life}})
         return {"binding": b, "life_id": life, "prediction_deadline": str(a.members[name]["deadline_ms"])}
+
+    def _owner_read_decides(self, b) -> bool:
+        """Whether this binding's owner is read from the identity NFT before its life (mainnet is
+        the trenchie's identity; whoever owns the token there controls it and its gear). Then a saved inventory
+        follows the token to its new owner, and the chain writer's owner read decides at activation; an arena with
+        no such read keeps the inventory to the account that last played it."""
+        cfg = getattr(self.arena.chain, "cfg", None)
+        nft = ((b.get("context") or {}).get("contract_ids") or {}).get("nft")
+        return cfg is not None and nft is not None and nft in (getattr(cfg, "identity_nft", None), getattr(cfg, "nft", None))
 
     def lock_prediction(self, binding: SlotBinding, life_id: str,
                         signed_pick_or_none: PredictionRequest | None) -> PredictionLock | Error:
@@ -888,6 +976,7 @@ class ArenaBridge:
         record = {"pick_hash": fingerprint, "lock": lock, "public": public}
         a._record("lock", record)
         a.locks[life_id] = record
+        a._log_player_lock(m, life_id, pick)
         m["activation_requested"] = True
         a._member_changed(binding["nft_token_id"])
         replay_pick = {"loadout": {"menu_row": None, "bag_serials": []} if pick is None else pick["payload"]["loadout"],
@@ -1022,6 +1111,12 @@ class ArenaBridge:
 
     def apply(self, binding: SlotBinding, sequenced_input: IntentRequest) -> Receipt | Error:
         self.arena._prepare_segment()
+        if sequenced_input.get('kind') == 'behaviour':
+            try:
+                from .battle_engine import apply_behaviour
+            except ImportError:
+                from battle_engine import apply_behaviour
+            return apply_behaviour(self, binding, sequenced_input)
         a, m = self.arena, self._member(binding)
         if m is None or m["released"]:
             return error("stale_slot")

@@ -33,7 +33,7 @@ function hashString(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) 
 
 // A KITS.roster row for a fighter id; ids the roster does not know (anyone who snaps in) get a body colour from their id.
 export function rosterRow(KITS, id, items) {
-  const hit = (KITS.roster || []).find((r) => r.trenchieId === id);
+  const hit = [...(KITS.roster || []), ...(KITS.players || [])].find((r) => r.trenchieId === id);
   if (hit) return hit;
   const h = hashString(id);
   return { trenchieId: id, name: id, tag: id.length > 12 ? id.slice(0, 11) + '…' : id, paletteIds: [PALETTE[h % PALETTE.length], 'p04'], kit: items || {} };
@@ -43,6 +43,7 @@ class Actor {
   constructor(id, handle, row, scene) {
     this.id = id; this.h = handle; this.row = row; this.scene = scene;
     const J = handle.joints; this.J = J;
+    this.baseScaleY = J.base.scale.y;
     this.def = { hand: J.handR.position.clone(), handL: J.handL.position.clone(), footL: J.footL.position.clone(), footR: J.footR.position.clone(), pivot: J.pivot.position.clone() };
     this.phi = 0; this.px = null; this.pz = null; this.speed = 0;
     this.anims = [];                 // {kind, tick, ...} fired from events; evaluated against the render tick
@@ -68,7 +69,8 @@ export class Actors {
     let a = this.map.get(f.id);
     if (a) return a;
     const row = rosterRow(this.KITS, f.id, f.items);
-    const handle = this.LOOK3.makeTrenchie({ ...row, kit: {} });
+    const player = (this.KITS.players || []).find((r) => r.trenchieId === f.id);
+    const handle = player && globalThis.S3 ? globalThis.S3.make({ body: player.paletteIds?.[0] || 'p07', hairCol: player.paletteIds?.[1] || 'p03', ...player.look, hat: 'hide' }, { items: false }) : this.LOOK3.makeTrenchie({ ...row, kit: {} });
     handle.object3d.scale.setScalar(BODY_SCALE);
     handle.object3d.traverse((o) => { if (o.isMesh) o.castShadow = o.name !== 'shadow'; });
     if (this.arenaQuality) arenaTessellation(handle.object3d);
@@ -140,6 +142,7 @@ export class Actors {
       o.visible = f.status !== 2;
       out.set(f.id, { x: w.x, z: w.z, state, f });
       this.pose(a, f, state, w, dir, renderTick, nowMs, dtMs);
+      a.J.base.scale.y *= a.baseScaleY;
       out.get(f.id).lift = a.J.base.position.y * BODY_SCALE; // a body dropping in or knocked up: its tag follows it
     }
     // drop actors whose fighter left the snapshot

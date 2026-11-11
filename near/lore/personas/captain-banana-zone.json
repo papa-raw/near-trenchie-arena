@@ -120,6 +120,14 @@
     "tag": "Banana Zone",
     "loadout": "commons",
     "temperament": "Sunny",
+    "emoji": [
+      "🍌",
+      "☀️",
+      "🏄",
+      "🤙",
+      "🌴",
+      "🔭"
+    ],
     "voice": [
       "Surf's up. Liquidity Wave incoming.",
       "Zoom out, it's a banana.",

@@ -95,6 +95,12 @@ fn rows() -> Vec<Row> {
     }]
 }
 
+/// The hop's result lands: applied.
+fn land(a: &mut Arena, id: &str) {
+    call("arena.testnet", 0);
+    assert!(a.on_apply(id.into(), Ok(json!({"already_applied": false}))));
+}
+
 fn hop_calls() -> Vec<(String, String)> {
     get_created_receipts()
         .into_iter()
@@ -181,11 +187,13 @@ fn c5_the_301st_record_prunes_exactly_the_oldest() {
         let s = seg(&a, i);
         call("operator.testnet", 0);
         let _ = a.post_batch(format!("m{i}"), vec![s], rows(), true);
+        land(&mut a, &format!("m{i}"));
     }
     for i in 0..300u16 {
         let s = seg(&a, 40 + i);
         call("operator.testnet", 0);
         let _ = a.post_batch(format!("n{i}"), vec![s], rows(), false);
+        land(&mut a, &format!("n{i}"));
     }
     assert!(a.get_batch("n0".into()).is_some());
     let s = seg(&a, 340);
@@ -231,7 +239,7 @@ fn post_batch_refuses_malformed_segments() {
     assert!(refused(ctx, &mut a, |x| x.post_batch("b".into(), vec![], rows(), false)).contains("at least one segment"));
 }
 
-// ------------------------------------------------------- critic M2 (r4)
+// ------------------------------------------------ review findings
 
 /// The seed forms agree with the room's sealed record, checked against a
 /// vector computed outside Rust (Python hashlib, 2026-11-10):
@@ -276,15 +284,16 @@ fn m2_segments_consume_committed_seeds_in_order() {
     // In order: 0 then 1 of commit 0, in one batch.
     let _ = a.post_batch("b1".into(), vec![s0.clone(), s1.clone()], rows(), false);
     assert_eq!(a.state().next_seed, SeedRef { commit_id: U64(1), seed_index: 0 });
+    // A retry of the pending batch consumes nothing.
+    call("operator.testnet", 0);
+    let _ = a.post_batch("b1".into(), vec![s0.clone(), s1], rows(), false);
+    assert_eq!(a.state().next_seed, SeedRef { commit_id: U64(1), seed_index: 0 });
+    land(&mut a, "b1");
     // A used seed can't run a second segment.
     let mut again = s0.clone();
     again.final_state_hash = "08".repeat(32);
     let ctx = call("operator.testnet", 0);
     assert!(refused(ctx, &mut a, |x| x.post_batch("b2".into(), vec![again.clone()], rows(), false)).contains("next committed seed"));
-    // A retry of the pending batch consumes nothing.
-    call("operator.testnet", 0);
-    let _ = a.post_batch("b1".into(), vec![s0, s1], rows(), false);
-    assert_eq!(a.state().next_seed, SeedRef { commit_id: U64(1), seed_index: 0 });
     // Commit 1 follows.
     call("operator.testnet", 0);
     let _ = a.post_batch("b2".into(), vec![later], rows(), false);
@@ -299,4 +308,95 @@ fn m2_a_repeated_secret_is_refused() {
     a.commit_seeds("cd".repeat(32), 5);
     let ctx = call("operator.testnet", 0);
     assert!(refused(ctx, &mut a, |x| x.commit_seeds("cd".repeat(32), 5)).contains("secret already committed"));
+}
+
+/// Once a record is pruned, its batch id can't come back with new
+/// content (trenchie_nft would call it already applied, and arena would mark
+/// content that never applied as Applied).
+#[test]
+fn l8_a_pruned_batch_id_cannot_be_posted_again() {
+    call("owner.testnet", 0);
+    let mut a = Arena::new(acc("owner.testnet"), acc("operator.testnet"), acc("nft.testnet"), Some(1));
+    call("operator.testnet", 0);
+    a.commit_seeds("cd".repeat(32), MAX_SEEDS_PER_COMMIT);
+    a.post_batch("b1".into(), vec![seg(&a, 0)], rows(), false);
+    land(&mut a, "b1");
+    call("operator.testnet", 0);
+    a.post_batch("b2".into(), vec![seg(&a, 1)], rows(), false);
+    land(&mut a, "b2");
+    assert!(a.get_batch("b1".into()).is_none(), "b1 pruned");
+    let ctx = call("operator.testnet", 0);
+    let err = refused(ctx, &mut a, |x| x.post_batch("b1".into(), vec![seg(x, 2)], vec![], false));
+    assert!(err.contains("used before"), "{err}");
+}
+
+// ------------------------------------------------ review findings
+
+/// One batch in flight at a time. A new id is refused while one is
+/// pending; the pending one retries until it applies; seqs go 1, 2, ... and
+/// reach trenchie_nft with the hop.
+#[test]
+fn h1_a_new_batch_waits_for_the_pending_one() {
+    let mut a = seeded();
+    call("operator.testnet", 0);
+    a.post_batch("b1".into(), vec![seg(&a, 0)], rows(), false);
+    assert_eq!(a.get_batch("b1".into()).unwrap().seq.0, 1);
+    call("arena.testnet", 0);
+    assert!(!a.on_apply("b1".into(), Err(PromiseError::Failed)));
+    let s1 = seg(&a, 1);
+    let ctx = call("operator.testnet", 0);
+    let err = refused(ctx, &mut a, |x| x.post_batch("b2".into(), vec![s1.clone()], rows(), false));
+    assert!(err.contains("batch b1 is pending"), "{err}");
+    assert_eq!(a.state().pending.as_deref(), Some("b1"));
+    // The retry hops with seq 1; once it lands, b2 goes with seq 2.
+    call("operator.testnet", 0);
+    let _ = a.post_batch("b1".into(), vec![seg(&a, 0)], rows(), false);
+    land(&mut a, "b1");
+    assert_eq!(a.state().pending, None);
+    call("operator.testnet", 0);
+    let _ = a.post_batch("b2".into(), vec![s1], rows(), false);
+    assert_eq!(a.get_batch("b2".into()).unwrap().seq.0, 2);
+    assert!(get_logs().iter().any(|l| l.contains("\"post_batch\"") && l.contains("\"seq\":\"2\"")));
+}
+
+/// The owner's key abandons a pending batch that can never apply; the
+/// next batch goes on (its seq skips the abandoned one); the abandoned id is
+/// refused for good; nobody else may abandon.
+#[test]
+fn h1_owner_abandons_a_stuck_pending_batch() {
+    let mut a = seeded();
+    call("operator.testnet", 0);
+    a.post_batch("b1".into(), vec![seg(&a, 0)], rows(), false);
+    let ctx = call("operator.testnet", 1);
+    assert!(refused(ctx, &mut a, |x| x.abandon_pending("b1".into())).contains("owner only"));
+    call("owner.testnet", 1);
+    a.abandon_pending("b1".into());
+    assert_eq!(a.get_batch("b1".into()).unwrap().status, Status::Abandoned);
+    let ctx = call("operator.testnet", 0);
+    assert!(refused(ctx, &mut a, |x| x.post_batch("b1".into(), vec![seg(x, 0)], rows(), false)).contains("abandoned"));
+    call("operator.testnet", 0);
+    let _ = a.post_batch("b2".into(), vec![seg(&a, 1)], rows(), false);
+    assert_eq!(a.get_batch("b2".into()).unwrap().seq.0, 2);
+}
+
+/// A commit's record goes once its seeds are all used (the event keeps
+/// its secret and random seed); the secret is remembered in 8 bytes.
+#[test]
+fn l13_a_used_commit_is_pruned() {
+    let mut a = setup(None);
+    call("operator.testnet", 0);
+    a.commit_seeds("cd".repeat(32), 2);
+    let segs = vec![seg(&a, 0), seg(&a, 1)];
+    a.commits.flush();
+    let before = env::storage_usage();
+    call("operator.testnet", 0);
+    let _ = a.post_batch("b1".into(), segs, rows(), false);
+    assert!(a.get_commit(U64(0)).is_none(), "used commit pruned");
+    assert!(get_logs().iter().any(|l| l.contains("\"commit_used\"")));
+    a.commits.flush();
+    a.batches.flush();
+    a.queue.flush();
+    println!("bytes after a 1-segment-pair batch with its commit pruned: {}", env::storage_usage() as i64 - before as i64);
+    let ctx = call("operator.testnet", 0);
+    assert!(refused(ctx, &mut a, |x| x.commit_seeds("cd".repeat(32), 2)).contains("secret already committed"));
 }

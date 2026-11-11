@@ -1,4 +1,4 @@
-/* sheet.js: the character skinner's data layer (task r3-snapin-screens, sub-task skinner-sheet).
+/* sheet.js: the character skinner's data layer.
  *
  * Turns the skinner's choices into a persona sheet in the SAME shape as the 14 house sheets (near/lore/personas/*.json):
  * the ten core elements (identity, tools, skills, libraries, hooks, memory, model_routing, permissions, manifest,
@@ -248,6 +248,8 @@
   }
 
   // ------------------------------------------------------------------ build
+  // a tag chosen by the sheet's maker (the premint personas: one plain word), used only if it passes the same rule as a check
+  function ownTag(t) { return typeof t === 'string' && /^[A-Za-z][A-Za-z0-9]{0,11}$/.test(t) && HOUSE_TAGS.indexOf(t) < 0 ? t : ''; }
   function deriveTag(name) {
     var base = String(name || '').normalize('NFKD').replace(/[^A-Za-z0-9 ]/g, '').trim().split(/\s+/)[0] || 'Trenchie';
     if (/^[0-9]/.test(base)) base = 'T' + base;
@@ -286,7 +288,7 @@
     var reactions = {}; REACTION_KEYS.forEach(function (k) { reactions[k] = T ? T.reactions[k] : ''; });
     var brief = (name || 'This trenchie') + ' is ' + (T ? 'a ' + T.name + ' ' : 'a ') + 'trenchie washed up after the Great Rug. ' + (typed || (T ? T.line : '')) + BIO_JOIN + ARENA_RULES;
     var tools = {}; INTENTS.forEach(function (k) { tools[k] = TOOL_LIMITS[k]; });
-    return {
+    var sheet = {
       identity: {
         role: role,
         brief: brief,
@@ -315,7 +317,7 @@
       game: {
         version: 2,
         name: name,
-        tag: deriveTag(name),
+        tag: ownTag(state.tag) || deriveTag(name),
         temperament: T ? T.name : str(state.temperament),
         voice: lines,
         tics: quirks.map(ticLine),
@@ -324,6 +326,11 @@
         reactions: reactions
       }
     };
+    // the persona's emoji set (battle mode): written only when the emoji rules accept it (emoji-set.js, the same rules as
+    // near/lore/emoji.py); otherwise the sheet carries none and the temperament's default set applies
+    var E = root.SnapEmoji;
+    if (Array.isArray(state.emoji) && E && typeof E.checkSet === 'function' && E.checkSet(state.emoji) === null) sheet.game.emoji = state.emoji.slice();
+    return sheet;
   }
 
   // The look file: what the sheet has no field for. Travels beside the sheet (download as <role>.look.json), never inside it,
@@ -399,7 +406,9 @@
     if (!(isObj(s.self_improvement) && isObj(id) && s.self_improvement.mark === id.mark && s.self_improvement.assessor === id.assessor && /^disabled/.test(str(s.self_improvement.misses)) && /^disabled/.test(str(s.self_improvement.proposals)) && Array.isArray(s.self_improvement.checks) && s.self_improvement.checks.length === 1)) fail('self-improvement', 'self_improvement must declare the loop disabled and one check');
 
     if (!isObj(g)) { fail('game', 'no game block'); return f; }
-    if (!sameList(Object.keys(g), GAME_KEYS)) fail('game-keys', 'game keys ' + JSON.stringify(Object.keys(g)) + ' must be ' + JSON.stringify(GAME_KEYS));
+    var gKeys = Object.keys(g).filter(function (k) { return k !== 'emoji'; });   // emoji is the one optional key (battle mode)
+    if (!sameList(gKeys, GAME_KEYS)) fail('game-keys', 'game keys ' + JSON.stringify(Object.keys(g)) + ' must be ' + JSON.stringify(GAME_KEYS) + ' (plus an optional emoji set)');
+    if ('emoji' in g) { var ER = root.SnapEmoji, why = ER && typeof ER.checkSet === 'function' ? ER.checkSet(g.emoji) : 'the emoji rules did not load'; if (why) fail('emoji', why); }
     if (g.version !== 2) fail('game-version', 'the game block is version 2');
     var gn = guard(g.name, opts); if (!gn.ok) fail(gn.code, 'name: ' + gn.reason);
     if (!(typeof g.tag === 'string' && /^[A-Za-z][A-Za-z0-9]{0,11}$/.test(g.tag)) || has(HOUSE_TAGS, g.tag)) fail('tag', 'tag must be one word of at most ' + TAG_MAX + ' letters or digits, not a house tag');

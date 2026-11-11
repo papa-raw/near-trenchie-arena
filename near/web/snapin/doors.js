@@ -39,15 +39,44 @@
     }).join('') + '</div>';
   }
   var helpCopy = function () { return '<aside class="ai-help"><h2>Before you choose</h2><div class="help-entry"><b>PLAN</b><span>Your own agent.</span><span>Your computer stays on.</span></div><div class="help-entry"><b>KEY</b><span>Your own spending key.</span><span>Provider credits required.</span></div><div class="help-foot">You choose. No default.</div></aside>'; };
+  // Cost per hour while your trenchie is in the ring, in battle mode. The AI calls when the fight changes, not on a clock: a
+  // plan (re)write on hits (at most every 20 s), a KO, low hp or the owner's order; a line at most every 10 s; a prediction once
+  // a life. NEAR AI Cloud is measured: the real brain.js loop on DeepSeek V4.1 Flash for 6 sim minutes against the live DEV
+  // crowd's rhythm (a hit every ~10 s, a KO every 2 min) on a fake clock, so the fight is simulated and the model calls are
+  // real: 25 plans, 35 lines, 3 predictions, mean $0.000166 a call, about $0.10 an hour (measured by
+  // near/web/snapin/brain_cost_live_check.cjs at e1a05d0; its output brain_cost_live.json at 7e996d8). Claude (Haiku 5.5:
+  // $0.10 in / $0.50 out / $0.01 cached per million) and OpenRouter's default (openai/gpt-6-luna, the same $0.10 / $0.50 /
+  // $0.01 on openrouter.ai's model list) are list prices for the same token mix, read 2026-11-11.
+  // "Never more than your cap": brain.js reserves each call's worst case in the shared spend window before sending it and
+  // does not send a call that could pass the cap (brain.js at df092fa; the cost check above is brain_cost_live.json at 7e996d8).
+  var COST = {
+    'NEAR AI Cloud': { hour: '≈ $0.10', basis: 'Measured: the real AI loop on DeepSeek V4.1 Flash through 6 minutes of a simulated fight.' },
+    Claude: { hour: '≈ $0.04', basis: 'List price, Claude Haiku 5.5, for the same calls.' },
+    OpenRouter: { hour: '≈ $0.04', basis: 'List price, GPT-6 Luna (read 2026-11-11), for the same calls.' }
+  };
+  var RHYTHM = 'Your AI calls when the fight changes: a new plan on hits (at most every 20 s), a KO, low hp or your order; a line at most every 10 s; a prediction once a life. More in a busy brawl, less in a calm one.';
+  // this hour's spend, from the player's AI (brain.js) when it is on this page
+  var brain = null, brainHooked = false;   // brain.js loads after this file: hook it the first time it is needed
+  function hookBrain() { if (!brainHooked && root.SnapBrain && root.SnapBrain.on) { brainHooked = true; root.SnapBrain.on(function (x) { brain = x; }); } return brainHooked; }
+  // the cap the player saved (the brain reads the same key once it is in the ring; until then its capUsd is null)
+  function storedCap() { var c = Number(U.store.get(CAP_STORE)); return c > 0 ? c : 0; }
+  function spendLine() {
+    hookBrain();
+    if (!brain) return 'Nothing spent: your AI is not wired in on this page.';
+    return 'Spent this hour: $' + Number(brain.spendHourUsd || 0).toFixed(3) + (storedCap() ? ' of your $' + storedCap().toFixed(2) + ' cap' : ' (no cap set: your AI waits for one)') + '.';
+  }
   function cost(plan) {
-    return '<div class="ai-cost"><b>Real money</b>' + (plan ? line('Your plan limits apply.') :
-      '<div class="cost-row"><span>Cost per hour</span><strong>After model test</strong></div><label for="cap">Hourly cap preview</label><input id="cap" type="number" min="0" step="0.05" placeholder="Set your cap" value="' + esc(s.cap) + '"><small>Design only · not enforced.</small>') + '</div>';
+    var c = COST[s.door] || null, enforced = hookBrain();
+    return '<div class="ai-cost"><b>Real money</b>' + (plan ? line('Your plan’s usage limits apply. This page charges nothing.') :
+      '<div class="cost-row"><span>Cost per hour</span><strong>' + esc(c ? c.hour : 'unknown') + '</strong></div><small>' + esc(c ? c.basis : '') + ' ' + RHYTHM + '</small>' +
+      '<label for="cap">Hourly cap (USD)</label><input id="cap" type="number" min="0" step="0.05" placeholder="e.g. 0.20" value="' + esc(s.cap) + '">' +
+      '<small>' + (enforced ? 'At 80% of the cap your AI calls every 30 s; at 100% it stops until the hour rolls on. It never spends more than your cap: a call that could pass it is not sent.' : 'Your AI is not wired in on this page, so nothing is spent and the cap has nothing to stop.') + '</small>') + '</div>';
   }
   function consent(plan) {
     var nm = s.door === 'Claude' ? 'Console' : s.door;
-    return '<section class="consent" aria-label="Permission summary"><h2>' + (plan ? 'Trenchie Arena requests' : 'Proposed key handling') + '</h2>' +
+    return '<section class="consent" aria-label="Permission summary"><h2>' + (plan ? 'Trenchie Arena requests' : 'How your key is handled') + '</h2>' +
       (plan ? [line('Your agent sends us moves.'), line('Runs on your computer.'), line('Uses your own plan.'), line('Its permission prompts apply.'), line('We cannot constrain it.')].join('') :
-        [line('<b>This page would hold a spending key.</b>'), line('It spends ' + nm + ' credits.'), line('Stored in this browser.'), line(KEY_ROUTING_COPY.replace('{door}', s.door === 'Claude' ? 'Claude Console' : s.door)), line('Set provider limits yourself.')].join('')) + '</section>';
+        [line('<b>This page holds your spending key.</b>'), line('It spends ' + nm + ' credits.'), line('Stored in this browser.'), line(KEY_ROUTING_COPY.replace('{door}', s.door === 'Claude' ? 'Claude Console' : s.door)), line('Set provider limits yourself.')].join('')) + '</section>';
   }
   function providerLinks(plan) {
     var label = s.door === 'Claude' ? (plan ? 'Claude Code' : 'Console') : s.door;
@@ -82,7 +111,7 @@
   function account() {
     var plan = !s.keyRoute && (s.door === 'Claude' || s.door === 'Codex');
     return btn(M.mark(s.door) + '<span>' + (plan ? 'Your plan' : esc(maskKey(keyOf(s.door)) || 'Key')) + '</span><span class="connected-dot">●</span>', 'ai:panel', 'connection-chip') +
-      (s.panel ? '<section class="connection-panel">' + line(plan ? 'Agent link active.' : 'Limit remaining: unknown.') + (plan ? '' : btn('Say hi', 'ai:say-hi', 'secondary')) + btn('Switch AI', 'ai:switch', 'secondary') + (!plan ? btn('Add credits', 'ai:topup', 'secondary') : '') + btn('Disconnect', 'ai:disconnect', 'secondary') +
+      (s.panel ? '<section class="connection-panel">' + line(plan ? 'Agent link active.' : spendLine()) + (plan ? '' : btn('Say hi', 'ai:say-hi', 'secondary')) + btn('Switch AI', 'ai:switch', 'secondary') + (!plan ? btn('Add credits', 'ai:topup', 'secondary') : '') + btn('Disconnect', 'ai:disconnect', 'secondary') +
         (!plan ? line('Forgets this browser’s key.') + line('Delete at provider to revoke.') + btn('Provider key page', 'ai:revoke', 'textlink') : line('Ends this arena link.')) + '</section>' : '') +
       (s.hi ? '<div class="ai-feedback" role="status">“' + esc(s.hi) + '”</div>' : '') + btn('Connection details', 'ai:panel', 'textlink');
   }
@@ -174,7 +203,7 @@
     else if (x === 'test') await testKey();
     else if (x === 'say-hi') { s.keyText = keyOf(s.door); s.busy = false; var P = providers(); var fn = P && (s.door === 'NEAR AI Cloud' ? P.nearai : s.door === 'Claude' ? P.claude : P.openrouter); if (fn) { var r = await fn.test(s.keyText); if (r && r.ok) { s.hi = r.say || ''; } else { s.error = (r && r.message) || 'The call failed.'; s.keyText = ''; return go(mapKind(r && r.kind)); } } s.keyText = ''; go('connected'); }
     else if (x === 'disconnect') { U.store.del(KEY_STORE + s.door); stopPolling(); s.panel = false; s.hi = ''; go('disconnected'); host.onDisconnected && host.onDisconnected(); }
-    else if (x === 'new-key') { s.keyRoute = true; s.error = ''; go(s.door === 'NEAR AI Cloud' ? 'near' : s.door === 'Claude' ? 'credits' : 'router'); }
+    else if (x === 'new-key') { s.keyRoute = true; s.error = ''; s.keyText = ''; go(s.door === 'NEAR AI Cloud' ? 'near' : s.door === 'Claude' ? 'credits' : 'router'); }   // the refused key is not offered again
     else if (x === 'fallback') { s.fallbackOpen = true; host.repaint(); }
     else if (x === 'renew') { go('handoff'); requestCode(); }
     else if (x === 'authorize') {
@@ -189,7 +218,7 @@
     else if (x === 'get') openTab(GET_PAGES[s.door === 'Claude' ? (s.keyRoute ? 'Console' : 'Claude Code') : s.door]);
     else if (x === 'revoke') openTab(KEY_PAGES[s.door]);
     else if (x === 'continue') host.onContinue && host.onContinue();
-    else say('Not available yet.');
+    else say('That button does nothing here. Reload the page if this keeps happening.');
     return true;
   }
 

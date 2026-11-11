@@ -1,19 +1,19 @@
-//! `market`: the testnet stake ledger (F40, F76, F80; prd §4.3 "The stake ledger").
+//! `market`: the testnet stake ledger.
 //!
 //! Every amount is a `u128` of yoctoNEAR. Money enters only through the payable
 //! `deposit` (a function-call key cannot attach a deposit, so only a full-access
 //! key can pay in) and leaves only through `withdraw`, which asserts 1 yoctoNEAR
 //! (so it too needs a full-access key), debits first and re-credits if the
 //! transfer fails. `stake` moves ledger balance into an open stake for the
-//! current stake batch; `resolve`, called only by the stake resolver, settles
-//! that batch against the pot. `solvency()` checks
+//! current stake batch; the stake resolver closes it (`close_batch`: new
+//! stakes go to the next batch), then `resolve` settles it against the pot. `solvency()` checks
 //! balance >= ledger + open stakes + pot + storage after every money method.
 //!
 //! Per-key daily limits bind zero-deposit `stake` calls, keyed by the signing
 //! public key. A wallet-signed full-access call proves itself by attaching
 //! exactly 1 yoctoNEAR, which a function-call key cannot do, and is not limited
 //! (B107). The limit is read on the amount locked, which is the most a key can
-//! lose in a day (prd §4.3: net-loss reading, INFERRED).
+//! lose in a day (a net-loss reading, INFERRED).
 
 use near_sdk::json_types::{I128, U64, U128};
 use near_sdk::store::LookupMap;
@@ -24,8 +24,11 @@ use near_sdk::{
 
 /// 0.15 NEAR: the guest key's daily limit (decisions `:297`).
 pub const GUEST_DAILY_LIMIT: u128 = 150_000_000_000_000_000_000_000;
-/// Two hourly batches (prd §4.3 step 5, INFERRED).
+/// Two hourly batches (INFERRED).
 pub const DEFAULT_STAKE_TIMEOUT_NS: u64 = 2 * 3_600 * 1_000_000_000;
+/// One life's stake (F76): the least a stake may lock, so a flood of
+/// 1-yoctoNEAR stakes can't push a batch past one call's gas.
+pub const MIN_STAKE: u128 = 10_000_000_000_000_000_000_000;
 const DAY_NS: u64 = 86_400 * 1_000_000_000;
 const ONE_YOCTO: u128 = 1;
 const GAS_FOR_WITHDRAW_CALLBACK: Gas = Gas::from_tgas(10);
@@ -39,6 +42,8 @@ enum Key {
     Stakes,
     KeyUse,
     Batches,
+    Voided,
+    Stakers,
 }
 
 #[near(serializers = [borsh, json])]
@@ -47,6 +52,28 @@ pub struct Stake {
     pub amount: U128,
     pub batch: U64,
     pub locked_at: U64,
+    /// What this stake record's own storage cost the staker (with its place in
+    /// the batch's staker list and its top-ups); credited back to the ledger
+    /// when the record goes (resolve or refund).
+    pub storage_fee: U128,
+    /// Each lock and top-up as it landed, so the resolver can time every part
+    /// against the lives it covers.
+    pub parts: Vec<StakePart>,
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq)]
+pub struct StakePart {
+    pub amount: U128,
+    pub at: U64,
+}
+
+/// One stake of a batch, as `batch_stakes` lists it for the resolver.
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq)]
+pub struct BatchStake {
+    pub account_id: AccountId,
+    pub stake: Stake,
 }
 
 #[near(serializers = [borsh, json])]
@@ -64,6 +91,15 @@ pub struct BatchRecord {
     pub pot_after: U128,
     pub base_rate: [u16; 5],
     pub resolved_at: U64,
+}
+
+/// A batch the resolver closed: no new stake joins it; `resolve` settles it.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Closed {
+    pub batch: U64,
+    pub stakes: u32,
+    pub opened_at: U64,
 }
 
 #[near(serializers = [json])]
@@ -96,6 +132,10 @@ pub struct MarketState {
     pub base_rate: [u16; 5],
     pub daily_limit: U128,
     pub stake_timeout_ns: U64,
+    /// When the open stake batch opened (init, or the last close or void).
+    pub batch_opened_at: U64,
+    /// The closed batch waiting for its resolve, if any.
+    pub closed: Option<Closed>,
 }
 
 #[near(contract_state)]
@@ -107,7 +147,13 @@ pub struct Market {
     stakes: LookupMap<AccountId, Stake>,
     key_use: LookupMap<String, KeyUse>,
     batches: LookupMap<u64, BatchRecord>,
+    /// Voided batches (no result within the timeout): stakes still to refund.
+    voided: LookupMap<u64, u32>,
+    /// Who staked in each unresolved batch, in order (the resolver lists them).
+    stakers: LookupMap<u64, Vec<AccountId>>,
     open_batch: u64,
+    batch_opened_at: u64,
+    closed: Option<Closed>,
     open_count: u32,
     total_ledger: u128,
     total_staked: u128,
@@ -155,7 +201,11 @@ impl Market {
             stakes: LookupMap::new(Key::Stakes),
             key_use: LookupMap::new(Key::KeyUse),
             batches: LookupMap::new(Key::Batches),
+            voided: LookupMap::new(Key::Voided),
+            stakers: LookupMap::new(Key::Stakers),
             open_batch: 0,
+            batch_opened_at: env::block_timestamp(),
+            closed: None,
             open_count: 0,
             total_ledger: 0,
             total_staked: 0,
@@ -213,7 +263,7 @@ impl Market {
             "stake takes no deposit, or exactly 1 yoctoNEAR from a full-access key"
         );
         let amount = amount.0;
-        require!(amount > 0, "stake amount must be positive");
+        require!(amount >= MIN_STAKE, "stake at least 0.01 NEAR (one life)");
         let mut balance = self.balances.get(&account).copied().unwrap_or_else(|| {
             env::panic_str("no ledger balance: deposit first")
         });
@@ -236,23 +286,52 @@ impl Market {
             usage.used = U128(used);
             self.key_use.insert(key, usage);
         }
-        let stake = match self.stakes.get(&account).cloned() {
-            Some(open) => {
+        self.key_use.flush();
+        let key_fee = self.storage_cost_since(before);
+        let now = env::block_timestamp();
+        let part = StakePart { amount: U128(amount), at: U64(now) };
+        // Write the record (and, for a new stake, its place in the batch's
+        // staker list), measure what it added, then write the fee into it: the
+        // fee field's length is fixed, so the second write adds nothing.
+        let before_record = env::storage_usage();
+        let is_new = !self.stakes.contains_key(&account);
+        let mut stake = match self.stakes.get(&account).cloned() {
+            Some(mut open) => {
                 require!(
                     open.batch.0 == self.open_batch,
                     "previous stake unresolved: wait for its resolve or refund"
                 );
-                Stake { amount: U128(open.amount.0 + amount), batch: open.batch, locked_at: open.locked_at }
+                open.amount = U128(open.amount.0 + amount);
+                open.parts.push(part);
+                open
             }
             None => {
                 self.open_count += 1;
-                Stake { amount: U128(amount), batch: U64(self.open_batch), locked_at: U64(env::block_timestamp()) }
+                let mut list = self.stakers.get(&self.open_batch).cloned().unwrap_or_default();
+                list.push(account.clone());
+                self.stakers.insert(self.open_batch, list);
+                Stake {
+                    amount: U128(amount),
+                    batch: U64(self.open_batch),
+                    locked_at: U64(now),
+                    storage_fee: U128(0),
+                    parts: vec![part],
+                }
             }
         };
         self.stakes.insert(account.clone(), stake.clone());
         self.stakes.flush();
-        self.key_use.flush();
-        let fee = self.storage_cost_since(before);
+        // The staker pays its record and its own place in the batch's staker
+        // list (a borsh string: 4 + the id's bytes). The list entry's own key
+        // and header are the contract's, freed when the list goes; charging
+        // them to the first staker credited it storage still in use.
+        let record_fee = self.storage_cost_since(before_record)
+            + if is_new { (4 + account.as_str().len()) as u128 * env::storage_byte_cost().as_yoctonear() } else { 0 };
+        self.stakers.flush();
+        stake.storage_fee = U128(stake.storage_fee.0 + record_fee);
+        self.stakes.insert(account.clone(), stake.clone());
+        self.stakes.flush();
+        let fee = key_fee + record_fee;
         require!(balance >= amount + fee, "ledger balance too low for this stake");
         balance -= amount + fee;
         self.balances.insert(account.clone(), balance);
@@ -269,9 +348,26 @@ impl Market {
         stake
     }
 
-    /// The stake resolver posts one stake batch (F80). `market` can't check the
-    /// numbers; it checks they conserve: every open stake of the batch gets one
-    /// result, no stake loses more than itself, and stakes plus pot sum to zero.
+    /// The stake resolver closes the open batch: from here on new
+    /// stakes join the next batch, so the stake count the resolver reads can't
+    /// change under it. One closed batch at a time.
+    pub fn close_batch(&mut self) -> Closed {
+        require!(env::predecessor_account_id() == self.resolver, "only the stake resolver may close a batch");
+        require!(self.closed.is_none(), "resolve the closed batch first");
+        let closed = Closed { batch: U64(self.open_batch), stakes: self.open_count, opened_at: U64(self.batch_opened_at) };
+        self.closed = Some(closed.clone());
+        self.open_batch += 1;
+        self.open_count = 0;
+        self.batch_opened_at = env::block_timestamp();
+        emit("close_batch", near_sdk::serde_json::json!({"batch": closed.batch, "stakes": closed.stakes}));
+        self.assert_solvent();
+        closed
+    }
+
+    /// The stake resolver posts one closed stake batch (F80). `market` can't
+    /// check the numbers; it checks they conserve: every stake of the batch
+    /// gets one result, no stake loses more than itself, and stakes plus pot
+    /// sum to zero.
     pub fn resolve(
         &mut self,
         batch: U64,
@@ -281,8 +377,9 @@ impl Market {
         log_hash: String,
     ) -> BatchRecord {
         require!(env::predecessor_account_id() == self.resolver, "only the stake resolver may resolve");
-        require!(batch.0 == self.open_batch, "batch is not the open stake batch");
-        require!(results.len() as u32 == self.open_count, "every open stake needs exactly one result");
+        let closed = self.closed.clone().unwrap_or_else(|| env::panic_str("close the batch first"));
+        require!(batch == closed.batch, "batch is not the closed stake batch");
+        require!(results.len() as u32 == closed.stakes, "every stake of the batch needs exactly one result");
         require!(
             base_rate.iter().map(|v| *v as u32).sum::<u32>() == 10_000,
             "base_rate must sum to 10000 basis points"
@@ -294,11 +391,12 @@ impl Market {
                 .stakes
                 .remove(&result.account_id)
                 .unwrap_or_else(|| env::panic_str("result for an account with no open stake"));
-            require!(stake.batch.0 == self.open_batch, "result for a stake of another batch");
+            require!(stake.batch == closed.batch, "result for a stake of another batch");
             let amount = stake.amount.0 as i128;
             let net = result.net.0;
             require!(net >= -amount, "a stake cannot lose more than itself");
-            let returned = (amount + net) as u128;
+            // The stake plus its net, plus the record's storage fee, now freed.
+            let returned = (amount + net) as u128 + stake.storage_fee.0;
             let balance = self.balances.get(&result.account_id).copied().unwrap_or(0) + returned;
             self.balances.insert(result.account_id.clone(), balance);
             self.total_staked -= stake.amount.0;
@@ -317,49 +415,106 @@ impl Market {
             base_rate,
             resolved_at: U64(env::block_timestamp()),
         };
-        self.batches.insert(self.open_batch, record.clone());
+        self.stakers.remove(&closed.batch.0);
+        self.batches.insert(closed.batch.0, record.clone());
         emit(
             "resolve",
             near_sdk::serde_json::json!({
-                "batch": U64(self.open_batch), "results": record.results, "pot_delta": pot_delta,
+                "batch": closed.batch, "results": record.results, "pot_delta": pot_delta,
                 "pot_after": record.pot_after, "log_hash": record.log_hash,
             }),
         );
-        self.open_batch += 1;
-        self.open_count = 0;
+        self.closed = None;
         self.assert_solvent();
         record
     }
 
-    /// Anyone may refund a stake whose result never came within the timeout
-    /// (two batches, INFERRED). The refund is logged so the page can say so.
+    /// Anyone may refund a stake whose batch got no result within the timeout
+    /// (two batches, INFERRED), counted from when that batch opened. The first
+    /// such refund **voids the whole batch**: every stake in it
+    /// refunds, and no result for it can land any more. So a player who can see
+    /// a losing life can't refund alone while winners wait to be paid from the
+    /// pot. The refund and the void are logged so the page can say so.
     pub fn refund_stake(&mut self, account_id: AccountId) -> U128 {
         let stake = self
             .stakes
             .get(&account_id)
             .cloned()
             .unwrap_or_else(|| env::panic_str("no open stake"));
-        require!(
-            env::block_timestamp() >= stake.locked_at.0 + self.stake_timeout_ns,
-            "stake has not timed out"
-        );
-        self.stakes.remove(&account_id);
-        if stake.batch.0 == self.open_batch {
-            self.open_count -= 1;
+        let batch = stake.batch.0;
+        if !self.voided.contains_key(&batch) {
+            let now = env::block_timestamp();
+            let (stakes, opened_at) = match &self.closed {
+                Some(c) if c.batch.0 == batch => (c.stakes, c.opened_at.0),
+                _ => {
+                    require!(batch == self.open_batch, "stake of a resolved batch");
+                    (self.open_count, self.batch_opened_at)
+                }
+            };
+            require!(now >= opened_at + self.stake_timeout_ns, "stake has not timed out");
+            self.voided.insert(batch, stakes);
+            emit(
+                "batch_void",
+                near_sdk::serde_json::json!({
+                    "batch": U64(batch), "stakes": stakes, "reason": "no result within the timeout",
+                }),
+            );
+            if batch == self.open_batch {
+                self.open_batch += 1;
+                self.open_count = 0;
+                self.batch_opened_at = now;
+            } else {
+                self.closed = None;
+            }
         }
-        let balance = self.balances.get(&account_id).copied().unwrap_or(0) + stake.amount.0;
+        let left = self.voided.get(&batch).copied().unwrap_or(1) - 1;
+        if left == 0 {
+            self.voided.remove(&batch);
+        } else {
+            self.voided.insert(batch, left);
+        }
+        self.stakes.remove(&account_id);
+        let mut list = self.stakers.get(&batch).cloned().unwrap_or_default();
+        list.retain(|a| *a != account_id);
+        if list.is_empty() {
+            self.stakers.remove(&batch);
+        } else {
+            self.stakers.insert(batch, list);
+        }
+        let returned = stake.amount.0 + stake.storage_fee.0;
+        let balance = self.balances.get(&account_id).copied().unwrap_or(0) + returned;
         self.balances.insert(account_id.clone(), balance);
         self.total_staked -= stake.amount.0;
-        self.total_ledger += stake.amount.0;
+        self.total_ledger += returned;
         emit(
             "stake_refund",
             near_sdk::serde_json::json!({
                 "account_id": account_id, "amount": stake.amount, "batch": stake.batch,
-                "reason": "no result within the timeout",
+                "storage_fee": stake.storage_fee, "reason": "no result within the timeout",
             }),
         );
         self.assert_solvent();
         stake.amount
+    }
+
+    /// The stakes of an unresolved batch, in staking order, for the resolver.
+    pub fn batch_stakes(&self, batch: U64, from_index: Option<u32>, limit: Option<u32>) -> Vec<BatchStake> {
+        self.stakers
+            .get(&batch.0)
+            .map(|list| {
+                list.iter()
+                    .skip(from_index.unwrap_or(0) as usize)
+                    .take(limit.unwrap_or(100) as usize)
+                    .filter_map(|a| {
+                        self.stakes.get(a).map(|s| BatchStake { account_id: a.clone(), stake: s.clone() })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn batch_voided(&self, batch: U64) -> Option<u32> {
+        self.voided.get(&batch.0).copied()
     }
 
     // -------------------------------------------------------------- money out
@@ -467,6 +622,8 @@ impl Market {
             base_rate: self.base_rate,
             daily_limit: U128(self.daily_limit),
             stake_timeout_ns: U64(self.stake_timeout_ns),
+            batch_opened_at: U64(self.batch_opened_at),
+            closed: self.closed.clone(),
         }
     }
 }
@@ -487,6 +644,8 @@ impl Market {
         self.stakes.flush();
         self.key_use.flush();
         self.batches.flush();
+        self.voided.flush();
+        self.stakers.flush();
         require!(self.solvency().solvent, "insolvent: balance below ledger + stakes + pot + storage");
     }
 }

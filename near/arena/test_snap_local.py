@@ -15,6 +15,7 @@ import time
 import types
 import unittest
 import urllib.request
+from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE)]
@@ -32,6 +33,35 @@ def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
+
+
+class SimClockRoom(snap_local.DevRoom):
+    """Real HTTP room whose simulation advances only when its case requests it."""
+
+    async def run_clock(self, ticks: int | None = None) -> None:
+        if ticks is not None:
+            raise ValueError('the manual fixture uses step(), not an automatic tick limit')
+        self._fixture_loop = asyncio.get_running_loop()
+        self.hold_until = float('inf')
+        while not self.stop:
+            await asyncio.sleep(0.01)
+
+    def route(self, method: str, target: str, body: bytes, ip: str, admin: str = '') -> tuple[int, object]:
+        try:
+            return super().route(method, target, body, ip, admin)
+        finally:
+            # Predictions normally release the DEV join hold. This fixture's
+            # clock stays paused, so owner clocks must stay on sim time too.
+            self.hold_until = float('inf')
+
+    def step(self, ticks: int) -> None:
+        async def advance() -> None:
+            for _ in range(ticks):
+                self.round.arena.advance()
+                self.refresh_frames()
+                self.publish()
+                await asyncio.sleep(0)
+        asyncio.run_coroutine_threadsafe(advance(), self._fixture_loop).result(timeout=60)
 
 
 class StateFile(unittest.TestCase):
@@ -122,7 +152,12 @@ class LocalSnap(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.port = free_port()
-        self.dev = snap_local.DevRoom(self.port, self.tmp.name)
+        manual = getattr(getattr(self, self._testMethodName), 'manual_clock', False)
+        if manual:
+            seeds = patch.object(snap_local.secrets, 'randbelow', return_value=1)
+            seeds.start()
+            self.addCleanup(seeds.stop)
+        self.dev = (SimClockRoom if manual else snap_local.DevRoom)(self.port, self.tmp.name)
         self.ready = threading.Event()
         self.thread = threading.Thread(target=lambda: asyncio.run(snap_local.serve(self.dev, ready=lambda p: self.ready.set())), daemon=True)
         self.thread.start()
@@ -142,7 +177,7 @@ class LocalSnap(unittest.TestCase):
         self.assertIn("error", bad)
         ok = snap.call(self.url + "/dev/identity", "POST", {"name": "Tester!", "preset": "guardian", "public_key": new_public_key()})
         self.assertEqual((ok["label"], ok["nft_token_id"], ok["preset"]), ("DEV", "dev-tester", "guardian"))
-        self.assertEqual(sorted(ok["presets"]), ["brawler", "guardian", "hunter", "looter", "survivor"])
+        self.assertEqual(sorted(ok["presets"]), sorted(["brawler", "guardian", "hunter", "looter", "survivor"] + list(snap_local.GUIDE_PRESET_IDS)))
 
     def test_join_needs_the_terms_version_the_owner_read(self) -> None:
         with self.assertRaises(SystemExit) as caught:
@@ -320,27 +355,25 @@ class LocalSnap(unittest.TestCase):
         players = snap.call(self.url + "/dev/players")
         self.assertEqual([(p["label"], p["fighter_id"]) for p in players], [("DEV", "dev-tester")])
         keeper.tick()
-        deadline = time.monotonic() + 120
-        while keeper.summary()["you"]["state"] != "ring":  # a house trenchie yields a seat at its life boundary
-            self.assertLess(time.monotonic(), deadline, "never reached the ring")
-            keeper.tick()
-            time.sleep(0.3)
+        self.dev.step(12)
+        keeper.tick()
+        self.assertEqual(keeper.summary()["you"]["state"], "ring")
         pushed = keeper.intent({"focus": "nearest", "loot": "nearest", "sig": "auto"})
         self.assertEqual(pushed["state"], "accepted", pushed)
+        self.dev.step(10)  # the advertised 0.5 sim-second order spacing
         ended = keeper.intent({"leave": True})
         self.assertEqual(ended["state"], "accepted", ended)
-        stop = threading.Event()
-        beat = threading.Thread(target=lambda: [keeper.tick() or time.sleep(0.3) for _ in iter(stop.is_set, True)], daemon=True)
-        beat.start()
-        try:
-            result = keeper.result(300)
-        finally:
-            stop.set()
-            beat.join(10)
+        arena = self.dev.round.arena
+        while arena.sim.state['tick'] < 1201:
+            self.dev.step(min(20, 1201 - arena.sim.state['tick']))
+            keeper.tick()
+        result = keeper.result(0)
         self.assertTrue(result["signed"] and result["completed"], result)
         self.assertEqual((result["dev"], result["chain_result"]), (True, False))
         self.assertEqual(result["lives"][0]["prediction_lock"], "prediction")
         self.assertEqual(result["public_prediction_row"], "matches your private receipt")
+
+    test_join_predicts_fights_leaves_and_reads_a_signed_result.manual_clock = True
 
 
 class DevHostFlag(unittest.TestCase):

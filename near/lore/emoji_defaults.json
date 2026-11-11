@@ -1,0 +1,54 @@
+{
+ "about": "Each temperament's default emoji set, used by a persona sheet without its own game.emoji (rules: near/lore/emoji.py).",
+ "version": 1,
+ "sets": {
+  "Sunny": [
+   "😄",
+   "☀️",
+   "🌈",
+   "🎉",
+   "😎",
+   "🤙"
+  ],
+  "Deadpan": [
+   "😐",
+   "🙄",
+   "🫠",
+   "🗿",
+   "☕",
+   "🧊"
+  ],
+  "Earnest": [
+   "🙏",
+   "💪",
+   "🫡",
+   "📣",
+   "✊",
+   "🤝"
+  ],
+  "Gruff": [
+   "😤",
+   "💢",
+   "👊",
+   "🔥",
+   "🪓",
+   "🐗"
+  ],
+  "Serene": [
+   "😌",
+   "🌊",
+   "🍃",
+   "🧘",
+   "🌙",
+   "🪷"
+  ],
+  "Restless": [
+   "⚡",
+   "🏃",
+   "🌀",
+   "😵‍💫",
+   "🐇",
+   "🚀"
+  ]
+ }
+}

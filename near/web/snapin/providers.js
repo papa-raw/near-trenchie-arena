@@ -1,4 +1,4 @@
-/* providers.js: the login doors' network calls (W2 spike, task r3-snapin-screens).
+/* providers.js: the login doors' network calls (W2 spike).
  *
  * A classic script, no build step. In a page it sets window.SnapProviders; under node
  * it is module.exports. Every function returns a Promise of a plain object and never
@@ -28,7 +28,7 @@
   var OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
   var OPENROUTER_AUTH = 'https://openrouter.ai/auth';
   // Cheap, long-lived default; the caller may pass {model}. UNVERIFIED that it is live on the day of play.
-  var OPENROUTER_MODEL = 'openai/gpt-4o-mini';
+  var OPENROUTER_MODEL = 'openai/gpt-6-luna';   // current and cheap on openrouter.ai's model list, read 2026-11-11
   var HI_PROMPT = 'Say hi in five words.';
   var VERIFIER_KEY = 'trenchie.snap.orVerifier';
   var TIMEOUT_MS = 20000;

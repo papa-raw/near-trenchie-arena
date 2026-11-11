@@ -120,6 +120,14 @@
     "tag": "Warrior",
     "loadout": "rares",
     "temperament": "Gruff",
+    "emoji": [
+      "🌾",
+      "🚜",
+      "👊",
+      "🛡️",
+      "😠",
+      "🌽"
+    ],
     "voice": [
       "Off my rows.",
       "Harvest Quake. Reap it.",

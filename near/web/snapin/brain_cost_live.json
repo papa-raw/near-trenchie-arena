@@ -1,0 +1,16 @@
+{
+ "model": "deepseek-ai/DeepSeek-V4.1-Flash-1017 on NEAR AI Cloud",
+ "sim_minutes": 6,
+ "calls": {
+  "plan": 25,
+  "line": 35,
+  "prediction": 3,
+  "tell": 0
+ },
+ "metered_usd": 0.010446,
+ "usd_per_hour": 0.1045,
+ "per_call_usd": {
+  "mean": 0.000166
+ },
+ "basis": "one step per 5 s; a hit every ~10 s (live DEV crowd rhythm), a KO every 2 min; plan rewrites at most every 20 s on hits, plus on low hp, a KO and a refused plan; lines at most every 10 s; the next life's prediction once per life"
+}

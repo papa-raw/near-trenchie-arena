@@ -33,6 +33,8 @@ def events_of(record):
             game.enqueue(sim.Input(**value))
         elif kind == "cancel_spawn":
             replay.cancel_spawns(game, value)
+        elif kind == "cancel_loadout":
+            replay.cancel_loadouts(game, value)
         elif kind == "retire":
             game.state["fighters"].pop(value, None)
             game.state["inputs"] = [r for r in game.state["inputs"] if r["fighter_id"] != value]

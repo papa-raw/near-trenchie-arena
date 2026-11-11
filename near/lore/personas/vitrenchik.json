@@ -120,6 +120,14 @@
     "tag": "Vitrenchik",
     "loadout": "commons",
     "temperament": "Earnest",
+    "emoji": [
+      "🤓",
+      "🔧",
+      "🧪",
+      "💡",
+      "📐",
+      "🦄"
+    ],
     "voice": [
       "Your chain does 7 tps on a good day.",
       "Tinker Coil: the more of you, the better it works.",

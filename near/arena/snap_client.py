@@ -8,13 +8,17 @@ from urllib.parse import urlencode, urlsplit
 
 from room.ledger import sealed_hash
 from room.policy import canonical_bytes, digest, validate
+try:
+    from .battle_protocol import check_request as check_battle_request, check_receipt as check_battle_receipt, KINDS as BATTLE_KINDS, REQUEST_DOMAIN
+except ImportError:
+    from battle_protocol import check_request as check_battle_request, check_receipt as check_battle_receipt, KINDS as BATTLE_KINDS, REQUEST_DOMAIN
 
 _BINDING = ("context", "grant_id", "session_key_id", "member_id", "nft_token_id",
             "persona_digest", "slot_id", "generation")
 # Joint member-read contract: the signed request expires within15seconds.
 _MEMBER_READ_TTL_MS = 15_000
 _CONTROL = {"observe": "ObserveRequest", "intent": "IntentRequest", "prediction": "PredictionRequest",
-            "renew": "RenewRequest", "leave": "LeaveRequest"}
+            "renew": "RenewRequest", "leave": "LeaveRequest", "behaviour": "BattleRequest", "speech": "BattleRequest"}
 
 
 class SnapTransport(Protocol):
@@ -78,7 +82,7 @@ class SnapClient:
         if isinstance(value, dict) and value.get("type") == "error":
             validate("Error", value)
             raise SnapRefusal(value["code"])
-        validate(name, value)
+        (check_battle_receipt(value) if name == 'BattleReceipt' else validate(name, value))
         if value.get("context") != (self._context if context is None else context):
             raise SnapRefusal("context_mismatch")
         return deepcopy(value)
@@ -107,7 +111,7 @@ class SnapClient:
 
     def _signed(self, name: str, value: dict) -> dict:
         value["signature"] = self._sign(canonical_bytes(value, exclude=("signature",)))
-        validate(name, value)
+        (check_battle_request(value) if name == 'BattleRequest' else validate(name, value))
         return value
 
     def manifest(self) -> dict:
@@ -263,7 +267,8 @@ class SnapClient:
     def control(self, kind: str, payload: dict, *, life_id: str | None = None) -> dict:
         if self._connection is None or kind not in _CONTROL:
             raise SnapRefusal("proof_required")
-        request = dict(**self._binding(), domain="room.prediction.v1" if kind == "prediction" else "room.control.v1",
+        domain = REQUEST_DOMAIN if kind in BATTLE_KINDS else "room.prediction.v1" if kind == "prediction" else "room.control.v1"
+        request = dict(**self._binding(), domain=domain,
                        sequence=str(self._sequence), life_id=life_id, kind=kind, payload=deepcopy(payload))
         if self._pending is None:
             request = self._signed(_CONTROL[kind], request)
@@ -271,10 +276,13 @@ class SnapClient:
         elif canonical_bytes(request) != canonical_bytes(self._pending[0], exclude=("signature",)):
             raise SnapRefusal("request_conflict")
         request, raw = self._pending
-        reply = self._verified("Receipt", self._transport.frame(self._connection, raw))
+        reply = self._verified("BattleReceipt" if kind in BATTLE_KINDS else "Receipt", self._transport.frame(self._connection, raw))
         expected = dict(grant_id=request["grant_id"], session_key_id=request["session_key_id"],
-            sequence=request["sequence"], message_domain=request["domain"],
-            request_digest=digest(request, exclude=("signature",)))
+            sequence=request["sequence"], request_digest=digest(request, exclude=("signature",)))
+        if kind in BATTLE_KINDS:
+            expected.update(self._binding(), kind=kind, life_id=life_id)
+        else:
+            expected['message_domain'] = request['domain']
         if any(reply[key] != value for key, value in expected.items()):
             raise SnapRefusal("context_mismatch")
         if kind == "prediction" and reply["state"] == "accepted":

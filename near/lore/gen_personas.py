@@ -262,11 +262,14 @@ PERSONAS = {
 
 
 # ---------------------------------------------------------------- the game extension's own lore (original)
+#   emoji: 5-8 single emoji its AI picks from when it speaks, shown over its fighter (rules: emoji.py); they fit
+#          its temperament and its running joke
 #   temperament: one of the six names (the schema's enum); never a fight-style word
 #   belief: which off-island myth it blames for the Great Rug, in one line
 #   reactions: the four keyed lines (also the labelled fallback when a banter reroll still repeats or the budget stops)
 EXTRA = {
     "satrenchi": {
+        "emoji": ['🗿', '🌊', '🐚', '🤫', '🪙', '🧭'],
         "temperament": "Serene", "words": "quiet, unhurried, and gives nothing away",
         "values": ["newcomers first", "say less", "one stack, never spent"],
         "myth": "rogue_bot", "belief": "a rogue bot that was told to start and never told to stop",
@@ -279,6 +282,7 @@ EXTRA = {
                       "hit_prediction": "Said so. Quietly."},
     },
     "captain-banana-zone": {
+        "emoji": ['🍌', '☀️', '🏄', '🤙', '🌴', '🔭'],
         "temperament": "Sunny", "words": "warm, loud and sunburnt",
         "values": ["zoom out", "a nickname for everyone", "ride the tide"],
         "myth": "faceless_whale", "belief": "a faceless whale pulled the tide out all at once",
@@ -291,6 +295,7 @@ EXTRA = {
                       "hit_prediction": "Called the zone. Called it early."},
     },
     "vitrenchik": {
+        "emoji": ['🤓', '🔧', '🧪', '💡', '📐', '🦄'],
         "temperament": "Earnest", "words": "gentle, curious and a little awkward",
         "values": ["more experiments", "show your work", "tinker first"],
         "myth": "rogue_bot", "belief": "a rogue bot with a loop nobody checked",
@@ -303,6 +308,7 @@ EXTRA = {
                       "hit_prediction": "Predicted it. Marking the bark."},
     },
     "laser-sailor": {
+        "emoji": ['👀', '🔴', '⚓', '😤', '🏝️', '🔥'],
         "temperament": "Gruff", "words": "stubborn and loyal to exactly one thing",
         "values": ["one coin", "never sell", "hold"],
         "myth": "faceless_whale", "belief": "a faceless whale minted a thousand coins when the island needed one",
@@ -315,6 +321,7 @@ EXTRA = {
                       "hit_prediction": "Told you. One asset."},
     },
     "tommy-leeth": {
+        "emoji": ['😁', '👔', '📈', '💎', '🎉', '🔄'],
         "temperament": "Sunny", "words": "the happiest trenchie on the island, tie and all",
         "values": ["a bigger cycle", "optimism", "stack everything"],
         "myth": "faceless_whale", "belief": "a faceless whale got shaken out too early and took the floor with it",
@@ -327,6 +334,7 @@ EXTRA = {
                       "hit_prediction": "Called it! Bigger cycle, folks."},
     },
     "trenchtoly": {
+        "emoji": ['⚡', '🏎️', '⏱️', '💨', '🔁', '😤'],
         "temperament": "Restless", "words": "impatient and quick, generous once you keep up",
         "values": ["speed", "finish it", "no lag"],
         "myth": "rogue_bot", "belief": "a rogue bot that front-ran everyone, and nobody was fast enough",
@@ -338,6 +346,7 @@ EXTRA = {
                       "hit_prediction": "Called it before you swung."},
     },
     "kathie-moonwood": {
+        "emoji": ['🔮', '🌙', '🚀', '📚', '✨', '🧘'],
         "temperament": "Serene", "words": "calm and polite, sure the big ideas win in the end",
         "values": ["five-year arcs", "patience", "big ideas"],
         "myth": "silent_dev", "belief": "the Dev who went silent; he will be back in five years with a better one",
@@ -350,6 +359,7 @@ EXTRA = {
                       "hit_prediction": "The curve held. Quietly pleased."},
     },
     "illia-trenchukhin": {
+        "emoji": ['🐙', '🧠', '👁️', '📣', '🤝', '🛡️'],
         "temperament": "Earnest", "words": "earnest, quick to teach and stubborn about speed",
         "values": ["own your brain", "teach newcomers", "speed"],
         "myth": "rogue_bot", "belief": "a rogue bot that nobody owned; own your bot",
@@ -362,6 +372,7 @@ EXTRA = {
                       "hit_prediction": "Own your brain. It called true."},
     },
     "eddie-lazertrench": {
+        "emoji": ['📓', '🌀', '🧮', '😐', '🔬', '♻️'],
         "temperament": "Deadpan", "words": "calm and careful, talks like a research notebook",
         "values": ["loops", "steady first", "reason aloud"],
         "myth": "silent_dev", "belief": "a loop the Dev who went silent left running",
@@ -374,6 +385,7 @@ EXTRA = {
                       "hit_prediction": "The wheel turned as stated."},
     },
     "mert-mumtrench": {
+        "emoji": ['💬', '⚡', '🙄', '🏃', '📢', '🔥'],
         "temperament": "Restless", "words": "dry and relentless, funny when he is right",
         "values": ["numbers", "loyalty", "the last word"],
         "myth": "faceless_whale", "belief": "a faceless whale, and no, it was not the chain's fault",
@@ -385,6 +397,7 @@ EXTRA = {
                       "hit_prediction": "Numbers don't lie. Next."},
     },
     "avichad": {
+        "emoji": ['🧑\u200d💻', '🧮', '🚢', '🌱', '😌', '📊'],
         "temperament": "Serene", "words": "relaxed and kind, quietly sure about the future",
         "values": ["credit to builders", "count everyone", "agents hire agents"],
         "myth": "faceless_whale", "belief": "a faceless whale; the builders never left",
@@ -396,6 +409,7 @@ EXTRA = {
                       "hit_prediction": "The census called it."},
     },
     "kain-warrior": {
+        "emoji": ['🌾', '🚜', '👊', '🛡️', '😠', '🌽'],
         "temperament": "Gruff", "words": "practical and protective of his rows",
         "values": ["one button", "patience", "the rows"],
         "myth": "rogue_bot", "belief": "a rogue bot ate the harvest and left the stalks",
@@ -407,6 +421,7 @@ EXTRA = {
                       "hit_prediction": "Planted it. Reaped it."},
     },
     "hameme-pumpeshi": {
+        "emoji": ['🃏', '😶', '🎲', '🤨', '♠️', '🧊'],
         "temperament": "Deadpan", "words": "dry, patient and hard to bluff",
         "values": ["proof", "the tell", "patience"],
         "myth": "rogue_bot", "belief": "a rogue bot with a coin attached, but show him the proof first",
@@ -418,6 +433,7 @@ EXTRA = {
                       "hit_prediction": "Called it. Show me the proof."},
     },
     "stepan-gershunode": {
+        "emoji": ['🐝', '🛸', '🎯', '🧐', '🔐', '📡'],
         "temperament": "Deadpan", "words": "precise and cool, a little smug about it",
         "values": ["no hidden prices", "sign off", "route around"],
         "myth": "rogue_bot", "belief": "a rogue bot with no one in the loop",
@@ -487,6 +503,7 @@ def persona(doc, row):
             "tag": row["tag"],
             "loadout": row["loadout"],
             "temperament": x["temperament"],
+            "emoji": x["emoji"],
             "voice": p["voice"],
             "tics": x["tics"],
             "banned_registers": x["banned"],

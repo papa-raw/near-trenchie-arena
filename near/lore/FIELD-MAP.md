@@ -37,6 +37,7 @@ Version 2: the arena's own game block. A sheet that says version 1 is refused. P
 | `name`, `tag` | the full name on the card; the short tag over the head and in the feed (one word, except Banana Zone) |
 | `loadout` | house sheets only: `rares` (three rares plus the legendary trinket) or `commons` (the legendary plus three commons). Seven each. |
 | `temperament` | one of six: Sunny, Deadpan, Earnest, Gruff, Serene, Restless. None is a fight-style word. |
+| `emoji` | 5 to 8 single emoji its AI picks from when it speaks, one per line; the picked one floats over its fighter for about 3 s and leads its line in the ticker. They fit its temperament and its running joke. Required on the 14 house sheets. A creator's sheet may leave it out: it then uses its temperament's default set (`emoji_defaults.json`), and its lines say so. Rules: `emoji.py`. |
 | `voice` | three sample lines, at most 60 characters each |
 | `tics`, `banned_registers`, `never_hooks` | habits, registers it never uses, topics it never raises |
 | `belief` | `{myth, line}`: which off-island myth it blames for the Great Rug (`silent_dev`, `faceless_whale`, `rogue_bot`). Never a trenchie. |
@@ -45,7 +46,7 @@ Version 2: the arena's own game block. A sheet that says version 1 is refused. P
 | `cosmetics` | palette ids, the named legendary (`id`, `name`, `reskin_of`, `serial`), the starter kit, the signature piece. A declaration, never an inventory grant: the chain owns the real bag. |
 | `reactions` | four keyed lines: `ko_by_rival`, `lost_legendary`, `missed_prediction`, `hit_prediction`. They are also the labelled fallback when a banter reroll still repeats or the budget stops. |
 
-The runtime sends `temperament`, `tics`, `never_hooks`, `banned_registers`, `belief`, the rivalries and `voice` in the prompt. The checker caps that rendering at 600 characters, about 150 tokens (the ratio is an estimate).
+The runtime sends `temperament`, `tics`, `never_hooks`, `banned_registers`, `belief`, the rivalries, `voice` and the emoji set in the prompt. The checker caps that rendering at 600 characters, about 150 tokens (the ratio is an estimate).
 
 ## The content digest
 

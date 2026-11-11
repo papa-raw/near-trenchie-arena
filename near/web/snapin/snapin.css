@@ -33,3 +33,15 @@ input::placeholder,textarea::placeholder{color:#5b4b39;opacity:1}
 @media(max-width:600px){.swatches{grid-template-columns:repeat(3,1fr)}.persona-card{max-width:100%}}
 .row.quirks>*{flex:0 1 auto;white-space:nowrap}.row.quirks button{min-height:40px;padding:8px 12px}
 @media(min-width:601px){.split>div:first-child{align-self:start}.split>div:first-child .portrait,.split>div:first-child .desktop-portrait{position:sticky;top:12px}}
+.acct{font:700 15px/1.3 'Space Mono',monospace;overflow-wrap:anywhere;word-break:break-all}
+.join-steps{list-style:none;margin:12px 0 4px;padding:0;display:grid;gap:6px}.join-steps li{opacity:.55}.join-steps li.done{opacity:1}.join-steps li.now{opacity:1;font-weight:700}
+.in-banner{margin:10px 0 4px;padding:8px 12px;border:2px solid #2a2622;border-radius:10px;background:#9fdcc5;font-weight:700;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.chat{display:grid;gap:6px}.chat .field{margin-top:4px}.chat textarea{height:72px}.chat.compact textarea{height:38px}
+.chat-row{display:flex;align-items:center;justify-content:space-between;gap:10px}.chat-row .chat-send{width:auto;min-width:140px;margin:0}
+.chat-reply{font:20px/1.25 'Lilita One';margin-top:8px}.chat-receipt{font:12px/1.45 'Space Mono';color:#5b5145;overflow-wrap:anywhere}.chat-receipt.refused{color:#7a2e22;font-weight:700}
+.chat-fixes{margin:4px 0 0;padding-left:18px;font:12px/1.45 'Space Mono';color:#7a2e22}
+.chat-turns{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px;border-top:1px dashed #c9bc98;padding-top:8px}.chat-turns li{font:13px/1.4 'Space Mono';overflow-wrap:anywhere}.chat-turns .who{font-weight:700;margin-right:6px}.chat-turns .trenchie{font-family:'Lilita One';font-size:16px}
+@media(max-width:600px){.textlink{min-height:44px;padding:10px 12px}.checks input{width:24px;height:24px}.checks label{min-height:44px}}
+button.textlink{min-height:44px}   /* a thumb-sized target everywhere; beats the 36 px rule above */
+.checks input{flex:0 0 24px;min-width:24px;width:24px;height:24px}.checks label{align-items:flex-start}   /* the box never shrinks beside a long label */
+.chat-door p{margin:6px 0 0}.chat-door a{display:inline-block;min-height:44px;padding:12px 0;font-weight:700}   /* the door states: a heading and one line, the link a 44 px target like every text link */

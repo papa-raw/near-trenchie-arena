@@ -4,8 +4,8 @@ import { decode } from './codec.mjs';
 import { TICK_MS } from './buffer.mjs';
 
 export class BudgetReplay {
-  constructor(record, buffer, { crowd = 0, onMetadata = () => {} } = {}) {
-    this.onMetadata = onMetadata; this.metadataIndex = 0;
+  constructor(record, buffer, { crowd = 0, teleN = 0, onMetadata = () => {} } = {}) {
+    this.onMetadata = onMetadata; this.metadataIndex = 0; this.teleN = teleN;
     this.record = record; this.buffer = buffer; this.crowd = crowd; this.start = null; this.index = 0;
   }
   pump(now) {
@@ -22,9 +22,26 @@ export class BudgetReplay {
       });
       // Preserve the recorded stream's events, but avoid synthetic KO/respawn hiding bodies in the fixed-density view.
       snap.events = snap.events.filter((e) => e.kind !== 'ko' && e.kind !== 'respawn');
+      if (this.teleN) snap.objects = snap.objects.concat(stressTelegraphs(this.teleN, snap.tick));
       this.buffer.push(snap, this.start + this.index * TICK_MS); this.index++;
     }
   }
+}
+
+export const STRESS_TELE_TICKS = 40;   // each stress telegraph lives 2 s, then a fresh one replaces it (create/dispose churn)
+/** At least `n` extra live telegraphs for the budget scene (&tele_n=n): lobbed circles of 1.2 to 4 tiles (the most candles)
+ * and beam lines, spread over the ring, staggered so they start and land at different ticks. View-only stress: the sim and
+ * the recording are untouched. */
+export function stressTelegraphs(n, tick) {
+  const out = [];
+  for (let j = 0; j < n; j++) {
+    const phase = Math.floor((j * STRESS_TELE_TICKS) / n), cycle = Math.floor((tick + phase) / STRESS_TELE_TICKS);
+    const resolveAt = cycle * STRESS_TELE_TICKS - phase + STRESS_TELE_TICKS, key = 'stress-tele-' + j + '-' + cycle;
+    const a = j * 2.399, r = 2500 + (j % 5) * 1000, x = Math.round(Math.cos(a) * r), y = Math.round(Math.sin(a) * r);
+    if (j % 3 === 2) out.push({ key, kind: 'beam', x, y, angle: (j * 47) % 360, range: 4500, width: 700, resolveAt });
+    else out.push({ key, kind: 'lob', x: 0, y: 0, tx: x, ty: y, radius: 1200 + (j % 4) * 933, resolveAt });
+  }
+  return out;
 }
 
 /** The same spark geometry/material as the arena effects, held at the prescribed 150 live shapes. */

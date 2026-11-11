@@ -6,9 +6,9 @@ is an in-process **testnet mock**. It has no RPC client, transaction signer,
 network request or payment collection. It does not establish deployed wallet or
 chain interoperability.
 
-Install `room/requirements.txt` and `near/onboarding/requirements.txt`, then run
+Install `near/requirements.txt` (it includes `near/onboarding/requirements.txt`), then run
 `python3 -B near/onboarding/test_arrival.py Arrival` from the repository root.
-`make -C near test-arrival` selects the same four new cases. Normal source
+`(cd near && make test-arrival)` selects the same four new cases. Normal source
 checkouts must include the tracked `room/` copy.
 
 ## Runtime order

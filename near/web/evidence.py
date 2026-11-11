@@ -39,7 +39,7 @@ def read_evidence(directory: Path | None) -> dict:
         return pending
     except (OSError, ValueError, TypeError, KeyError, IndexError):
         return dict(state='unavailable', chain_transaction=None, predictions=[],
-                    message='Local archive could not be checked. Run make -C near demo again.')
+                    message='Local archive could not be checked. Run (cd near && make demo) again.')
 
 
 def _public_prediction(row: dict) -> dict:

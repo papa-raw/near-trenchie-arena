@@ -100,7 +100,8 @@ class SnapCold(unittest.TestCase):
         public = scratch / "public"
         (public / "near/arena").mkdir(parents=True)
         shutil.copytree(ROOT / "room", public / "room", ignore=shutil.ignore_patterns("__pycache__"))
-        shutil.copy2(ROOT / "near/arena/snap_client.py", public / "near/arena/snap_client.py")
+        for name in ("snap_client.py", "battle_protocol.py"):
+            shutil.copy2(ROOT / "near/arena" / name, public / "near/arena" / name)
         owner = scratch / "owner"
         owner.mkdir()
         (owner / "SNAP.md").write_text(snap)

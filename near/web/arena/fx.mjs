@@ -4,9 +4,23 @@
 import * as THREE from 'three';
 import { milliToWorld } from './frame.mjs';
 import { TICK_MS } from './buffer.mjs';
+import { makeTelegraph, updateTelegraph, disposeTelegraph, telegraphHitArea, TELE_STYLES, TELE_DEFAULT } from './telegraph.mjs';
+// The telegraph look: c (red candles, Pat's pick) by default; ?tele=a|b for the other drafts, ?tele=old for the earlier
+// flat danger shape. An unknown value keeps the default.
+export const teleLook = (search) => { try { const v = new URLSearchParams(search).get('tele'); return v === 'old' || (v !== null && Object.hasOwn(TELE_STYLES, v)) ? v : TELE_DEFAULT; } catch { return TELE_DEFAULT; } };
+const TELE_LOOK = teleLook(globalThis.location?.search ?? '');
+// The hit area a telegraph actually draws, for either look: shape (circle|ring|cone|line), radius in tiles, cone arc in radians
+export function hitArea(m) {
+  if (m.userData.shader) return telegraphHitArea(m);
+  const g = m.geometry, P = g.parameters;
+  const shape = g.type === 'RingGeometry' ? 'ring' : g.type === 'PlaneGeometry' ? 'line' : P.thetaLength < 2 * Math.PI - 1e-9 ? 'cone' : 'circle';
+  return { shape, r: shape === 'line' ? P.width : (P.outerRadius ?? P.radius), arc: shape === 'cone' ? P.thetaLength : null, style: 'old' };
+}
+const dropTele = (m) => { if (m.userData.shader) disposeTelegraph(m); else { m.geometry.dispose(); m.material.dispose(); } };
 
 export const DANGER = '#E84855';             // the one reserved danger hue: outside p01-p16, for telegraphs and live hazards only
 export const EFFECT_CAP = 150;
+export const TELE_POOL = 8;                  // spare telegraphs kept per shape and size
 // signature shapes, from the rules table (ranges in tiles)
 const SIG_SHAPE = {
   beam_sweep: { shape: 'cone', r: 4.5, arc: 60 }, blink_strike: { shape: 'circle', r: 1.2, at: 'target' }, shockwave: { shape: 'ring', r: 3 },
@@ -18,11 +32,12 @@ const dangerMat = (o = 0.4) => new THREE.MeshBasicMaterial({ color: DANGER, tran
 const lerp = (a, b, k) => a + (b - a) * k;
 
 export class Effects {
-  constructor(scene, LOOK3, ITEMS, itemRenderer, details = null) {
+  constructor(scene, LOOK3, ITEMS, itemRenderer, details = null, look = null) {
     this.details = details; this.warnedMetadata = false;
     this.scene = scene; this.LOOK3 = LOOK3; this.ITEMS = ITEMS; this.itemRenderer = itemRenderer;
-    this.tele = new Map(); this.proj = new Map(); this.floor = new Map(); this.bursts = []; this.marks = new Map();
-    this.counts = { effects: 0, peak: 0 };
+    this.tele = new Map(); this.telePool = new Map(); this.proj = new Map(); this.floor = new Map(); this.bursts = []; this.marks = new Map();
+    this.counts = { effects: 0, peak: 0, telePeak: 0 };
+    this.teleLook = look || TELE_LOOK;
     this.seenFirst = new Map();               // telegraph key -> first tick seen (the fill runs from there to resolveAt)
     this.crown = null;
     this.shake = { trauma: 0 };
@@ -66,7 +81,8 @@ export class Effects {
       const ang = Math.atan2(c.y - f.f.y, c.x - f.f.x) * 180 / Math.PI;
       this.telegraph(key, liveT, { shape: sig.shape, x: s.x, y: s.y, angle: ang, r: sig.r, arc: sig.arc, from: this.first(key, rt), to: c.resolveAt }, rt);
     }
-    for (const [key, m] of this.tele) if (!liveT.has(key)) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); this.tele.delete(key); this.seenFirst.delete(key); }
+    for (const [key, m] of this.tele) if (!liveT.has(key)) { this.scene.remove(m); this.releaseTele(m); this.tele.delete(key); this.seenFirst.delete(key); }
+    this.counts.telePeak = Math.max(this.counts.telePeak, this.tele.size);
     for (const [key, m] of this.proj) if (!liveP.has(key)) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); this.proj.delete(key); this.seenFirst.delete(key); }
 
     // loot on the floor, with its tier glow and an expiry that thins the ring
@@ -87,15 +103,24 @@ export class Effects {
   telegraph(key, live, t, rt) {
     live.add(key); let m = this.tele.get(key);
     const geometryKey = [t.shape, t.r, t.arc, t.width].join(':');
-    if (m && m.userData.geometryKey !== geometryKey) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); m = null; }
-    if (!m) { m = this.teleMesh(t); m.userData.geometryKey = geometryKey; this.tele.set(key, m); }
-    if (t.shape === 'line' || t.shape === 'cone') m.rotation.z = -(t.angle || 0) * Math.PI / 180;
+    if (m && m.userData.geometryKey !== geometryKey) { this.scene.remove(m); this.releaseTele(m); m = null; }
+    if (!m) { m = this.telePool.get(geometryKey)?.pop() || this.teleMesh(t); if (!m.parent) this.scene.add(m); m.userData.geometryKey = geometryKey; m.userData.shape = { shape: t.shape, r: t.r, arc: t.arc, width: t.width }; this.tele.set(key, m); }
     const p = Math.min(1, Math.max(0, (rt - t.from) / Math.max(1, t.to - t.from)));
+    if (m.userData.shader) { updateTelegraph(m, p, t.shape === 'line' || t.shape === 'cone' ? t.angle : 0, rt * TICK_MS / 1000); const w = milliToWorld(t.x, t.y, 0.03); m.position.set(w.x, w.y, w.z); return; }
+    if (t.shape === 'line' || t.shape === 'cone') m.rotation.z = -(t.angle || 0) * Math.PI / 180;
     m.material.opacity = 0.2 + 0.5 * p * p + (p > 0.7 ? 0.12 * Math.sin(rt * 5) : 0); // slow start so a viewer sees it begin, pulse in the last stretch
     const w = milliToWorld(t.x, t.y, 0.03); m.position.set(w.x, w.y, w.z);
   }
 
+  // An expired telegraph waits in a small pool by shape and size: a new one of the same shape takes it instead of building a
+  // shader material and a candle mesh again (a busy ring starts several a second). Beyond TELE_POOL a shape's spares are freed.
+  releaseTele(m) {
+    const k = m.userData.geometryKey, list = this.telePool.get(k) || [];
+    if (list.length < TELE_POOL) { list.push(m); this.telePool.set(k, list); } else dropTele(m);
+  }
+
   teleMesh(t) {
+    if (this.teleLook !== 'old') { const g = makeTelegraph(t, this.teleLook); g.userData.shader = true; this.scene.add(g); return g; }
     let geo;
     if (t.shape === 'line') { geo = new THREE.PlaneGeometry(t.r, t.width); geo.translate(t.r / 2, 0, 0); }
     else if (t.shape === 'cone') geo = new THREE.CircleGeometry(t.r, 28, -(t.arc * Math.PI / 360), t.arc * Math.PI / 180);

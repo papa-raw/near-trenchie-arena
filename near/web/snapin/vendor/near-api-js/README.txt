@@ -12,7 +12,8 @@ near-api-js 7.3.1
   tgz sha1    03b79f5c83fde1c2ca55ba2b1aea0084bbc33798 (npm dist.shasum)
   Ships ESM + CJS only (lib/index.js, lib/index.cjs), NO browser/IIFE bundle, so esbuild was used.
 
-@hot-labs/near-connect 0.12.0 (the wallet selector; wallet list comes from its manifest at run time)
+@hot-labs/near-connect 0.12.0 (the wallet selector; wallet.js always hands it our reviewed list, ../../wallets-manifest.json,
+  never its own default list, which it would fetch unpinned from GitHub branches)
   published   2026-10-26 (npm time)
   licence     MIT
   tarball     https://registry.npmjs.org/@hot-labs/near-connect/-/near-connect-0.12.0.tgz

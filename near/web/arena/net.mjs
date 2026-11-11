@@ -4,8 +4,8 @@ import { decode } from './codec.mjs';
 import { StyleState } from './style.mjs';
 
 export class Net {
-  constructor(url, { onSnapshot, onStatus, onStyles = () => {}, onMetadata = () => {} }) {
-    this.onMetadata = onMetadata; this.styles = new StyleState(); this.onStyles = onStyles;
+  constructor(url, { onSnapshot, onStatus, onStyles = () => {}, onMetadata = () => {}, onSocial = () => {} }) {
+    this.onSocial = onSocial; this.onMetadata = onMetadata; this.styles = new StyleState(); this.onStyles = onStyles;
     this.url = url; this.onSnapshot = onSnapshot; this.onStatus = onStatus;
     this.ws = null; this.tries = 0; this.frames = 0; this.bytes = 0; this.bad = 0; this.closed = false;
     this.connect();
@@ -24,6 +24,7 @@ export class Net {
       let snap;
       try {
         const value = JSON.parse(text);
+        if (value?.type === 'spectator_social') { this.onSocial(value); return; }
         if (value?.type === 'spectator_styles') {
           const next = new StyleState(); next.map = this.styles.map; next.revision = this.styles.revision;
           next.apply(value); this.onMetadata(value); this.styles = next; this.onStyles(this.styles.map); return;
@@ -32,7 +33,7 @@ export class Net {
       } catch (e) { this.bad++; this.onStatus({ state: 'bad-frame', url: this.url, message: String(e.message || e) }); return; }
       this.onSnapshot(snap);
     };
-    ws.onclose = () => { this.onMetadata(null); this.styles = new StyleState(); this.onStyles(this.styles.map); if (!this.closed) { this.onStatus({ state: 'closed', url: this.url }); this.retry(); } };
+    ws.onclose = () => { this.onSocial(null); this.onMetadata(null); this.styles = new StyleState(); this.onStyles(this.styles.map); if (!this.closed) { this.onStatus({ state: 'closed', url: this.url }); this.retry(); } };
     ws.onerror = () => {};
   }
   retry() { this.tries++; setTimeout(() => this.connect(), Math.min(5000, 400 * 2 ** Math.min(this.tries, 4))); }

@@ -1,0 +1,15 @@
+{
+ "role": "pike-pennywhistle",
+ "look_set": "c",
+ "look": {
+  "shape": "pear",
+  "body": "p15",
+  "tone": "warm",
+  "eyes": "sleepy",
+  "brows": "none",
+  "mouth": "smile",
+  "hair": "puffs",
+  "hairCol": "p03",
+  "hat": "st-cap"
+ }
+}

@@ -75,10 +75,10 @@ const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++;
     // ---- doors: three key doors, real calls with fake keys
     await open('?mode=login'); await p.evaluate(() => localStorage.removeItem('trenchie.snapin.lastdoor'));
     await open('?mode=login');
-    await click('ai:door:NEAR AI Cloud'); await p.fill('#key', 'sk-fake-r3-nearai'); await click('ai:test');
+    await click('ai:door:NEAR AI Cloud'); await p.fill('#key', 'sk-test-key-nearai'); await click('ai:test');
     await p.waitForFunction(() => document.body.innerText.includes('Key not accepted') || document.body.innerText.includes('Call could not be made'), null, { timeout: 25000 });
     ok((await text()).includes('Key not accepted'), 'NEAR AI Cloud: real call from the browser, fake key answered 401 (Key not accepted)');
-    await open('?mode=login'); await click('ai:door:Claude'); await click('ai:credits'); await p.fill('#key', 'sk-' + 'ant-fake-r3'); await click('ai:test');
+    await open('?mode=login'); await click('ai:door:Claude'); await click('ai:credits'); await p.fill('#key', 'sk-' + 'ant-test-key'); await click('ai:test');
     await p.waitForFunction(() => document.body.innerText.includes('Key not accepted') || document.body.innerText.includes('Call could not be made'), null, { timeout: 25000 });
     ok((await text()).includes('Key not accepted'), 'Claude (Console key): real call with the opt-in header, fake key answered 401');
     await open('?mode=login'); await click('ai:door:OpenRouter');

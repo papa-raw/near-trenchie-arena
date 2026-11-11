@@ -7,7 +7,7 @@
 (function (root) {
   'use strict';
   var K = root.SKA, INK = '#2A2622';
-  var W = 340, H = 520;
+  var W = 340, H = 610;   // the bag one item a line, then the gauge below the record line, its end labels and its caption
 
   function gauge(cx, cy, r, cal) {
     var s = '', a0 = Math.PI, i;
@@ -48,17 +48,20 @@
     }
     // bag: four slot lines (items are inventory data on the persona NFT, not NFT media)
     var bag = (o.bag || []).slice(0, 4), slots = ['Weapon', 'Head', 'Body', 'Trinket'];
-    bag.forEach(function (it, i) { var cx = i % 2 ? W / 2 + 12 : 28, cy = 340 + Math.floor(i / 2) * 20; s += K.text(cx, cy, slots[i] + ' · ' + it, { fs: 11.5, wt: i === 0 ? 700 : 400 }); });
-    if (o.serials && o.serials.length) s += K.text(28, 384, o.serials.map(function (x) { return x.name + ' #' + x.n; }).join('  '), { fs: 11, wt: 700, fill: '#8A5F3C' });
+    // one item a line, trimmed to the plate's width so a long name never runs into its neighbour or off the card
+    var fit = function (t, fs, wt) { var max = W - 56, f = (wt === 700 ? '700 ' : '400 ') + fs + 'px "Space Mono"'; if (!K.tw || K.tw(t, f) <= max) return t; while (t.length > 4 && K.tw(t + '…', f) > max) t = t.slice(0, -1); return t + '…'; };
+    bag.forEach(function (it, i) { s += K.text(28, 338 + i * 19, fit(slots[i] + ' · ' + it, 11.5, i === 0 ? 700 : 400), { fs: 11.5, wt: i === 0 ? 700 : 400 }); });
+    if (o.serials && o.serials.length) s += K.text(28, 338 + 4 * 19 + 4, fit(o.serials.map(function (x) { return x.name + ' #' + x.n; }).join('  '), 11, 700), { fs: 11, wt: 700, fill: '#8A5F3C' });
     // record
-    var ry = 402;
-    s += K.text(28, ry, rec ? 'Lives ' + rec.lives + ' · KOs ' + rec.kos + (o.scars ? ' · Scars ' + o.scars : '') : 'No lives yet', { fs: 12, wt: 700 });
+    var ry = 446;
+    s += K.text(28, ry, rec ? 'Lives ' + rec.lives + ' · KOs ' + rec.kos + (o.scars ? ' · Scars ' + o.scars : '') : (o.recordUnavailable ? 'Record unavailable, retrying' : 'No lives yet'), { fs: 12, wt: 700 });   // a log that cannot be read is not a log with no lives
     s += '<path d="M28 ' + (ry + 8) + 'H' + (W - 28) + '" stroke="#C9BC98" stroke-width="1.5" stroke-dasharray="3 5"/>';
     // the boldness gauge (W23): how far the AI's spreads sit from what happened
     var cal = rec && rec.calibration != null ? rec.calibration : null;
-    s += gauge(W / 2, ry + 52, 62, cal);
-    var under = cal == null ? 'No lives scored yet' : 'Mean score ' + (rec.meanScore != null ? Number(rec.meanScore).toFixed(2) : '–') + ' · ' + rec.lives + ' lives';
-    s += K.text(W / 2, ry + 76, under, { fs: 11.5, anchor: 'middle', fill: '#4A443A' });
+    s += gauge(W / 2, ry + 90, 62, cal);   // the arc's top (ry + 28) clears the record line (ry + 8)
+    // the mean score is the ranked probability score of the AI's spreads: 0 is spot on, 1 as far off as a spread can be
+    var under = !rec ? (o.recordUnavailable ? 'The gauge waits for the record' : 'No lives scored yet') : (rec.meanScore != null ? 'Mean score ' + Number(rec.meanScore).toFixed(2) + ' (0 = spot on)' : 'No scored lives') + ' · ' + rec.lives + (rec.lives === 1 ? ' life' : ' lives');
+    s += K.text(W / 2, ry + 136, under, { fs: 11.5, anchor: 'middle', fill: '#4A443A' });   // below the reckless/careful labels (ry + 110)
     return K.svg(W, H, s, ' role="img" aria-label="' + K.esc(name) + ' persona card" style="width:100%;height:auto;max-width:' + W + 'px"');
   }
 

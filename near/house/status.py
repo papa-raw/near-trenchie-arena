@@ -29,6 +29,8 @@ def public_roster(members):
     for m in sorted(members, key=lambda m: m["persona"]):
         row = {"persona": m["persona"], "house": bool(m["house"]), "state": PUBLIC_STATES[m["state"]],
                "model": m["model"]}
+        if "id" in m:                                   # the fighter id the arena view already shows, for its cards
+            row["id"] = m["id"]
         if m["house"]:
             row["spend_today_microusd"] = m["spend_today_microusd"]
         rows.append(row)

@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import argparse
 import base64
+import errno
 import json
 import math
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -32,19 +34,57 @@ import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
+STARTUP_DEPENDENCIES = frozenset(('cryptography', 'jsonschema', 'requests'))
 sys.path[:0] = [str(ROOT)]
 try:
     from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
-except ImportError:
-    raise SystemExit("snap: needs the `cryptography` package: python3 -m pip install -r near/onboarding/requirements.txt")
-from near.arena.snap_client import SnapClient, SnapRefusal  # noqa: E402
+    from near.arena.snap_client import SnapClient, SnapRefusal  # noqa: E402
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from dev_persona import read_sheet, read_look  # noqa: E402
+    from presets import NAMES as BATTLE_NAMES  # noqa: E402
+except ModuleNotFoundError as exc:
+    if (exc.name or '').split('.')[0] not in STARTUP_DEPENDENCIES:
+        raise
+    raise SystemExit(f"Missing {exc.name}: run python3 -m pip install -r {shlex.quote(str(ROOT / 'near/requirements.txt'))}") from None
 
 DEFAULT_URL = "http://127.0.0.1:8765"
 STATE = ".snap-dev.json"
+PRESET_CHOICES = tuple(name.lower().replace(" ", "-") for name in BATTLE_NAMES) + ("brawler", "hunter", "looter", "guardian", "survivor")
 ORDER_FIELDS = ("focus", "avoid", "loot", "sig")
 DEFAULT_ORDERS = dict(focus=None, avoid=None, loot="nearest", sig="auto")
+SPEECH_INTERVAL_MS = 10000
+REFUSAL_FIXES = {
+    "prediction_closed": "Wait until state says ring, then send the intent again; use respawn to change the next life's pick.",
+    "rate_limited": "Wait 0.5 sim seconds before another order, or 10 sim seconds before another speech line; follow the host's retry tick.",
+    "stale_slot": "Run stop, then join again for fresh room authority.",
+    "proof_required": "Run stop, then join again with a fresh local session.",
+    "context_mismatch": "The host started a new round. Run stop, then join again.",
+    "version_mismatch": "Run terms, read the current version, then join with --accept-terms VERSION.",
+    "request_conflict": "Read state before sending a new command; do not change and replay an old request.",
+    "room_full": "Keep watching and retry when a seat opens.",
+    "bad_message": "Check the command flags with --help and use a fighter id from state.",
+}
+
+
+def refusal_message(code: str) -> str:
+    return code + ". " + REFUSAL_FIXES.get(code, "Read state and terms, then retry with a current room session.")
+
+
+def speech_message(speech: dict | None) -> str:
+    """Explain the speech outcome separately from whether the fighter order was accepted."""
+    if speech is None:
+        return ''
+    if speech.get('refused') == 'rate_limited':
+        return f"speech refused: wait {speech.get('retry_after_s', 10)} sim seconds, then send --say again."
+    if speech.get('refused'):
+        return "speech refused: " + str(speech['refused']) + ". Check state, then send a new --say line."
+    if speech.get('muted'):
+        return "speech muted: guard list missing; the feed shows " + str(speech.get('text', 'an emote')) + ". Ask the operator to load the guard list."
+    if speech.get('blocked'):
+        return "speech blocked: the feed shows " + str(speech.get('text', 'an emote')) + ". Change the line before sending --say again."
+    return "speech posted: " + str(speech.get('text', ''))
 
 
 def encoded(raw: bytes) -> str:
@@ -98,9 +138,16 @@ def call(url: str, method: str = "GET", body: bytes | dict | None = None, header
                 seen.update(now=int(reply.headers["X-Dev-Now"]), at=time.monotonic(), paused=reply.headers.get("X-Dev-Paused") == "1")
             return json.loads(reply.read())
     except urllib.error.HTTPError as exc:
-        return json.loads(exc.read() or b"{}")
+        try:
+            return json.loads(exc.read() or b"{}")
+        except json.JSONDecodeError:
+            raise SystemExit(f"snap: HTTP {exc.code} from the host or proxy. Check the local host and allowed route, then retry; no room action was confirmed.") from None
     except (urllib.error.URLError, ConnectionError, TimeoutError) as exc:
-        raise SystemExit(f"snap: cannot reach {url}: {getattr(exc, 'reason', exc)}. Is snap_local.py running?")
+        reason = getattr(exc, 'reason', exc)
+        denied = isinstance(reason, OSError) and reason.errno in {errno.EPERM, errno.EACCES}
+        fix = ('The operating system or network policy denied this connection. Check this runtime\'s permissions and configured proxy route.'
+               if denied else 'Check that the host is running at this address and that the network route is allowed.')
+        raise SystemExit(f"snap: cannot reach {url}: {reason}. {fix}") from None
 
 
 class Transport:
@@ -129,7 +176,10 @@ class Transport:
 
 
 def parse_spread(text: str) -> dict:
-    parts = [int(x) for x in text.split(",")]
+    try:
+        parts = [int(x) for x in text.split(",")]
+    except ValueError:
+        raise SystemExit("snap: --spread needs four whole percents, for example 40,30,20,10") from None
     if len(parts) != 4 or sum(parts) != 100 or min(parts) < 0:
         raise SystemExit("snap: --spread is four whole percents that sum to 100: chance your life ends with 1, 2, 3, 4+ KOs given at least one")
     return dict(one=parts[0] * 100, two=parts[1] * 100, three=parts[2] * 100, four_plus=parts[3] * 100)
@@ -143,28 +193,38 @@ def prediction_payload(preset: str, spread: dict, zero_pct: int) -> dict:
 class Keeper:
     """The background process: holds the grant, renews the lease, files each life's standing prediction."""
 
-    def __init__(self, args) -> None:
+    def __init__(self, args, *, transport_factory=Transport) -> None:
         self.base = args.url
         self.lock = threading.RLock()
         self.key = Ed25519PrivateKey.generate()  # this session's key: only the public half ever leaves this process
         public = encoded(self.key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw))
-        ident = call(self.base + "/dev/identity", "POST", {"name": args.name, "preset": args.preset, "public_key": public})
+        identity = {"name": args.name, "preset": args.preset, "public_key": public}
+        sheet = read_sheet(getattr(args, "sheet", None))
+        if sheet is not None:
+            identity["sheet"] = sheet
+        look = read_look(getattr(args, "look", None))
+        if look is not None:
+            identity["look"] = look
+        if getattr(args, "code", None):
+            identity["code"] = args.code
+        ident = call(self.base + "/dev/identity", "POST", identity)
         if "nft_token_id" not in ident:
             raise SystemExit("snap: " + str(ident.get("error", ident)))
         self.ident, self.token = ident, ident["nft_token_id"]
         room = ident["room_public_key"]
-        self.transport = Transport(self.base, self.token)
+        self.transport = transport_factory(self.base, self.token)
         now = self.now = self.transport.now
         self.client = SnapClient(ident["context"], self.transport, now_ms=now,
             sign_session=lambda body: encoded(self.key.sign(body)),
             verify_room=lambda key, body, sig: key == ident["key_id"] and verify_ed25519(room, body, sig),
             trusted_key_ids=(ident["key_id"],), result_context=ident["result_context"])
-        self.order = dict(preset=args.preset, spread=parse_spread(args.spread), zero=args.zero)
+        self.order = dict(preset=ident["preset"], spread=parse_spread(args.spread), zero=args.zero)
         self.life_id = None
         self.lives_seen = 0
         self.ko_seen = False
         self.last_renew = 0
         self.last_intent = 0
+        self.last_say: int | None = None
         self.errors: list[str] = []
         self.result_cache = None
         self.orders = dict(DEFAULT_ORDERS)
@@ -261,20 +321,20 @@ class Keeper:
         self.orders = merged
         return merged
 
-    def send_orders(self, me: dict, snap: dict, orders: dict, leave: bool) -> dict:
+    def send_orders(self, me: dict, snap: dict, orders: dict, leave: bool, say: str | None = None) -> dict:
         focus = orders["focus"]
         if focus == "nearest":
             others = [f for f in snap["fighters"] if f is not me and f["state"] == "ring"]
             at = (int(me["x_milli"]), int(me["y_milli"]))
             focus = min(others, key=lambda f: math.dist((int(f["x_milli"]), int(f["y_milli"])), at))["fighter_id"] if others else None
         reply = {}
-        for _ in range(40):  # the room's 2 s order spacing runs on sim time; retry while it says rate_limited
+        for _ in range(40):  # The advertised order spacing runs on sim time; retry while it says rate_limited.
             wait = (self.last_intent + self.interval_ms - self.now()) / 1000
             if wait > 0:
                 time.sleep(min(wait, 2.5))
             try:
                 reply = self.client.control("intent", dict(fighter_id=me["fighter_id"], focus=focus, avoid=orders["avoid"],
-                    loot=orders["loot"], sig=orders["sig"], leave=leave, say=None), life_id=self.life_id)
+                    loot=orders["loot"], sig=orders["sig"], leave=leave, say=say), life_id=self.life_id)
             except SnapRefusal as exc:
                 if str(exc) != "rate_limited":  # the host steps aside for the last ticks of a segment: same bytes, again shortly
                     raise
@@ -294,13 +354,29 @@ class Keeper:
             if me is None:
                 raise SystemExit("snap: you are not on the island")
             orders = self.merge_orders(body)
-            reply = self.send_orders(me, snap, orders, bool(body.get("leave")))
+            say = body.get("say")
+            speech_refusal = None
+            last_say = getattr(self, "last_say", None)
+            if say is not None and last_say is not None and self.now() - last_say < SPEECH_INTERVAL_MS:
+                speech_refusal = dict(refused="rate_limited", retry_after_s=math.ceil((SPEECH_INTERVAL_MS - self.now() + last_say) / 1000))
+                say = None
+            reply = self.send_orders(me, snap, orders, bool(body.get("leave")), say)
             self.orders_life = self.life_id
-        out = dict(state=reply["state"], applied_tick=reply.get("applied_tick"), focus=reply["resolved_focus"],
-                   loot=orders["loot"], sig=orders["sig"], leave=bool(body.get("leave")))
-        if reply["state"] != "accepted":
-            out.update(reason=reply.get("reason") or reply.get("code"))
-        return out
+            out = dict(state=reply["state"], applied_tick=reply.get("applied_tick"), focus=reply["resolved_focus"],
+                       loot=orders["loot"], sig=orders["sig"], leave=bool(body.get("leave")))
+            if speech_refusal is not None:
+                out["speech"] = speech_refusal
+            elif say is not None and reply["state"] == "accepted":
+                posted = call(self.base + "/dev/speech?fighter_id=" + self.token)
+                if posted.get("sequence") == reply.get("sequence"):
+                    out["speech"] = posted["speech"]
+                    if "refused" not in posted["speech"]:
+                        self.last_say = self.now()
+                else:
+                    out["speech"] = {"refused": "not_posted"}
+            if reply["state"] != "accepted":
+                out.update(reason=refusal_message(reply.get("reason") or reply.get("code") or "refused"))
+            return out
 
     def reapply_orders(self) -> None:
         """A new life starts with the room's default orders: put yours back once the fighter is in the ring."""
@@ -396,7 +472,7 @@ def serve_keeper(keeper: Keeper, state_path: Path, secret: str) -> None:
             except SystemExit as exc:
                 out = dict(error=str(exc))
             except SnapRefusal as exc:
-                out = dict(error="refused: " + str(exc))
+                out = dict(error="refused: " + refusal_message(str(exc)))
             data = json.dumps(out).encode()
             self.send_response(200); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
 
@@ -421,7 +497,7 @@ def daemon_main(args) -> None:
         write_state(state_path, state)
         return
     state = read_state(state_path)
-    state.update(first=first, identity=dict(id=keeper.token, label="DEV", preset=keeper.ident["preset"], account=keeper.ident["account_id"]))
+    state.update(first=first, identity=dict(id=keeper.token, label="DEV", preset=keeper.ident["preset"], account=keeper.ident["account_id"], name_notice=keeper.ident.get("name_notice")))
     write_state(state_path, state)
     serve_keeper(keeper, state_path, state["secret"])
 
@@ -445,39 +521,67 @@ def main(argv: list[str] | None = None) -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("terms")
     j = sub.add_parser("join")
-    j.add_argument("--name", required=True)
-    j.add_argument("--preset", required=True, choices=["brawler", "hunter", "looter", "guardian", "survivor"])
+    j.add_argument("--name", default="newcomer")
+    j.add_argument("--sheet", help="a checked creator persona JSON file")
+    j.add_argument("--look", help="optional exported player look JSON")
+    j.add_argument("--code", help="one-time code from the local AI door")
+    j.add_argument("--preset", required=True, choices=PRESET_CHOICES)
     j.add_argument("--accept-terms", required=True, help="the terms version you have read with `terms`")
     j.add_argument("--spread", default="40,30,20,10")
     j.add_argument("--zero", type=int, default=10, help="percent chance of a life with 0 KOs")
+    live = sub.add_parser('live', help='one connection: line commands in, JSON-line battle events out')
+    live.add_argument('--name', default='newcomer'); live.add_argument('--sheet'); live.add_argument('--look'); live.add_argument('--code')
+    live.add_argument('--preset', required=True, choices=PRESET_CHOICES)
+    live.add_argument('--accept-terms', required=True)
+    live.add_argument('--spread', default='40,30,20,10'); live.add_argument('--zero', type=int, default=10)
+    live.add_argument('--fifo', help='read commands from this private named pipe instead of stdin')
+    live.add_argument('--seconds', type=int, default=0, help='stop after this many seconds; zero keeps streaming until leave')
     sub.add_parser("state")
     i = sub.add_parser("intent")
+    i.add_argument("--say", help="one public line, at most one per 10 sim seconds")
     i.add_argument("--focus"); i.add_argument("--avoid"); i.add_argument("--loot", choices=["nearest", "ignore"])
     i.add_argument("--sig", choices=["auto", "hold", "use"]); i.add_argument("--leave", action="store_true")
     r = sub.add_parser("respawn")
-    r.add_argument("--preset", required=True, choices=["brawler", "hunter", "looter", "guardian", "survivor"])
+    r.add_argument("--preset", required=True, choices=PRESET_CHOICES)
     r.add_argument("--spread", required=True); r.add_argument("--zero", type=int, required=True)
     s = sub.add_parser("result")
     s.add_argument("--wait", type=float, default=90)
     sub.add_parser("stop")
     d = sub.add_parser("_keeper")
+    d.add_argument("--sheet"); d.add_argument("--look"); d.add_argument("--code")
     d.add_argument("--name", required=True); d.add_argument("--preset", required=True)
     d.add_argument("--accept-terms", required=True); d.add_argument("--spread", default="40,30,20,10"); d.add_argument("--zero", type=int, default=10)
     args = ap.parse_args(argv)
     state_path = Path(args.state)
 
-    if args.cmd == "terms":
+    if args.cmd == 'live':
+        from near.arena.battle_transport import LiveTransport
+        from near.arena.snap_live import run_live
+        parse_spread(args.spread)
+        if not 0 <= args.zero <= 100:
+            raise SystemExit('snap: --zero must be a whole percent from 0 to 100')
+        status = run_live(args, lambda options: Keeper(options, transport_factory=lambda base, who: LiveTransport(Transport(base, who))),
+                          refusal_fix=refusal_message)
+        raise SystemExit(status)
+    elif args.cmd == "terms":
         terms = call(args.url + "/dev/terms")
         print(json.dumps(terms))
         print(f"terms version {terms['version']}: segments are {int(terms['segment_ms']) // 1000} s, one intent every {int(terms['input_interval_ms']) / 1000:g} s, "
               f"simulated at {terms['simulation_hz']} Hz. Joining as a DEV trenchie: no wallet, no chain, no NFT. Accept with: join --accept-terms {terms['version']}")
     elif args.cmd == "join":
         parse_spread(args.spread)
+        if not 0 <= args.zero <= 100:
+            raise SystemExit("snap: --zero must be a whole percent from 0 to 100")
+        read_sheet(args.sheet)
+        read_look(args.look)
         secret = encoded(os.urandom(18))
         write_state(state_path, dict(secret=secret, url=args.url))
         proc = subprocess.Popen([sys.executable, "-I", str(Path(__file__).resolve()), "--url", args.url, "--state", str(state_path), "_keeper",
                                  "--name", args.name, "--preset", args.preset, "--accept-terms", args.accept_terms,
-                                 "--spread", args.spread, "--zero", str(args.zero)],
+                                 "--spread", args.spread, "--zero", str(args.zero)] +
+                                (["--sheet", str(Path(args.sheet).resolve())] if args.sheet else []) +
+                                (["--code", args.code] if args.code else []) +
+                                (["--look", str(Path(args.look).resolve())] if args.look else []),
                                 start_new_session=True, stdin=subprocess.DEVNULL,
                                 stdout=open(state_path.with_suffix(".log"), "ab"), stderr=subprocess.STDOUT)
         for _ in range(600):
@@ -491,6 +595,8 @@ def main(argv: list[str] | None = None) -> None:
                 lock = (first or {}).get("prediction_lock") or {}
                 print(f"joined as {state['identity']['id']} (DEV); life {first.get('life_id')} prediction {first.get('state')} "
                       f"hash {str(lock.get('prediction_hash'))[:12]}; the keeper (pid {state['pid']}) holds your seat. Next: state, intent, result.")
+                if state["identity"].get("name_notice"):
+                    print(state["identity"]["name_notice"])
                 return
             if proc.poll() is not None:
                 raise SystemExit("snap: the keeper exited; see " + str(state_path.with_suffix(".log")))
@@ -513,9 +619,17 @@ def main(argv: list[str] | None = None) -> None:
             if getattr(args, key) is not None:
                 body[key] = getattr(args, key)
         body["leave"] = args.leave
+        if args.say is not None:
+            if not 1 <= len(args.say) <= 140:
+                raise SystemExit("snap: --say needs 1 to 140 characters")
+            body["say"] = args.say
         out = keeper_call(state_path, "intent", body)
         print(json.dumps(out))
-        print(f"intent {out['state']} (applies at tick {out['applied_tick']}); focus {out['focus']} loot {out['loot']} sig {out['sig']}; orders stay until you change them")
+        message = speech_message(out.get('speech'))
+        speech_note = '; ' + message if message else ''
+        print(f"intent {out['state']} (applies at tick {out['applied_tick']}); focus {out['focus']} loot {out['loot']} sig {out['sig']}; orders stay until you change them{speech_note}")
+        if out.get('reason'):
+            print(out['reason'])
     elif args.cmd == "respawn":
         out = keeper_call(state_path, "respawn", dict(preset=args.preset, spread=args.spread, zero=args.zero))
         print(json.dumps(out))

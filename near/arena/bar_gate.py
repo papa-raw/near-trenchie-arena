@@ -2,7 +2,7 @@
 
 Run: python3 -B near/arena/bar_gate.py REPORT.json --variance 20 [--variant baseline] [--output gate.json]
 
-Every threshold is the critic's locked number. A cell that is missing, censored-only or under its
+Every threshold is the reviewer's locked number. A cell that is missing, censored-only or under its
 minimum denominator is reported as NOT MEASURED, which the bar counts as a fail. A field reads
 "within" when every gated cell is inside its limit and every required cell was measured. The builder
 never marks the bar passed: the status line says it awaits the critic.

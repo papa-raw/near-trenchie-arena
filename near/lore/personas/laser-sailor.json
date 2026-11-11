@@ -120,6 +120,14 @@
     "tag": "Sailor",
     "loadout": "commons",
     "temperament": "Gruff",
+    "emoji": [
+      "👀",
+      "🔴",
+      "⚓",
+      "😤",
+      "🏝️",
+      "🔥"
+    ],
     "voice": [
       "I have one asset and it's laser eyes.",
       "This isn't over.",

@@ -89,11 +89,11 @@ population map. All review captures wait for current fonts/images and paint.
 
 ## Focused cases
 
-Prerequisites: Python3.10+, pinned room requirements, Node20+, Playwright and
+Prerequisites: Python3.10+, pinned requirements (`near/requirements.txt`), Node20+, Playwright and
 Chromium. Install the locked browser dependency:
 
 ```sh
-python3 -m pip install -r room/requirements.txt
+python3 -m pip install -r near/requirements.txt
 npm ci --prefix near/members
 cd near/members && npx playwright install chromium
 ```
@@ -116,7 +116,7 @@ captures. No browser response or signed snapshot is substituted.
 
 Existing approved-board, recovery and presentation cases remain separately
 available in test_members.py, test_member_repair.py and test_member_presentation.py.
-`make -C near test-members-source` selects only the four source integration cases.
+`(cd near && make test-members-source)` selects only the four source integration cases.
 Set MEMBER_SHOTS to retain captures; otherwise browser cases use temporary output.
 Chromium honors an existing HTTPS_PROXY/HTTP_PROXY for the permitted local fixture;
 these cases create no proxy or network grant. All identity/wallet/signature/journal

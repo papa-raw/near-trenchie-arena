@@ -1,0 +1,15 @@
+{
+ "role": "static-sid",
+ "look_set": "c",
+ "look": {
+  "shape": "pear",
+  "body": "p12",
+  "tone": "warm",
+  "eyes": "sleepy",
+  "brows": "none",
+  "mouth": "smile",
+  "hair": "cowlick",
+  "hairCol": "p03",
+  "hat": "st-cap"
+ }
+}

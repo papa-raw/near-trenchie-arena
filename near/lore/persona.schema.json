@@ -884,6 +884,17 @@
        "$ref": "#/$defs/line"
       }
      }
+    },
+    "emoji": {
+     "type": "array",
+     "minItems": 5,
+     "maxItems": 8,
+     "items": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4
+     },
+     "description": "The emoji its AI picks from when it speaks, one per line, shown over its fighter: 5 to 8 unique single emoji that fit its temperament and voice (rules: near/lore/emoji.py). A sheet without one uses its temperament's default set (near/lore/emoji_defaults.json)."
     }
    }
   }

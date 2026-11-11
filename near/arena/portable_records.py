@@ -46,7 +46,38 @@ def _check_command(event: dict, command: dict) -> None:
         raise Refusal("bad_message")
 
 
-def _check_commands(native: dict, input_lives: list[dict]) -> None:
+def _input_key(row: dict) -> tuple[str, str, str, str]:
+    return row["kind"], str(row["tick"]), row["fighter_id"], str(row["sequence"])
+
+
+def _cancelled_spawns(native: dict) -> set[tuple[str, str, str, str]]:
+    """Find pending spawns removed by the independently replayed journal.
+
+    Commands at tick T execute during the advance from T to T+1. A retire
+    or cancel_spawn before that advance removes the spawn without starting
+    its announced life. This does not excuse a missing applied input.
+    """
+    tick = native["initial_state"]["tick"]
+    pending, cancelled, seen = {}, set(), set()
+    for command in native["commands"]:
+        kind, value = command["kind"], command["value"]
+        if kind == "input" and value["kind"] == "spawn":
+            key = _input_key(value)
+            if key in seen:
+                raise Refusal("bad_message")
+            seen.add(key)
+            pending[key] = value
+        elif kind == "advance":
+            tick += value
+            pending = {key: row for key, row in pending.items() if row["tick"] >= tick}
+        elif kind in {"retire", "cancel_spawn"}:
+            removed = {key for key, row in pending.items() if row["fighter_id"] == value}
+            cancelled.update(removed)
+            pending = {key: row for key, row in pending.items() if key not in removed}
+    return cancelled
+
+
+def _check_commands(native: dict, input_lives: list[dict]) -> set[int]:
     """Reject a rehashed public row that contradicts the archived engine input."""
     commands = [row["value"] for row in native["commands"] if row["kind"] == "input"
                 and row["value"]["kind"] in {"join", "spawn", "intent", "leave"}]
@@ -55,7 +86,8 @@ def _check_commands(native: dict, input_lives: list[dict]) -> None:
                     for row in input_lives}
     if len(actual_lives) != len(input_lives):
         raise Refusal("bad_message")
-    for event in native["sealed"]["input_events"]:
+    cancelled, omitted = _cancelled_spawns(native), set()
+    for position, event in enumerate(native["sealed"]["input_events"]):
         if event["kind"] == "prediction_lock":
             continue  # Full unsigned forecast and lock are checked by prediction_log_hash.
         kind = "spawn" if event["kind"] == "life_start" else event["kind"]
@@ -66,12 +98,15 @@ def _check_commands(native: dict, input_lives: list[dict]) -> None:
         if match is None:
             raise Refusal("bad_message")
         _check_command(event, match)
-        key = (kind, str(match["tick"]), match["fighter_id"], str(match["sequence"]))
-        if actual_lives.pop(key, None) != event["life_id"]:
+        key = _input_key(match)
+        if key in cancelled and key not in actual_lives:
+            omitted.add(position)  # Payload/life already matched the cancelled spawn.
+        elif actual_lives.pop(key, None) != event["life_id"]:
             raise Refusal("bad_message")
         commands.remove(match)
     if commands or actual_lives:
         raise Refusal("bad_message")
+    return omitted
 
 
 def _check_predictions(native: dict) -> None:
@@ -92,16 +127,19 @@ def _check_predictions(native: dict) -> None:
         raise Refusal("bad_message")
 
 
-def _events(native: dict) -> list[dict]:
+def _events(native: dict, omitted: set[int]) -> list[dict]:
     """Project effective tick order and wire hash chain, preserving every lock.
 
     Native event indices count segment events; immutable lock indices address
     the engine journal. Wire prediction rows use that existing lock index.
     Other wire rows take the next free index. A collision refuses; no lock or
     archived event is repaired, renumbered in place or re-signed here.
+    Announcements of proved cancelled spawns have no effective wire life_start;
+    their native rows and every prediction lock remain in the archive.
     """
     projected, previous_hash, previous_index = [], "0" * 64, -1
-    for source in sorted(native["sealed"]["input_events"], key=lambda row: (int(row["tick"]), int(row["index"]))):
+    sources = [row for position, row in enumerate(native["sealed"]["input_events"]) if position not in omitted]
+    for source in sorted(sources, key=lambda row: (int(row["tick"]), int(row["index"]))):
         event = deepcopy(source)
         if not 0 <= int(event["tick"]) < 1200:
             raise Refusal("recovery_pending")
@@ -122,9 +160,9 @@ def _project(native: dict) -> tuple[dict, dict]:
     if native["initial_state"]["tick"] != 0 or native["sealed"]["segment_id"] != "segment:0":
         raise Refusal("recovery_pending")
     evidence = replay_evidence(native)
-    _check_commands(native, evidence["input_lives"])
+    omitted = _check_commands(native, evidence["input_lives"])
     _check_predictions(native)
-    events = _events(native)
+    events = _events(native, omitted)
     locks = {row["payload"]["prediction_lock"]["lock_ref"] for row in events if row["kind"] == "prediction_lock"}
     if locks != set(evidence["predictions"]):
         raise Refusal("bad_message")

@@ -1,12 +1,12 @@
-"""House runtime v1 (F31): 14 house trenchies on one NEAR AI Cloud model, under the daily cap and the hard stop.
+"""House runtime v1: 14 house trenchies on one NEAR AI Cloud model, under the daily cap and the hard stop.
 
 One model serves all 14, because each trenchie is a prompt. A per-tick policy fights; the model sends
 at most one intent per ~5 s per active trenchie, plus banter, the respawn pick and the prediction.
 The sim never waits on a model: calls run on worker threads and their answers are applied on later polls.
 
-Budget (B78, prd 4.6): a daily cap per phase; at 80% of the day's cap each active trenchie slows to one
+Budget: a daily cap per phase; at 80% of the day's cap each active trenchie slows to one
 call per 30 s; at 100% calls stop until 00:00 UTC and the "autopilot" chip shows; at a cumulative $77 a
-hard stop holds until Pat releases the reserve. Every fallback says so (gate 6): nothing is silent.
+hard stop holds until Pat releases the reserve. Every fallback says so: nothing is silent.
 Every write path is under the data directory (/srv/arena/data in the container). Standard library only.
 """
 
@@ -19,8 +19,9 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 try:
-    from . import guard as guard_mod, novelty, quote
+    from . import battle as battle_mod, guard as guard_mod, novelty, quote
 except ImportError:
+    import battle as battle_mod
     import guard as guard_mod
     import novelty
     import quote
@@ -35,7 +36,8 @@ HARD_STOP_USD = 77
 SLOW_AT_PCT = 80
 BASE_INTERVAL_S = 5
 SLOW_INTERVAL_S = 30
-BANTER_INTERVAL_S = 30                # at most one line per 30 s per trenchie (B55)
+BANTER_INTERVAL_S = 10                # at most one line per 10 s per trenchie (battle mode; it was 30 s before)
+FAILING_AFTER = 3                     # this many failed calls in a row, with no success between, shows the failing chip
 MEASURED_CACHED_SHARE_PCT = 55
 
 
@@ -49,6 +51,7 @@ def cost_microusd(usage):
 
 class JsonMeter:
     """The spend counter, one small file under the data directory, replaced atomically."""
+    per_name = True                                     # it also keeps each trenchie's spend for the roster
 
     def __init__(self, path):
         self.path = Path(path)
@@ -64,9 +67,15 @@ class JsonMeter:
     def total(self):
         return self.data["total"]
 
-    def add(self, day, microusd, usage=None):
+    def today_for(self, day, who):
+        return self.data.get("names", {}).get(str(day), {}).get(who, 0)
+
+    def add(self, day, microusd, usage=None, who=None):
         with self.lock:
             self.data["days"][str(day)] = self.today(day) + microusd
+            if who is not None:                         # the per-trenchie meter the roster shows for house members
+                names = self.data.setdefault("names", {}).setdefault(str(day), {})
+                names[who] = names.get(who, 0) + microusd
             self.data["total"] += microusd
             self.data["calls"] += 1
             if usage:
@@ -82,12 +91,43 @@ class JsonMeter:
         os.replace(tmp, self.path)
 
 
+# The cap period by the UTC clock, from the hackathon's own rule dates only (rules-raw/HACKATHON.md:20-22: submission
+# deadline 2026-11-14T23:59:00Z, judging from 2026-11-16T00:00:00Z, results by 2026-11-18T23:59:00Z). The soak starts at
+# the deadline itself; judging runs through 2026-11-18T23:59:59Z.
+PERIOD_STARTS = (                     # (UTC epoch seconds, the period that starts then); "building" before the first
+    (1794700740, "soak"),             # 2026-11-14T23:59:00Z, the submission deadline (the rules' own instant)
+    (1794787200, "judging"),          # 2026-11-16T00:00:00Z
+    (1795046400, "after"),            # 2026-11-19T00:00:00Z (judging runs to 2026-11-18T23:59:59Z)
+)
+
+
+def period_at(now):
+    period = "building"
+    for start, name in PERIOD_STARTS:
+        if now >= start:
+            period = name
+    return period
+
+
 class Budget:
-    def __init__(self, meter, mode="building", clock=None):
-        if mode not in DAY_CAPS_USD:
-            raise ValueError("mode is one of %s" % sorted(DAY_CAPS_USD))
-        self.meter, self.mode, self.clock = meter, mode, clock
+    """mode "auto" (the default) follows the calendar; any period name is an explicit override, and says so."""
+
+    def __init__(self, meter, mode="auto", clock=None):
+        if mode != "auto" and mode not in DAY_CAPS_USD:
+            raise ValueError("mode is auto or one of %s" % sorted(DAY_CAPS_USD))
+        import time as _time
+        self.meter, self.clock = meter, clock or _time.time
+        self.override = None if mode == "auto" else mode
         self.last_call = {}
+
+    @property
+    def mode(self):
+        """The active cap period: the override when one was given, else the period the UTC clock is in."""
+        return self.override or period_at(self.clock())
+
+    @property
+    def source(self):
+        return "override" if self.override else "calendar"
 
     def day(self, now=None):
         return int((self.clock() if now is None else now) // 86400)
@@ -117,8 +157,11 @@ class Budget:
         self.last_call[name] = now
         return True
 
-    def charge(self, usage, now=None):
-        self.meter.add(self.day(now), cost_microusd(usage), usage)
+    def charge(self, usage, now=None, who=None):
+        if who is not None and getattr(self.meter, "per_name", False):
+            self.meter.add(self.day(now), cost_microusd(usage), usage, who)
+        else:                                           # a meter with no per-trenchie split keeps its 3-argument add
+            self.meter.add(self.day(now), cost_microusd(usage), usage)
 
     def daily_report(self, now):
         """The judging-day check: cached share against the measured 55%, and when the 80% mark falls."""
@@ -172,18 +215,29 @@ def parse_json(text):
     return json.loads(text[start:end + 1])
 
 
+def now_ok(runtime, name):
+    """A plan's line may post only inside the 10 s speech limit (the feed refuses it otherwise; ask first)."""
+    return getattr(runtime.driver, "may_banter", lambda n: True)(name)
+
+
 class Runtime:
     """poll() is called from the server's schedule step; model answers apply on later polls."""
 
-    def __init__(self, client, budget, guard, sheets, driver, clock, executor=None, log=None):
+    def __init__(self, client, budget, guard, sheets, driver, clock, executor=None, log=None, battle=False):
         self.client, self.budget, self.guard, self.sheets = client, budget, guard, sheets
         self.driver, self.clock = driver, clock
+        if guard is None and not hasattr(getattr(driver, "feed", None), "post"):
+            raise ValueError("an unguarded runtime needs a driver whose feed guards every line (feed.PublicFeed)")
         self.executor = executor or ThreadPoolExecutor(max_workers=3)
         self.pending = []
         self.voices = {n: novelty.Voice(n, s["keyed"]) for n, s in sheets.items()}
         self.last_banter = {}
         self.notes = []            # no silent fallback: every fallback is recorded here and shown
         self.log = log if log is not None else []
+        self.call_times = {}       # name -> recent call times, for calls_per_min on the private status
+        self.failing = 0           # failed calls in a row (a success resets it; a budget stop is not a failure)
+        self.battle = battle_mod.Memory() if battle else None   # battle mode: behaviours instead of single intents
+        self.stats = {"calls": 0, "banter": 0, "intent": 0, "pick": 0, "failed": 0, "autopilot_lines": 0, "plan": 0, "line": 0}
 
     def note(self, text):
         if text not in self.notes[-3:]:
@@ -191,7 +245,11 @@ class Runtime:
 
     @property
     def chip(self):
-        return self.budget.state(self.clock())["chip"]
+        """The budget's chip; else, when the model's calls keep failing, the autopilot chip says so."""
+        chip = self.budget.state(self.clock())["chip"]
+        if chip is None and self.failing >= FAILING_AFTER:
+            return "autopilot (model calls failing)"
+        return chip
 
     def _ask(self, name, task, instruction, thinking=False, max_tokens=120):
         if self.budget.state(self.clock())["autopilot"]:      # a reroll or a second ask never outruns the cap
@@ -200,29 +258,104 @@ class Runtime:
         card = "\n".join(["Recent lines: " + " | ".join(self.voices[name].card_lines()), task])
         messages = [{"role": "system", "content": sheet["prefix"]}, {"role": "user", "content": card + "\n" + instruction}]
         answer = self.client.chat(messages, thinking=thinking, max_tokens=max_tokens)
-        self.budget.charge(answer["usage"], self.clock())
+        now = self.clock()
+        self.budget.charge(answer["usage"], now, who=name)
+        times = self.call_times.setdefault(name, [])
+        times.append(now)
+        self.call_times[name] = [t for t in times if now - t < 60]
+        self.stats["calls"] += 1
         return answer["text"]
+
+    def calls_per_min(self, name):
+        now = self.clock()
+        return sum(1 for t in self.call_times.get(name, ()) if now - t < 60)
 
     def poll(self, control, tick, names, want_new, observation):
         now = self.clock()
         self._harvest()
         view = self.driver.sync(control, tick, observation)
         if self.budget.state(now)["autopilot"]:
-            self.note("budget stop: the house fights on its tick policy (autopilot)")
+            self.note("%s: the house fights on its tick policy" % self.budget.state(now)["chip"])
+            for name in view.get("active", []):            # keyed lines only, labelled: no model call
+                moment = view.get("moments", {}).get(name)
+                if name in self.sheets and moment and moment != "idle" \
+                        and now - self.last_banter.get(name, -10 ** 9) >= BANTER_INTERVAL_S \
+                        and getattr(self.driver, "may_banter", lambda n: True)(name):
+                    self.last_banter[name] = now
+                    getattr(self.driver, "moment_used", lambda n: None)(name)
+                    keyed = self.sheets[name]["keyed"]
+                    self.driver.apply_banter(name, {"text": keyed.get(moment, keyed[sorted(keyed)[0]]),
+                                                    "label": "autopilot", "blocked": False})
+                    self.stats["autopilot_lines"] += 1
             return
         for name in view.get("benched", []):
             if name in self.sheets and self.budget.allow(name, now):
                 self.pending.append((name, "pick", self.executor.submit(self._pick, name, view["views"].get(name, {}))))
+        if self.battle is not None:
+            return self._battle_poll(view, now)
         for name in view.get("active", []):
             if name not in self.sheets or not self.budget.allow(name, now):
                 continue                      # one gate for every call kind: banter shares the trenchie's cadence
             moment = view.get("moments", {}).get(name)
-            if moment and now - self.last_banter.get(name, -10 ** 9) >= BANTER_INTERVAL_S:
+            if moment and now - self.last_banter.get(name, -10 ** 9) >= BANTER_INTERVAL_S \
+                    and getattr(self.driver, "may_banter", lambda n: True)(name):
                 self.last_banter[name] = now
                 getattr(self.driver, "moment_used", lambda n: None)(name)
                 self.pending.append((name, "banter", self.executor.submit(self._banter, name, moment)))
             else:
                 self.pending.append((name, "intent", self.executor.submit(self._intent, name, view["views"].get(name, {}))))
+
+    # --- battle mode -------------------------------------------------------------------------
+    def _battle_poll(self, view, now):
+        """Triggers become plan rewrites, real events become lines; everything else runs free in the engine."""
+        arena = self.driver.arena
+        mine = [n for n in view.get("active", []) if n in self.sheets]
+        tag = lambda n: self.sheets[n]["tag"] if n in self.sheets else (arena.members[n]["profile"]["public_name"]
+                                                                         if n in arena.members else n)
+        self.battle.style = battle_mod.style_for(self.budget.mode)   # lean while building and after, full on judging days
+        battle_mod.watch(self.battle, mine, self.sheets, arena.sim.state, arena.sim.state["events"], arena.sim.rules, now, tag)
+        line_gap = battle_mod.STYLES[self.battle.style]["line_s"]
+        busy = {n for n, _, _ in self.pending}
+        for name in mine:
+            if name in busy:
+                continue                                   # one call in flight per trenchie
+            wants_plan = name not in self.battle.planned or bool(self.battle.pending.get(name))
+            wants_line = (self.battle.unspoken.get(name, 0) > 0 and now - self.last_banter.get(name, -10 ** 9) >= max(BANTER_INTERVAL_S, line_gap)
+                          and getattr(self.driver, "may_banter", lambda n: True)(name))
+            if not (wants_plan or wants_line) or not self.budget.allow(name, now):
+                continue                                   # the behaviour runs on its own: no call, no spend
+            if wants_plan:
+                trigger, detail = self.battle.take(name, now)
+                ring = battle_mod.ring_view(name, arena.sim.state, tag)
+                self.pending.append((name, "plan", self.executor.submit(self._plan, name, trigger, detail, ring)))
+            else:
+                self.last_banter[name] = now
+                self.battle.unspoken[name] = 0
+                self.pending.append((name, "line", self.executor.submit(self._line, name)))
+
+    def _plan(self, name, trigger, detail, ring):
+        task = battle_mod.plan_ask(name, self.sheets, trigger, detail, ring, self.battle.behaviour.get(name),
+                                   minor=battle_mod.schema_minor(self.driver.arena.sim.rules))
+        data = battle_mod.parse(self._ask(name, task, "", max_tokens=450))
+        behaviour = data.get("behaviour")
+        if not isinstance(behaviour, dict):
+            raise ValueError("the answer had no behaviour object")
+        behaviour = dict(behaviour, v=1)
+        return {"behaviour": behaviour, "trigger": trigger, "say": battle_mod.clean_say(data.get("say")),
+                "emoji": data.get("emoji")}
+
+    def _line(self, name):
+        task = battle_mod.line_ask(name, self.sheets, self.battle)
+        holder = {}
+
+        def generate():
+            data = battle_mod.parse(self._ask(name, task, "", max_tokens=60))
+            holder["emoji"] = data.get("emoji")
+            return battle_mod.clean_say(data.get("say")) or ""
+
+        moments = sorted(self.voices[name].keyed)
+        posted = self.voices[name].post(generate, moments[0])
+        return {"text": posted["text"], "label": posted["label"], "blocked": False, "emoji": holder.get("emoji")}
 
     def _harvest(self):
         waiting = []
@@ -234,10 +367,47 @@ class Runtime:
                 result = future.result()
             except Exception as exc:                       # a failed call is an autopilot tick, said out loud
                 self.note("%s: %s call failed (%s): tick policy continues" % (name, kind, type(exc).__name__))
+                self.stats["failed"] += 1
+                if not isinstance(exc, Autopilot):
+                    self.failing += 1
                 continue
-            if result is not None:
-                getattr(self.driver, "apply_" + kind)(name, result)
+            self.failing = 0
+            self.stats[kind] += 1
+            if result is not None and kind in ("plan", "line"):
+                try:
+                    self._apply_battle(name, kind, result)
+                except Exception as exc:
+                    self.note("%s: the arena refused the %s (%s): the last behaviour keeps running" % (name, kind, type(exc).__name__))
+                    self.stats["failed"] += 1
+            elif result is not None:
+                try:
+                    getattr(self.driver, "apply_" + kind)(name, result)
+                except Exception as exc:                   # the arena refused the answer: said out loud, never fatal
+                    self.note("%s: the arena refused the %s (%s): tick policy continues" % (name, kind, type(exc).__name__))
+                    self.stats["failed"] += 1
         self.pending = waiting
+
+    def _apply_battle(self, name, kind, result):
+        if kind == "line":
+            if result["text"]:
+                self.driver.apply_banter(name, result)
+            return
+        if result.get("emoji") and hasattr(self.driver.feed, "set_voice_emoji"):
+            self.driver.feed.set_voice_emoji(name, result["emoji"])      # the plan's reflex says speak with this emoji
+        ack = self.driver.apply_behaviour(name, result["behaviour"], result["trigger"])
+        status = (ack or {}).get("status")
+        if status in ("applied", "clipped"):
+            self.battle.planned.add(name)
+            self.battle.behaviour[name] = ack.get("behaviour")
+        else:                                             # refused, or a host that has no behaviour input yet: said
+            self.battle.planned.add(name)
+            fixes = "; ".join(r.get("fix", "") for r in (ack or {}).get("refused") or [] if isinstance(r, dict))
+            if status == "refused" and result["trigger"] != "refused" and fixes:   # one retry with the arena's own fix
+                self.battle.fire(name, "refused", "the arena refused your last behaviour: " + fixes, self.clock())
+            self.note("%s: behaviour not applied (%s)" % (name, (ack or {}).get("summary") or (ack or {}).get("code") or "no answer"))
+        if result.get("say") and now_ok(self, name):
+            self.last_banter[name] = self.clock()
+            self.driver.apply_banter(name, {"text": result["say"], "label": None, "blocked": False, "emoji": result.get("emoji")})
 
     def _intent(self, name, view):
         text = self._ask(name, "State: " + json.dumps(view, sort_keys=True),
@@ -256,6 +426,8 @@ class Runtime:
 
         posted = voice.post(generate, moment if moment in voice.keyed else sorted(voice.keyed)[0],
                             on_reroll=lambda: None)
+        if self.guard is None:                              # the public feed runs the guard when it posts the line
+            return {"text": posted["text"], "label": posted["label"], "blocked": False}
         checked = self.guard.check(posted["text"], who=name)
         if checked["blocked"]:
             self.note("%s: a line was blocked (%s) and shown as an emote" % (name, checked["reason"]))

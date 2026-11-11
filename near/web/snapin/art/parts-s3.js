@@ -23,7 +23,7 @@
   // six body shapes (prd.md:585 "6 body presets"): the B1 gumdrop lathe with its width, squareness, top and base flare
   // changed, the height kept, so the face, hats and hands still sit on it. Cosmetic only: every shape fights the same (B8).
   var SHAPES = {
-    // v0.5 (critic M2: Gumdrop/Acorn and Pear/Pebble read as twins): pushed apart in width, taper and height. sy scales
+    // v0.5 (a review found Gumdrop/Acorn and Pear/Pebble read as twins): pushed apart in width, taper and height. sy scales
     // the whole body from the ground (the face and kit ride along), so a shape also changes how tall it stands.
     gumdrop:  { R: 0.226, n: 2.7, flare: 0.035, e: 2.1, sy: 1 },      // B1's approved body
     bean:     { R: 0.172, n: 2.4, flare: 0.0,   e: 2.4, sy: 1.12 },   // tall and slim

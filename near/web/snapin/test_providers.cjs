@@ -28,7 +28,7 @@ function fakeFetch(handler) {
   f.calls = calls;
   return f;
 }
-const KEY = 'sk-fake-r3-nearai-0123456789';
+const KEY = 'sk-test-key-nearai-0123456789';
 const sameShape = (r) => r && typeof r.ok === 'boolean' && (r.ok || ('kind' in r && 'status' in r && 'message' in r));
 
 (async () => {

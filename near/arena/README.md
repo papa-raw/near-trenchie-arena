@@ -393,3 +393,41 @@ must refuse without signing or changing the source archive. Its intact controls
 still sign, and a duplicated life-start also remains refused. Run only the new
 case with `python3 -B near/arena/test_record_applications.py
 RecordApplications.test_join_and_spawn_cannot_publish_one_application_twice`.
+
+## Rules table integer-12: a focus order lands
+
+`integer-12` changes one constant from `integer-11`: `focus_weight` 150 -> 2700. A
+focus order (`intent --focus <id>`) on an enemy in view now takes the target on
+the first policy tick after it applies (receive tick + 2), whatever was held
+before. 2700 is the smallest round number above the sticky bound: a focused enemy
+with base score 0 must beat `sticky_percent` (125%) of the largest score any other
+target can reach (guardian, 2150). At 1000 a brawler or guardian holding a close,
+hurt, just-hit enemy kept it. `integer-11` stays on disk, so its segments replay
+under their own hash. The case is `python3 -B near/arena/test_focus.py`.
+
+## Rules table integer-13: battle mode
+
+`integer-13` is `integer-12` plus battle mode: a fighter's AI sends a **behaviour**
+(drives, an attack gate, a target mode and up to 8 reflexes; the schema is
+`BEHAVIOUR.md`) that the engine runs every tick and keeps across respawns. Four keys
+change and nothing else: `version`, `input_kinds` (adds `behaviour`),
+`intent_interval` 40 -> 10 (one order per 0.5 s, shared by behaviours and intents)
+and the new `behaviour` block (limits and the seven stance presets).
+`behaviour.py` normalises a behaviour and writes the host's ACK receipt; the engine
+accepts only the normalised form, so a replay never re-runs a clip. A fighter
+without a behaviour runs the style AI exactly as in `integer-12`, and `integer-11`
+and `integer-12` stay on disk for their segments. The cases are
+`python3 -B near/arena/test_behaviour.py`; `python3 -I near/arena/battle_measure.py`
+prints Pat's example measured in seeded crowds and the tick cost at 16 fighters x 8
+reflexes.
+
+## Rules table integer-14: chase seeks out of view
+
+`integer-14` is `integer-13` plus one key, `behaviour.chase_seek: true`. A fighter
+on a behaviour with `chase` above 0 and no target in view walks toward the nearest
+enemy anywhere on the ring that passes its gate, the way rival seek already works
+for house rivals. Under `integer-13` two berserkers who spawn out of each other's
+view stood still for the whole segment (`BATTLE-BALANCE.md` finding 4); under
+`integer-14` they meet and land a hit within about 3 s. `integer-13` stays on disk
+and keeps its own behaviour for its segments. The cases are `ChaseSeek` in
+`python3 -B near/arena/test_behaviour.py`.

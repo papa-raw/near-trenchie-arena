@@ -11,7 +11,8 @@ import replay
 import sim
 
 
-RULES_PATH = Path(__file__).parent / "rules" / "integer-11.json"
+# The quirk cases test the sim's current default table (its file is named by its version), never a pinned old one.
+RULES_PATH = Path(__file__).parent / "rules" / (sim.DEFAULT_RULES["version"] + ".json")
 
 
 def table() -> dict:

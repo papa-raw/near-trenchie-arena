@@ -1,0 +1,43 @@
+{
+ "network": "testnet",
+ "arena": "arena.trenchie-r4b-20261111.testnet",
+ "about": "post_batch transactions settled on testnet by near/chain (2026-11-11): the live smoke's three one-segment batches and the live hour's three option-C parts; read back by archival.py",
+ "batches": [
+  {
+   "batch_id": "t20261111T091744fe7b-0",
+   "tx": "6MNZxNXxPnp4P8CD9MyhXFBnv88voVcTjsQ1AFvXu9t3",
+   "signer": "operator.trenchie-r4b-20261111.testnet",
+   "fight_hash": "3f261e1725a8b26710dca7f1d3d13e79f9570a2249f5298b6b4f65b79a3ca7c9"
+  },
+  {
+   "batch_id": "t20261111T091744fe7b-1",
+   "tx": "B88XEtLfVkttjRRhVNF2L1NSbwLAJZWHyXseQfPVPJb6",
+   "signer": "operator.trenchie-r4b-20261111.testnet",
+   "fight_hash": "1d316dd56a19be0e393b920b3bd53f82987e0d7198342feede672a9d7cbc756c"
+  },
+  {
+   "batch_id": "t20261111T091744fe7b-2",
+   "tx": "Gs9uH5ZFMAphJEKdsxUm9VdNnWKnHvEDhJffJ557TdbB",
+   "signer": "operator.trenchie-r4b-20261111.testnet",
+   "fight_hash": "5124458721a003d7e68f044fe25f4d11c3c8c56954e4f1915ac5b296a9ef56da"
+  },
+  {
+   "batch_id": "t20261111T0950556902-0.1",
+   "tx": "2uoYCJVWBKpZXmwYgx14SAZcE5G6QrC6FsMfYgEGrHKQ",
+   "signer": "operator.trenchie-r4b-20261111.testnet",
+   "fight_hash": "9f238b6a981404cd071e689c337cb13db9dbe5aa321bccc8b8d87b958b723de2"
+  },
+  {
+   "batch_id": "t20261111T0950556902-0.2",
+   "tx": "62UtELjoghq71uQNURen7GQDgdg9wBp1tqNzh3hi9B8L",
+   "signer": "operator.trenchie-r4b-20261111.testnet",
+   "fight_hash": "462b6f9e21ad4541bfcdca49fc755d5004682d0bc8cf344c4b4c726f2cae18ba"
+  },
+  {
+   "batch_id": "t20261111T0950556902-0.3",
+   "tx": "HY3ugiQDxuSui1fw81WWEtVMtmLQ6iQJdxJqdCMZ6ZFV",
+   "signer": "operator.trenchie-r4b-20261111.testnet",
+   "fight_hash": "6529e8506df8b88db948d0aa49e1e5c4ab81e4980c598354f6e3e0bf297c4035"
+  }
+ ]
+}

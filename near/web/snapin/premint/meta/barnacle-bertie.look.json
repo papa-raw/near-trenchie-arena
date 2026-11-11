@@ -1,0 +1,15 @@
+{
+ "role": "barnacle-bertie",
+ "look_set": "c",
+ "look": {
+  "shape": "bean",
+  "body": "p07",
+  "tone": "warm",
+  "eyes": "keen",
+  "brows": "none",
+  "mouth": "smile",
+  "hair": "cowlick",
+  "hairCol": "p03",
+  "hat": "st-cap"
+ }
+}

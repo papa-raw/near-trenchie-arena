@@ -1,0 +1,15 @@
+{
+ "role": "lantern-lou",
+ "look_set": "c",
+ "look": {
+  "shape": "pebble",
+  "body": "p12",
+  "tone": "warm",
+  "eyes": "happy",
+  "brows": "none",
+  "mouth": "smile",
+  "hair": "fin",
+  "hairCol": "p03",
+  "hat": "st-cap"
+ }
+}

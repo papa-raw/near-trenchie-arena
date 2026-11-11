@@ -1,37 +1,72 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>W2 spike: mainnet wallet sign-in (Pat)</title>
+<html lang="en"><head><meta charset="utf-8"><title>Wallet test page (testnet)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>body{font:15px/1.5 ui-monospace,Menlo,monospace;margin:16px;max-width:760px;background:#fffaf0;color:#222}
-button{font:inherit;padding:10px 14px;margin:4px 6px 4px 0;cursor:pointer} pre{background:#fff;border:1px solid #bbb;padding:8px;white-space:pre-wrap;word-break:break-all}</style></head><body>
-<h1>Mainnet wallet sign-in check (for Pat's own hands)</h1>
-<p><b>Read-only.</b> Each button opens the wallet's own sign-in on <b>MAINNET</b> and asks for the account name only.
-It sends <b>no transaction</b>, adds <b>no key</b> and moves <b>no money</b>. If a wallet asks you to approve a transaction, cancel.
-Click one wallet at a time. The result appears below as JSON; copy it into the verification log.</p>
+button{font:inherit;padding:10px 14px;margin:4px 6px 4px 0;cursor:pointer} button:disabled{cursor:default}
+.why{color:#5b5145;font-size:13px} pre{background:#fff;border:1px solid #bbb;padding:8px;white-space:pre-wrap;word-break:break-all}
+#net{padding:8px 12px;border:2px solid #2f6f3a;background:#e4f3e1;font-weight:700}
+#net.mainnet{border-color:#9c2a1c;background:#fbe2dc;color:#7a1d12}
+fieldset{border:2px solid #9c2a1c;margin:12px 0;padding:8px 12px} legend{font-weight:700;color:#7a1d12}
+label{display:flex;gap:8px;align-items:flex-start} input[type=checkbox]{width:20px;height:20px;flex:0 0 20px;margin-top:2px}</style></head><body>
+<!-- The file keeps its old name (make play and the wallet notes link to it); the page is testnet first. -->
+<h1>Wallet test page</h1>
+<p id="net" role="status">Network: TESTNET (play money). Use a new test account, never your own.</p>
+<p><b>1. Sign in.</b> Each button opens that wallet's own sign-in and asks for the account name. Signing in sends no transaction and moves no money.</p>
 <div id="btns"></div>
-<p>Testnet, the same way: <label><input type="checkbox" id="tn"> use testnet instead</label> (a testnet account is needed; the AddKey step is a separate button, below).</p>
-<p><button id="addkey" disabled>After a TESTNET sign-in: ask this wallet to add ONE guest function-call key (testnet, receiver market label, 0.25 NEAR allowance, no deposit)</button></p>
+<p><b>2. Add the guest key</b> (testnet only). <button id="addkey" disabled aria-describedby="addkey-why">Add ONE guest key</button> <span class="why" id="addkey-why">Sign in on testnet first.</span></p>
+<p id="approval">The wallet will ask you to approve: a key that can call only <b id="receiver">(not set)</b>, with an allowance of 0.25 NEAR for gas and no payment. If its screen names any other contract or asks for money, do not approve.</p>
+<p><b>3. Test the key</b> (testnet only). <button id="testkey" disabled aria-describedby="testkey-why">Test my key</button> <span class="why" id="testkey-why">Add the guest key first.</span><br>
+<span class="why">One zero-payment call to the market through the guest key; it shows the transaction hash for the checker.</span></p>
+<fieldset><legend>Mainnet (a real account)</legend>
+<label><input type="checkbox" id="mainnet"> <span>Switch to MAINNET: the sign-in buttons above then sign in a <b>real mainnet account</b> to read its name. That is all: on mainnet this page adds no key, sends no transaction and moves no money (steps 2 and 3 stay testnet only). Leave it off unless you mean to check a real wallet's sign-in.</span></label>
+</fieldset>
 <pre id="out">(nothing yet)</pre>
 <script src="../vendor/near-api-js/near-api-js-7.3.1.min.js"></script>
 <script src="../vendor/near-api-js/near-connect-0.12.0.min.js"></script>
+<script src="../chain.js"></script>
 <script src="../wallet.js"></script>
 <script>
 (function () {
-  var W = window.SnapWallet, out = document.getElementById('out'), log = [];
+  var W = window.SnapWallet, out = document.getElementById('out'), log = [], $ = function (id) { return document.getElementById(id); };
+  var signedIn = { testnet: false }, keyAdded = false;
   function show(o) { log.push(o); out.textContent = JSON.stringify(log.length === 1 ? log[0] : log, null, 1); }
-  show({ importCheck: W.importCheck(), shortlist: W.list(), note: 'wallets are listed as "declares testnet" only; none is marked as working until a sign-in is logged' });
+  function net() { return $('mainnet').checked ? 'mainnet' : 'testnet'; }
+  // every grey button says why it is grey; every label says which network it acts on
+  function refresh() {
+    var n = net();
+    $('net').className = n;
+    $('net').textContent = n === 'mainnet' ? 'Network: MAINNET (a real account). Sign-in only: no key, no transaction, no money.' : 'Network: TESTNET (play money). Use a new test account, never your own.';
+    [].forEach.call($('btns').children, function (b) { b.textContent = 'Sign in with ' + b.dataset.name + ' (' + n + ')'; });
+    var canAdd = n === 'testnet' && signedIn.testnet, canTest = n === 'testnet' && keyAdded;
+    $('addkey').disabled = !canAdd; $('addkey-why').textContent = n === 'mainnet' ? 'Testnet only: switch mainnet off.' : (signedIn.testnet ? '' : 'Sign in on testnet first.');
+    $('testkey').disabled = !canTest; $('testkey-why').textContent = n === 'mainnet' ? 'Testnet only: switch mainnet off.' : (keyAdded ? '' : 'Add the guest key first.');
+  }
+  $('receiver').textContent = W.config.marketAccount || '(no market configured: chain.js did not load)';
+  show({ network: 'testnet (default)', market: W.config.marketAccount, rpc: W.config.rpc, importCheck: W.importCheck(), shortlist: W.list(), note: 'wallets are listed as "declares testnet" only; none is marked as working until a sign-in is logged' });
   W.list().forEach(function (w) {
-    var b = document.createElement('button'); b.textContent = 'Sign in with ' + w.name;
+    var b = document.createElement('button'); b.dataset.name = w.name;
     b.onclick = async function () {
-      var net = document.getElementById('tn').checked ? 'testnet' : 'mainnet';
-      var r = await W.connect(w.id, { network: net });
-      show({ at: new Date().toISOString(), wallet: w.id, network: net, result: r });
-      if (r.ok && net === 'testnet') document.getElementById('addkey').disabled = false;
+      var n = net(), r = await W.connect(w.id, { network: n });
+      show({ at: new Date().toISOString(), wallet: w.id, network: n, result: r });
+      if (r.ok && n === 'testnet') signedIn.testnet = true;
+      refresh();
     };
-    document.getElementById('btns').appendChild(b);
+    $('btns').appendChild(b);
   });
-  document.getElementById('addkey').onclick = async function () {
+  $('mainnet').onchange = function () { show({ at: new Date().toISOString(), network: net(), note: net() === 'mainnet' ? 'switched to MAINNET: sign-in only' : 'back to testnet' }); refresh(); };
+  $('addkey').onclick = async function () {
     var r = await W.guestKey({ network: 'testnet', receiver: 'market', allowanceNear: '0.25' });
     show({ at: new Date().toISOString(), step: 'guestKey (testnet AddKey)', result: r });
+    if (r.ok) keyAdded = true;
+    refresh();
   };
+  $('testkey').onclick = async function () {
+    var b = this; b.disabled = true; b.textContent = 'Testing…';
+    var r = await W.testKey();
+    show({ at: new Date().toISOString(), step: 'testKey (one zero-deposit call to the market)', result: r,
+           check: r.ok ? 'python3 check_wallet_key.py ' + r.accountId + ' --tx ' + r.txHash + ' --market ' + r.receiver + ' --rpc ' + W.config.rpc : null });
+    b.textContent = 'Test my key'; refresh();
+  };
+  refresh();
 })();
 </script></body></html>

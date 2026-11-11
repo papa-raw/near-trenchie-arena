@@ -8,12 +8,26 @@ from types import MappingProxyType
 from collections.abc import Mapping
 try:
     from .catalog import ITEMS, HOUSE
+    from . import behaviour as battle
 except ImportError:
     from catalog import ITEMS, HOUSE
+    import behaviour as battle
+
+
+def _drives(**weights):
+    """A full drives record: every key present, unset weights 0 (battle mode, integer-13)."""
+    return {"loot": 0, "keep_away": 0, "keep_away_radius": 4, "chase": 0, "protect": 0, "protect_ally": None,
+            "hold": 0, "hold_at": "center", "hold_radius": 2, **weights}
+
+
+def _stance(drives, gate, target):
+    """A preset never names an ally, so laying it down keeps the ally the behaviour already has."""
+    return {"drives": {k: v for k, v in drives.items() if k != "protect_ally"},
+            "gate": {"match": "all", **gate}, "target": target}
 
 
 _RULES = {
-    "version": "integer-11",
+    "version": "integer-14",
     "dodge_weapon_warnings": True,
     "beam_slow_active": True,
     "rival_seek": True,
@@ -64,7 +78,7 @@ _RULES = {
     "rng_shift_c": 31,
     "phases": ["inputs", "policy", "movement", "attacks", "projectiles",
                "damage", "grabs", "bench", "leaves"],
-    "input_kinds": ["intent", "join", "leave", "disconnect", "loadout", "spawn"],
+    "input_kinds": ["intent", "join", "leave", "disconnect", "loadout", "spawn", "behaviour"],
     "combat_enabled": True,
     "auto_respawn": True,
     "hitVarPct": 20,
@@ -84,13 +98,13 @@ _RULES = {
     "view_radius": 12000,
     "sticky_ticks": 30,
     "sticky_percent": 125,
-    "focus_weight": 150,
+    "focus_weight": 2700,              # integer-12: a focus order outranks any other target (see test_focus.py)
     "avoid_weight": 200,
     "rivalry_weight": 300,
     "bounty_weight": 150,
     "recent_hit_ticks": 60,
     "credit_ticks": 100,
-    "intent_interval": 40,
+    "intent_interval": 10,             # integer-13: one order per 0.5 s (Pat, battle mode Q6); was 40
     "intent_stale_ticks": 300,
     "spawn_shield_ticks": 40,
     "spawn_points": 32,
@@ -179,6 +193,20 @@ _RULES = {
     "fire_slow_pct": 50,
     "gap_closer_range": 2000,
     "gap_closer_cooldown": 100,
+    "behaviour": {                     # integer-13: battle mode (BEHAVIOUR.md); a fighter's AI sends a plan
+        "version": 1, "schema_minor": 1, "max_reflexes": 8, "max_bytes": 2048, "say_chars": 80, "id_chars": 64,
+        "drive_max": 10, "radius_max_tiles": 12, "hold_radius_max_tiles": 6,
+        "default_drives": _drives(),
+        "reflex_hold_ticks": 20, "say_ticks": 200, "protect_score": 60,
+        "chase_seek": True,            # integer-14: chase walks to the nearest gated enemy when none is in view
+        "stances": {
+            "flee": _stance(_drives(loot=2, keep_away=10, keep_away_radius=8), {"distance_under": 2}, "nearest"),
+            "berserk": _stance(_drives(chase=10), {}, "nearest"),
+            "defend": _stance(_drives(chase=3, hold=8, hold_at="here", hold_radius=3), {"distance_under": 5}, "attacker"),
+            "loot": _stance(_drives(loot=10, keep_away=6, keep_away_radius=4, chase=1), {"target_hp_below_pct": 30}, "weakest"),
+            "hold": _stance(_drives(chase=2, hold=10, hold_at="here", hold_radius=2), {"distance_under": 6}, "nearest"),
+            "follow-ally": _stance(_drives(chase=4, protect=10), {}, "auto"),
+            "hunt-weakest": _stance(_drives(loot=1, chase=10), {}, "weakest")}},
     "items": ITEMS,
     "house": HOUSE,
     "sine": [0,18,36,54,71,89,107,125,143,160,178,195,213,230,248,265,
@@ -427,6 +455,9 @@ class Sim:
                    "intent": {"direction", "focus", "avoid", "loot", "sig", "leave", "ward"},
                    "leave": set(), "disconnect": set(), "loadout": set(self.rules["default_loadout"]),
                    "spawn": {"life_id"}}
+        if row.kind == "behaviour":
+            battle.check_stored(row.payload, self.rules, row.fighter_id)
+            return
         if set(row.payload) - allowed[row.kind]:
             raise ValueError("unknown payload field")
         for field in ("angle", "direction"):
@@ -525,6 +556,9 @@ class Sim:
                      last_hit=None, last_damage_tick=-1, kos=0, assists=0, deaths=0, life_kos=0,
                      life_number=0, managed=payload.get("managed", False), gap_at=0, fleeing_since=None,
                      life_id=payload.get("life_id", name + ":0"), knock_x=0, knock_y=0, knock_ticks=0)
+            if "behaviour" in self.rules:
+                f.update(behaviour=None, battle_anchor=None, battle_reflexes=[], battle_gate=None,
+                         battle_say_at=-self.rules["behaviour"]["say_ticks"])
             if f["house"]:
                 f["bag"] = {r: self.inventory_entry(r) for r in sorted(kit.values())
                             if not self.rules["items"][r]["default"]}
@@ -550,6 +584,14 @@ class Sim:
                     f["intent"][key] = payload[key]
             if payload.get("leave"):
                 f["leave"] = True
+        elif kind == "behaviour":
+            f = fighters[name]
+            if self.state["tick"] - f["last_intent"] < self.rules["intent_interval"]:
+                self.state["events"].append({"kind": "intent_refused", "fighter": name})
+                return
+            f["last_intent"] = self.state["tick"]
+            self._set_behaviour(f, None if payload.get("clear") else rules_dict(payload))
+            self.state["events"].append({"kind": "behaviour", "fighter": name})
         elif kind == "leave":
             fighters[name]["leave"] = True
             if fighters[name]["state"] == "bench":
@@ -574,12 +616,16 @@ class Sim:
         if not self.rules["combat_enabled"]:
             return
         live = self._live()
+        targets = {n: self.state["fighters"][n]["target"] for n in live}
         for name in live:
             f = self.state["fighters"][name]
             enemies = [self.state["fighters"][n] for n in live if n != name]
             f["move_x"], f["move_y"] = 0, 0
             if f["leave"]:
                 f["move_x"], f["move_y"] = normalise(f["x"] or 1, f["y"], f["speed"])
+                continue
+            if f.get("behaviour") is not None:
+                self._battle_policy(f, enemies, targets)
                 continue
             choices = [(self.target_score(f, e), "fighter", e["id"]) for e in enemies]
             if "rival_seek" in self.rules:
@@ -640,6 +686,271 @@ class Sim:
                 if sx or sy:
                     f["move_x"], f["move_y"] = normalise(
                         sx * 2 + f["move_x"] // 2, sy * 2 + f["move_y"] // 2, f["speed"])
+
+    # ---- battle mode (rules table integer-13; BEHAVIOUR.md) ------------------------------------------------
+
+    OFFENSIVE_SIGNATURES = ("beam_sweep", "chain_storm", "shockwave", "blink_strike")
+
+    def _set_behaviour(self, f: dict, plan: dict | None) -> None:
+        """Replace the plan whole; reflexes start off and may turn on this tick."""
+        hold = self.rules["behaviour"]["reflex_hold_ticks"]
+        f["behaviour"] = plan
+        f["battle_gate"] = None if plan is None else plan["gate"]
+        f["battle_anchor"] = [f["x"], f["y"]] if plan is not None and plan["drives"]["hold_at"] == "here" else None
+        f["battle_reflexes"] = [{"on": False, "since": self.state["tick"] - hold, "anchor": None}
+                                for _ in (plan or {}).get("reflexes", [])]
+
+    def _grabbable(self, f: dict, view: int) -> list:
+        """(distance, id, drop) for every drop this fighter could take, inside `view`."""
+        out = []
+        for key in ordered_ids(self.state["drops"]):
+            d = self.state["drops"][key]
+            if self._can_grab(f, d):
+                dist = distance(f, d)
+                if dist <= view:
+                    out.append((dist, key, d))
+        return out
+
+    def _recent(self, hits: Mapping) -> bool:
+        tick = self.state["tick"]
+        return any(tick - at <= self.rules["recent_hit_ticks"] for at in hits.values())
+
+    def _condition(self, f, cond, near, drops, targets) -> bool:
+        r, tile = self.rules, self.rules["tile"]
+        (key, value), = cond.items()
+        p = r["percent"]
+        if key == "self_hp_below_pct":
+            return f["hp"] * p < f["max_hp"] * value
+        if key == "self_hp_above_pct":
+            return f["hp"] * p > f["max_hp"] * value
+        if key == "enemy_within":
+            if not isinstance(value, Mapping):
+                return any(dist < value * tile for dist, _ in near)
+            return any(dist < value["radius"] * tile and self._is_who(f, name, value["who"]) for dist, name in near)
+        if key == "hit_by":
+            tick, recent = self.state["tick"], r["recent_hit_ticks"]
+            return any(tick - at <= recent and self._is_who(f, name, value["who"]) for name, at in f["hits"].items())
+        if key == "always":
+            return True
+        if key == "enemies_at_least":
+            return sum(1 for dist, _ in near if dist < value["radius"] * tile) >= value["count"]
+        if key == "hit_recently":
+            return self._recent(f["hits"])
+        if key == "ally_hit_recently":
+            ally = self.state["fighters"].get(f["behaviour"]["drives"]["protect_ally"])
+            return ally is not None and ally["state"] == "alive" and self._recent(ally["hits"])
+        if key == "loot_within":
+            return any(dist < value * tile for dist, _, _ in drops)
+        if key == "legendary_on_floor":
+            return any(r["items"][d["row"]]["tier"] == "legendary" for _, _, d in drops)
+        target = self.state["fighters"].get(targets.get(f["id"]))
+        alive = target is not None and target["state"] == "alive"
+        if key == "target_hp_below_pct":
+            return alive and target["hp"] * p < target["max_hp"] * value
+        return not alive                                                      # no_target
+
+    def _is_who(self, f, name, who) -> bool:
+        """A reflex's who filter (schema v1.1): any, a seeded rival, the protected ally's attacker, or one id."""
+        if who == "any":
+            return True
+        if who == "rival":
+            return name in f["rivals"]
+        if who == "ally_attacker":
+            ally = self.state["fighters"].get(f["behaviour"]["drives"]["protect_ally"])
+            recent = self.rules["recent_hit_ticks"]
+            return ally is not None and self.state["tick"] - ally["hits"].get(name, -recent - 1) <= recent
+        return name == who
+
+    def _say(self, f, index, text) -> None:
+        """A reflex line, at most one per fighter per 10 s; the host guards it before any feed."""
+        if self.state["tick"] - f["battle_say_at"] >= self.rules["behaviour"]["say_ticks"]:
+            f["battle_say_at"] = self.state["tick"]
+            self.state["events"].append({"kind": "say", "fighter": f["id"], "index": index + 1, "text": text})
+
+    def _effective(self, f, near, drops, targets) -> tuple:
+        """The plan with every holding reflex laid over it; reflex 1 is laid last, so it wins."""
+        r, tick, plan = self.rules, self.state["tick"], f["behaviour"]
+        hold = r["behaviour"]["reflex_hold_ticks"]
+        for index, reflex in enumerate(plan["reflexes"]):
+            state, then = f["battle_reflexes"][index], reflex["then"]
+            holds = self._condition(f, reflex["if"], near, drops, targets)
+            if holds == state["on"] or tick - state["since"] < hold:
+                if state["on"] and then.get("repeat"):
+                    self._say(f, index, then["say"])
+                continue
+            state["on"], state["since"] = holds, tick
+            state["anchor"] = [f["x"], f["y"]] if holds and then.get("drives", {}).get("hold_at") == "here" else None
+            self.state["events"].append({"kind": "reflex", "fighter": f["id"], "index": index + 1, "on": holds})
+            if holds and "say" in then:
+                self._say(f, index, then["say"])
+        drives, gate, mode = dict(plan["drives"]), plan["gate"], plan["target"]
+        anchor = f["battle_anchor"]
+        for index in reversed(range(len(plan["reflexes"]))):
+            if not f["battle_reflexes"][index]["on"]:
+                continue
+            then = plan["reflexes"][index]["then"]
+            if "drives" in then:
+                drives.update(then["drives"])
+                if "hold_at" in then["drives"]:
+                    anchor = f["battle_reflexes"][index]["anchor"]
+            gate = then.get("gate", gate)
+            mode = then.get("target", mode)
+        return drives, gate, mode, anchor
+
+    def _passes(self, f, enemy, gate, dist, targets) -> bool:
+        r = self.rules
+        if gate.get("never"):
+            return False
+        checks = []
+        if "target_hp_below_pct" in gate:
+            checks.append(enemy["hp"] * r["percent"] < enemy["max_hp"] * gate["target_hp_below_pct"])
+        if gate.get("target_busy"):
+            theirs = targets.get(enemy["id"])
+            fighting = theirs is not None and theirs != f["id"] and theirs in self.state["fighters"]
+            vx, vy = vector(enemy["direction"], r["trig_scale"], r)
+            checks.append(fighting or vx * (f["x"] - enemy["x"]) + vy * (f["y"] - enemy["y"]) < 0)
+        if "distance_under" in gate:
+            checks.append(dist < gate["distance_under"] * r["tile"])
+        if gate.get("rival"):
+            checks.append(enemy["id"] in f["rivals"])
+        if gate.get("wears_legendary"):
+            checks.append(any(r["items"][row]["tier"] == "legendary" for row in enemy["equipped"].values()))
+        if not checks:
+            return True
+        return all(checks) if gate["match"] == "all" else any(checks)
+
+    def _may_strike(self, f: dict, enemy: dict) -> bool:
+        """A fighter on a behaviour starts a weapon, gap closer or offensive signature only at an enemy its gate lets
+        through right now: an earlier fighter's attack this tick may have turned the enemy round. Others always may."""
+        if f.get("behaviour") is None:
+            return True
+        targets = {n: self.state["fighters"][n]["target"] for n in self._live()}
+        return self._passes(f, enemy, f["battle_gate"], distance(f, enemy), targets)
+
+    def _battle_target(self, f, enemies, near_by_id, gate, mode, drives, targets):
+        r, tick = self.rules, self.state["tick"]
+        ally = self.state["fighters"].get(drives["protect_ally"]) if drives["protect"] else None
+        scored = []
+        for e in enemies:
+            score = self.target_score(f, e)
+            if score < 0 or not self._passes(f, e, gate, near_by_id[e["id"]], targets):
+                continue
+            if ally is not None and tick - ally["hits"].get(e["id"], -r["recent_hit_ticks"] - 1) <= r["recent_hit_ticks"]:
+                score += drives["protect"] * r["behaviour"]["protect_score"]
+            scored.append((score, e))
+        if not scored:
+            return None
+        if mode == "nearest":
+            return min(scored, key=lambda c: (near_by_id[c[1]["id"]], c[1]["id"]))[1]["id"]
+        if mode == "weakest":
+            return min(scored, key=lambda c: (c[1]["hp"] * r["percent"] // c[1]["max_hp"],
+                                              near_by_id[c[1]["id"]], c[1]["id"]))[1]["id"]
+        if mode != "auto":
+            want = f["last_hit"] if mode == "attacker" else mode
+            return next((e["id"] for _, e in scored if e["id"] == want), None)
+        best = max(scored, key=lambda c: (c[0], c[1]["id"]))
+        current = next((c for c in scored if c[1]["id"] == f["target"]), None)
+        if current is not None and (tick - f["target_since"] < r["sticky_ticks"]
+                                    or best[0] * r["percent"] <= current[0] * r["sticky_percent"]):
+            best = current
+        return best[1]["id"]
+
+    def _toward(self, f: dict, x: int, y: int) -> tuple[int, int]:
+        """A unit (trig_scale) pull from the fighter to a point."""
+        return normalise(x - f["x"], y - f["y"], self.rules["trig_scale"])
+
+    def _pull_loot(self, f: dict, drops: list) -> tuple:
+        """(pull, standing on it): toward the best drop by tier value and nearness."""
+        r = self.rules
+        if not drops or f["intent"]["loot"] == "ignore":
+            return (0, 0), False
+        _, _, d = max(drops, key=lambda c: (r["tier_value"][r["items"][c[2]["row"]]["tier"]] * (r["view_radius"] - c[0]), c[1]))
+        return self._toward(f, d["x"], d["y"]), distance(f, d) <= r["grab_radius"]
+
+    def _pull_keep_away(self, f: dict, enemies: list, near_by_id: dict, target_id, radius: int) -> tuple[int, int]:
+        """Away from every enemy inside the radius but the target: half strength at the edge, full touching."""
+        unit = self.rules["trig_scale"]
+        px = py = 0
+        for e in enemies:
+            dist = near_by_id[e["id"]]
+            if e["id"] == target_id or dist >= radius:
+                continue
+            ax, ay = normalise(f["x"] - e["x"] or (1 if f["id"] < e["id"] else -1), f["y"] - e["y"],
+                               unit * (2 * radius - dist) // (2 * radius))
+            px, py = px + ax, py + ay
+        return normalise(px, py, min(unit, isqrt(px * px + py * py))) if px or py else (0, 0)
+
+    def _pull_chase(self, f: dict, target_id, near_by_id: dict, enemies: list, gate: Mapping,
+                    targets: dict) -> tuple[int, int]:
+        """Toward the attack target until it is in weapon reach. From integer-14 (`behaviour.chase_seek`), with no
+        target in view, toward the nearest enemy anywhere on the ring that passes the gate, as rival seek does."""
+        target = self.state["fighters"].get(target_id)
+        if target is None and self.rules["behaviour"].get("chase_seek", False):
+            far = [(near_by_id[e["id"]], e["id"], e) for e in enemies
+                   if self._passes(f, e, gate, near_by_id[e["id"]], targets)]
+            if far:
+                target = min(far, key=lambda c: (c[0], c[1]))[2]
+                return self._toward(f, target["x"], target["y"])
+        reach = self._weapon(f)["range"] * f["range_pct"] // self.rules["percent"]
+        if target is None or near_by_id[target_id] <= reach:
+            return 0, 0
+        return self._toward(f, target["x"], target["y"])
+
+    def _pull_protect(self, f: dict, ally_id) -> tuple[int, int]:
+        """Toward the ally while it is farther than the guardian radius."""
+        ally = self.state["fighters"].get(ally_id)
+        if ally is None or ally["state"] != "alive" or distance(f, ally) <= self.rules["guardian_radius"]:
+            return 0, 0
+        return self._toward(f, ally["x"], ally["y"])
+
+    def _pull_hold(self, f: dict, drives: dict, anchor) -> tuple[int, int]:
+        """Back into the hold area (centre, the anchored spot, or a point) when outside it."""
+        at = drives["hold_at"]
+        if at == "center":
+            hx, hy = 0, 0
+        elif at == "here":
+            hx, hy = anchor or (f["x"], f["y"])
+        else:
+            hx, hy = at["x_milli"], at["y_milli"]
+        if isqrt((hx - f["x"]) ** 2 + (hy - f["y"]) ** 2) <= drives["hold_radius"] * self.rules["tile"]:
+            return 0, 0
+        return self._toward(f, hx, hy)
+
+    def _battle_policy(self, f: dict, enemies: list, targets: dict) -> None:
+        """Drives pull, the gate picks who may be hit, reflexes override while they hold."""
+        r = self.rules
+        near = sorted((distance(f, e), e["id"]) for e in enemies)
+        near_by_id = {name: dist for dist, name in near}
+        drops = self._grabbable(f, r["view_radius"])
+        drives, gate, mode, anchor = self._effective(f, near, drops, targets)
+        f["battle_gate"] = gate
+        target_id = self._battle_target(f, enemies, near_by_id, gate, mode, drives, targets)
+        if target_id != f["target"]:
+            f["target_since"] = self.state["tick"]
+        f["target"] = target_id
+        weights = {k: drives[k] for k in battle.DRIVE_WEIGHTS}
+        pulls = {}
+        if weights["loot"]:
+            pulls["loot"], standing = self._pull_loot(f, drops)
+            if standing and weights["loot"] == max(weights.values()):
+                f["move_x"], f["move_y"] = self._sidestep(f) if r.get("threat_sidestep", False) else (0, 0)
+                return
+        if weights["keep_away"]:
+            pulls["keep_away"] = self._pull_keep_away(f, enemies, near_by_id, target_id,
+                                                      drives["keep_away_radius"] * r["tile"])
+        if weights["chase"]:
+            pulls["chase"] = self._pull_chase(f, target_id, near_by_id, enemies, gate, targets)
+        if weights["protect"]:
+            pulls["protect"] = self._pull_protect(f, drives["protect_ally"])
+        if weights["hold"]:
+            pulls["hold"] = self._pull_hold(f, drives, anchor)
+        mx = sum(pulls[k][0] * weights[k] for k in battle.DRIVE_WEIGHTS if k in pulls)
+        my = sum(pulls[k][1] * weights[k] for k in battle.DRIVE_WEIGHTS if k in pulls)
+        f["move_x"], f["move_y"] = normalise(mx, my, f["speed"])
+        if r.get("threat_sidestep", False):
+            sx, sy = self._sidestep(f)
+            if sx or sy:
+                f["move_x"], f["move_y"] = normalise(sx * 2 + f["move_x"] // 2, sy * 2 + f["move_y"] // 2, f["speed"])
 
     def _sidestep(self, fighter: dict) -> tuple[int, int]:
         """Steer away from the soonest incoming shot, beam or lob threat."""
@@ -800,6 +1111,8 @@ class Sim:
             if tick < f["cannot_attack_until"]:
                 continue
             target = self.state["fighters"].get(f["target"])
+            if target is not None and target["state"] == "alive" and not self._may_strike(f, target):
+                target = None                    # battle mode: the gate is judged again on the tick an attack starts
             if target is not None and target["state"] == "alive":
                 weapon = self._weapon(f)
                 reach = weapon["range"] * f["range_pct"] // self.rules["percent"]
@@ -920,6 +1233,12 @@ class Sim:
 
     def _should_signature(self, f, kind, target):
         r, intent = self.rules, f["intent"]
+        if f.get("behaviour") is not None and target is None and kind in self.OFFENSIVE_SIGNATURES:
+            if kind != "shockwave" or (f.get("battle_gate") or {}).get("never"):
+                return False
+            s = self._signature_rules(f["equipped"]["trinket"])
+            return (f["hp"] * r["percent"] < f["max_hp"] * s["hp_pct"] and
+                    any(distance(f, self.state["fighters"][n]) <= s["trigger_range"] for n in self._live() if n != f["id"]))
         if intent["sig"] == "hold" and (target is None or target["id"] != intent["focus"]):
             return False
         if intent["sig"] == "use":
@@ -1088,6 +1407,12 @@ class Sim:
 
     def queue_hit(self, source, target, base, damage_pct=None, tier_pct=None, knockback=0, move=None):
         p = self.rules["percent"]
+        owner = self.state["fighters"].get(source)
+        if owner is not None and owner.get("battle_gate") is not None and owner.get("behaviour") is not None:
+            enemy = self.state["fighters"][target]
+            targets = {n: self.state["fighters"][n]["target"] for n in self._live()}
+            if not self._passes(owner, enemy, owner["battle_gate"], distance(owner, enemy), targets):
+                return                                          # battle mode: the gate spares everyone else
         self.state["damages"].append({"source": source, "target": target, "base": base,
                                      "damage_pct": p if damage_pct is None else damage_pct,
                                      "tier_pct": p if tier_pct is None else tier_pct, "knockback": knockback})

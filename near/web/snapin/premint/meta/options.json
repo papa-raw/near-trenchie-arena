@@ -1,0 +1,112 @@
+{
+ "brawler-swing": {
+  "file": "barnacle-bertie.json",
+  "digest": "297faa0854b69361ba5247acd3e4fd11c6905ffdaa8ddf9a980eaa830f3d5b95",
+  "option": "Brawler Swing",
+  "look": "meta/barnacle-bertie.look.json",
+  "name": "Barnacle Bertie",
+  "role": "barnacle-bertie",
+  "temperament": "Gruff",
+  "temper": "gruff",
+  "quirks": [
+   "mutters"
+  ],
+  "voice": "Swings first and argues later. Is sure every crab on the island owes it money.",
+  "emoji": [
+   "😤",
+   "💢",
+   "👊",
+   "🔥",
+   "🪓",
+   "🐗"
+  ]
+ },
+ "hunter-lunge": {
+  "file": "pike-pennywhistle.json",
+  "digest": "ae953034c74020986c125e8b2e5b837cfeece6e437aad5a1b35e3486903ca908",
+  "option": "Hunter Lunge",
+  "look": "meta/pike-pennywhistle.look.json",
+  "name": "Pike Pennywhistle",
+  "role": "pike-pennywhistle",
+  "temperament": "Restless",
+  "temper": "restless",
+  "quirks": [
+   "hums"
+  ],
+  "voice": "Cannot sit still. Lunges at anything that twitches and whistles when it lands one.",
+  "emoji": [
+   "⚡",
+   "🏃",
+   "🌀",
+   "😵‍💫",
+   "🐇",
+   "🚀"
+  ]
+ },
+ "survivor-beam": {
+  "file": "lantern-lou.json",
+  "digest": "216b004c0a7fbef14873e48e61a1b82d7be22a03938ee2a7bba7f529abd2fc8a",
+  "option": "Survivor Beam",
+  "look": "meta/lantern-lou.look.json",
+  "name": "Lantern Lou",
+  "role": "lantern-lou",
+  "temperament": "Serene",
+  "temper": "serene",
+  "quirks": [
+   "weather"
+  ],
+  "voice": "Calm as low tide. Keeps a lamp lit and a beam ready for anyone who crowds the light.",
+  "emoji": [
+   "😌",
+   "🌊",
+   "🍃",
+   "🧘",
+   "🌙",
+   "🪷"
+  ]
+ },
+ "looter-lob": {
+  "file": "coconut-cass.json",
+  "digest": "fc5796a7004271e3d4ae0548c2f3a09f980c60c65b1924e03494f7acf5e0816c",
+  "option": "Looter Lob",
+  "look": "meta/coconut-cass.look.json",
+  "name": "Coconut Cass",
+  "role": "coconut-cass",
+  "temperament": "Sunny",
+  "temper": "sunny",
+  "quirks": [
+   "sea-puns"
+  ],
+  "voice": "Lobs coconuts and compliments in equal measure, and pockets anything that glints.",
+  "emoji": [
+   "😄",
+   "☀️",
+   "🌈",
+   "🎉",
+   "😎",
+   "🤙"
+  ]
+ },
+ "brawler-zap": {
+  "file": "static-sid.json",
+  "digest": "3b15c7869aea71bbf2c5789173cda93fd7e72e72bf76ccf1c4c8360f500f358c",
+  "option": "Brawler Zap",
+  "look": "meta/static-sid.look.json",
+  "name": "Static Sid",
+  "role": "static-sid",
+  "temperament": "Deadpan",
+  "temper": "deadpan",
+  "quirks": [
+   "counts-kos"
+  ],
+  "voice": "Says zap instead of hello. Unimpressed by everything, thunder included.",
+  "emoji": [
+   "😐",
+   "🙄",
+   "🫠",
+   "🗿",
+   "☕",
+   "🧊"
+  ]
+ }
+}

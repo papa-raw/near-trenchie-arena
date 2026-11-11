@@ -41,6 +41,12 @@ def cancel_spawns(game: sim.Sim, name: str) -> None:
                             if row["kind"] != "spawn" or row["fighter_id"] != name]
 
 
+def cancel_loadouts(game: sim.Sim, name: str) -> None:
+    """Cancel released activation equipment without changing old spawn journals."""
+    game.state["inputs"] = [row for row in game.state["inputs"]
+                            if row["kind"] != "loadout" or row["fighter_id"] != name]
+
+
 def replay_segment(record: dict, rules: Mapping | None = None,
                    frame_sink: Callable | None = None, encoder: Callable | None = None,
                    input_sink: Callable[[sim.Sim, dict], None] | None = None) -> sim.Sim:
@@ -70,6 +76,8 @@ def replay_segment(record: dict, rules: Mapping | None = None,
             game.enqueue(sim.Input(**value))
         elif kind == "cancel_spawn":
             cancel_spawns(game, value)
+        elif kind == "cancel_loadout":
+            cancel_loadouts(game, value)
         elif kind == "retire":
             game.state["fighters"].pop(value, None)
             game.state["inputs"] = [r for r in game.state["inputs"] if r["fighter_id"] != value]

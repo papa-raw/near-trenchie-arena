@@ -243,17 +243,43 @@ A reviewer sent the work back four times before it passed: twice for warning sha
 
 Check: not in this repo yet. It lands with the arena view.
 
+## 2026-11-11 · Battle mode: you tell your trenchie how to fight
+
+You never steer a trenchie by hand. You tell it how to fight, and its AI turns your words into a behaviour the arena runs: drives (go for loot, chase, keep away, hold a spot), an attack gate ("only hit enemies under 40% health who are busy fighting someone else") and up to eight reflexes ("when hit, back off"). A new order can land every half second. Each order gets two answers: a line in the trenchie's own voice, and a signed receipt from the arena that says exactly what was recorded, what was clipped and when it applies.
+
+Every fighter now talks, one line every 10 seconds, with an emoji from its own persona over its head so you can see who is shouting. The lines run in the ticker at the side, not over the fight, along with the big moments. The house trenchies run calm while the game is being built and lively on the review days.
+
+Check: `python3 -B near/arena/test_behaviour.py` prints `Ran 42 tests` and `OK`. `make play` opens the arena on your own machine.
+
+## 2026-11-11 · A newcomer agent, cold
+
+A fresh agent session with nothing but this repo and SNAP.md started the arena, snapped in its own trenchie, fought, gave an order in plain words ("grab loot, avoid crowds, only hit low-health enemies") and read back the receipt: applied a tenth of a second later. It also listed eight places where SNAP.md was unclear or wrong. The worst: the local setup left out one package, so a clean machine couldn't start the arena. All eight are fixed, and the setup steps were run again word for word in a clean environment.
+
+Check: `python3 -I near/tools/check_snap.py` prints `SNAP.md: OK`.
+
+## 2026-11-11 · Wallets, frames and spending caps
+
+The wallet list now comes from a reviewed copy served by the game itself, with each wallet's code pinned to an exact version and checked by hash. A wallet is chosen by its exact id and code, never by the name on the button. Review also found that another site could load the guide inside a frame and catch a player's sign-in. The guide now refuses to sign in inside a frame. And a player's spending cap now holds across browser tabs: two tabs calling the AI at once can't go over it together.
+
+Check: not runnable without a browser; the cases ship with the code.
+
+## 2026-11-11 · Trenchies you own, gear that follows the owner
+
+On testnet, a trenchie claimed as an NFT fights through an owner check: when it's sold, its next life belongs to the buyer, and its gear stays filed under the token. Getting there turned up three ways a record could go wrong when the arena restarts: it could reset to zero, bring back an item it had lost, or drop one it never touched. The arena now saves only the moves it made itself, and only counts them saved once the chain confirms them.
+
+The identity contract for mainnet is built, rehearsed on testnet and through a security review. It deploys next.
+
+Every piece above went through a separate reviewer, and several came back more than once.
+
+Check: `cargo test` in each contract under `near/contracts/` passes.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
 
-- `trenchie_nft` and `arena` for mainnet and `market` for testnet, with `cargo test`
-- the gas measurements that set the batch size
-- the balance sweep's final report
-- the arena view, the 14 house models and the item kit
-- the login modal, the join flow in the browser and the persona creator
-- the prediction scoring and its public log
-- `make demo`: it will need no keys, run in under 5 minutes, re-simulate a fixed set of recorded segments and check each final hash against the hash written on mainnet, fetched from archival RPC
+- the identity contract on mainnet
 - the hosted arena, up before review starts on 2026-11-16
+- `make demo`'s check of each replayed hash against the hash written on testnet, fetched from archival RPC
+- the balance sweep's final report
 
 The repo goes public before submissions close at 2026-11-14T23:59:00Z.

@@ -4,12 +4,12 @@ RD-01 option A: four read-only actions for the reviewer. The hosted arena,
 hosted join command, public full prediction log/score, chain transaction and
 outside-agent recording remain explicitly pending. No wallet is requested.
 
-From the repository root, with Python 3.10+ and the pinned room dependency:
+From the repository root, with Python 3.10+ and the pinned dependencies:
 
 ```sh
-python3 -m pip install -r room/requirements.txt
-make -C near demo
-make -C near desk
+python3 -m pip install -r near/requirements.txt
+(cd near && make demo)
+(cd near && make desk)
 ```
 
 Open the printed loopback URL. `demo` finishes without starting a persistent
@@ -38,7 +38,7 @@ The native seal and portable room seal use different formulas and are labelled
 separately. A local replay is not a chain check. No deployment, RPC, archival
 transaction, custody, mint, claim or stake capability is added here.
 
-`make -C near demo DEMO_DIR=/absolute/path` changes the export directory. To read
+`(cd near && make demo DEMO_DIR=/absolute/path)` changes the export directory. To read
 it, use `python3 -B near/web/runtime.py --demo-dir /absolute/path`. Without an
 archive the desk retains pending states; an invalid archive is unavailable,
 never checked. The server binds only 127.0.0.1, checks Host/origin, allows fixed

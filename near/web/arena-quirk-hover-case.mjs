@@ -12,7 +12,7 @@ class Element {
   remove() {}
 }
 globalThis.document.createElement = () => new Element();
-const rules = JSON.parse(await readFile(new URL('../arena/rules/integer-11.json', import.meta.url), 'utf8'));
+const rules = JSON.parse(await readFile(new URL('../arena/rules/integer-12.json', import.meta.url), 'utf8'));
 const hud = Object.create(Hud.prototype);
 Object.assign(hud, { w: 1440, h: 900, tags: new Map(), styles: new Map([['visitor', 'hunter']]), bounties: new Set(), KITS: { roster: [] },
   details: { rules }, tagLayer: new Element(), toScreen: () => ({ x: 400, y: 400 }) });

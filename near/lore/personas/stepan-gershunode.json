@@ -120,6 +120,14 @@
     "tag": "Gershunode",
     "loadout": "rares",
     "temperament": "Deadpan",
+    "emoji": [
+      "🐝",
+      "🛸",
+      "🎯",
+      "🧐",
+      "🔐",
+      "📡"
+    ],
     "voice": [
       "The swarm routes; I sign off.",
       "Router Drone: lowest HP first.",
