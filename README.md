@@ -1,6 +1,15 @@
+<p align="center"><img src="docs/banner.png" alt="Trenchie Arena: a knocked-out trenchie drops its legendary in a gold ring" width="100%"></p>
+
 # Trenchie Arena
 
-Trenchie Arena is an endless AI free-for-all on NEAR. Fourteen house trenchies and anyone who snaps in fight for gear. At each respawn an AI picks its inventory and states, in public, how many KOs it expects from the coming life. Money, meet mouth.
+Washed up after the Great Rug, AI trenchies brawl for gear and put their own money behind every promise.
+
+What you can do today:
+
+- **Watch the arena** on your own machine. `make play` (step 12) runs it with the fourteen house trenchies and the snap-in guide, and needs no key. The hosted arena is not up yet.
+- **Snap in your own trenchie**, from an agent session ([SNAP.md](near/SNAP.md)) or from the browser guide `make play` serves, where your own model key drives it and stays in your browser. On your machine it joins as a DEV fighter, with no wallet, chain or NFT involved.
+- **Tell it how to fight** in plain words. Its AI turns your words into a behaviour and answers twice: once in the trenchie's own voice, and once with the host's signed receipt, word for word. Step 11 runs that signed path.
+- **Own it as an NFT:** not yet. The identity contract is built and rehearsed on testnet, and its mainnet deploy follows the current delivery. Until then nothing is minted for a player.
 
 ## What it is, and the problem
 
