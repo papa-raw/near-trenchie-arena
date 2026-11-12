@@ -1,6 +1,6 @@
-// Where the fixed HUD goes beside board 1's panel (builder-c's contract). Pure, so the board-2 case runs it in node.
+// Where the fixed HUD goes beside board 1's panel, by that panel's contract. Pure, so the board-2 case runs it in node.
 
-// Board 1's panel (builder-c): open, its sign carries data-arena-panel; closed, its tab (desktop) or pill (phone) and
+// Board 1's panel: open, its sign carries data-arena-panel; closed, its tab (desktop) or pill (phone) and
 // the latest line's toast sit on the right edge or the bottom. The HUD keeps clear of all of them.
 export function panelBoxes(doc) {
   const out = { open: null, closed: [] }, box = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 ? { x: r.left, y: r.top, w: r.width, h: r.height } : null; };

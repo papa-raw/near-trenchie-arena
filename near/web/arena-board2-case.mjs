@@ -83,7 +83,7 @@ const withPanel = signBox({ w: 1440, h: 900 }, 1440 - 472); assert.ok(withPanel.
 assert.equal(signUrl('wss://neartrenchies.xyz/arena-ws'), 'https://neartrenchies.xyz/house/leaderboards.json');
 assert.equal(signUrl('ws://127.0.0.1:8765'), 'http://127.0.0.1:8765/house/leaderboards.json'); n++;
 
-// ---- beside board 1's panel (builder-c's contract: [data-arena-panel] open; .edge-tab / .pill / .toast closed)
+// ---- beside board 1's panel (the panel's contract: [data-arena-panel] open; .edge-tab / .pill / .toast closed)
 const corner = { w: 250, h: 40 };
 let L = hudLayout({ w: 1440, h: 900 }, { open: null, closed: [] }, corner);
 assert.deepEqual([L.right, L.bottom, L.free, L.feedHidden], [16, 16, 1440, false]); n++;
@@ -122,7 +122,7 @@ let p = pose(0, from, to); assert.deepEqual([p.x, p.y, p.scale, p.opacity], [500
 p = pose(STAMP_MS, from, to); assert.deepEqual([p.x, p.y, p.scale, p.opacity], [500, 400 - LIFT_PX, 1, 1]); n++;
 p = pose(STAMP_MS + SHRINK_MS, from, to); assert.deepEqual([p.x, p.y, +p.scale.toFixed(3), p.opacity], [510, 330, 0.4, 0]); n++;
 
-// ---- review round 1 (critic-b @ a5b203f)
+// ---- fixes from the first review
 // L4: a 0-KO row (or 0 points) is not a place on the board
 const zero = { boards: { most_kos_hour: { players: [{ persona: 'ann', kos: 3, lives: 1 }, { persona: 'leeth', kos: 0, lives: 1 }], house: [] },
   most_correct_day: { players: [{ persona: 'ann', reward_points: 0, correct: 0 }], house: [] } } };
@@ -177,7 +177,7 @@ assert.equal(fitSign({ loose: 200, extraLines: 0 }), '');               // fits 
 assert.equal(fitSign({ loose: 120, extraLines: 0 }), 'tight');          // rank, face and points drop; 2 lines suffice
 assert.equal(fitSign({ loose: 120, extraLines: 1 }), 'stack tight'); n++;   // still more: the name takes the whole row
 
-// board2-followup (critic-b round 4 LOWs): the DEV chip stays with the name's last word, and a long single word shows a
+// board2-followup (small fixes from the fourth review): the DEV chip stays with the name's last word, and a long single word shows a
 // hyphen where it breaks (soft hyphens), never a bare cut
 assert.equal(nameHtml('Bartholomew Longname of the Tide', true), 'Bartholomew Longname of the <span class="nb">Tide&nbsp;<span class="dev">DEV</span></span>');
 assert.equal(nameHtml('Lantern Lou', false), 'Lantern Lou'); n++;

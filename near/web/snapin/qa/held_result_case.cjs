@@ -1,4 +1,4 @@
-// critic-b's MEDIUM on f2057f9 (orchestrator's call): when the DEV host holds new joins for a lapsed player's unread round
+// When the DEV host holds new joins for a lapsed player's unread round
 // result, only that player's own browser may read it. Two browsers on the real DEV arena:
 //   X snaps in through the guide, closes every tab and lapses, so the host holds new joins for X's unread result.
 //   Y (another browser) arrives and snaps in: Y waits on the host's countdown ("Back in the ring in N s…") and never asks

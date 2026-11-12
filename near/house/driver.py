@@ -106,7 +106,7 @@ class ArenaDriver:
         """The level a spread backs: the highest L in 1..4 whose own P(>= L KOs) is at least 50%, or None.
 
         `spread` is whole percents for exactly 1, 2, 3 and 4+ KOs given at least one, and `zero` the percent chance of
-        none, so P(>= L) = (100 - zero) * (spread[L-1] + ... + spread[3]) / 100. Compared in integers: no rounding."""
+        none, so P(>= L) = (100 - zero) * (spread[L - 1] + ... + spread[3]) / 100. Compared in integers: no rounding."""
         level = None
         for index in range(4):
             if 2 * (100 - zero) * sum(spread[index:]) >= 100 * 100:

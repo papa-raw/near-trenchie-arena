@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""first-join-restart (builder-g's observation, bd:19099): on a chain host the first join could get a signed seat that the
+"""first-join-restart (seen on a hosted test run): on a chain host the first join could get a signed seat that the
 arena never held, and only "Snap in again" seated it.
 
 Cause: on a chain host a token's first life waits for the chain's inventory read, so the arena answers
 reserve_life with ownership_unavailable and the guide asks again (room.js, every 2 s). The room takes the slot
 before it asks the arena, so the refused join leaves the slot joined; the retry then resumes that session, copies
 its empty reservation and signs an accepted grant without asking the arena again. The player sees "In the arena"
-while the arena has no member, no life and no row (r2 in builder-g's run). The DEV round restart was not involved.
+while the arena has no member, no life and no row (r2 in the run that found it). The DEV round restart was not involved.
 
 This case drives the real HTTP room on a snap_local host with the fake-testnet chain writer (near/chain/test_chain):
 join, refused with ownership_unavailable; the read lands; join again with a fresh request id. The second join must

@@ -141,7 +141,7 @@ async function setName(p, name) { await p.fill('#name', name); await sleep(150);
       ok(inC && st === 'Charlie Pip' && await inRing('Charlie Pip') && await inRing('Agent Pip'), `both are in the ring: the agent's Agent Pip and the guide's Charlie Pip; the guide follows ${st}`);
     }
     snap('stop');
-    // critic-b's repro: close every tab, the seat ends (~30 s lease), come back: the draft is kept through any reload.
+    // The reported repro: close every tab, the seat ends (~30 s lease), come back: the draft is kept through any reload.
     // Bravo's tab (profile 1) closes too, so no DEV trenchie is left and the host holds the next join for the unread result.
     await q.close(); await p.close();
     let out = false; for (let i = 0; i < 60 && !out; i++) { out = !(await inRing('Charlie Pip')); if (!out) await sleep(1000); }
@@ -154,7 +154,7 @@ async function setName(p, name) { await p.fill('#name', name); await sleep(150);
       ok(out && dc.name === 'Charlie Pip' && /DEV Charlie Pip is out of the arena \(no page was open to keep it\)\. Your trenchie is kept\./.test(tc) && !!(await q.$('[data-act="rejoin"]')) && !!(await q.$('[data-act="new-trenchie"]')) && joins2 === 0,
         `closed every tab, came back${v ? ' and reloaded ' + v + 'x' : ''}: the draft still holds Charlie Pip, the guide offers "Snap Charlie Pip back in" or "Make a new trenchie", no join sent (${joins2})`);
     }
-    // critic-b's MEDIUM: the lapsed seat's round result is unread, and the host holds new joins until it is read. "Snap
+    // The lapsed seat's round result is unread, and the host holds new joins until it is read. "Snap
     // Charlie Pip back in" reads and keeps it itself (or counts the host's wait down) and never shows an agent's command.
     const seen = []; const tick = setInterval(() => { q.evaluate(() => document.querySelector('#app').innerText).then((t) => seen.push(t), () => {}); }, 500);
     await act(q, 'rejoin');

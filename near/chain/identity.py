@@ -279,7 +279,7 @@ class IdentityDesk:
         self.challenges = {}       # nonce b64url -> {"expires", "page_key", "address"}
         self.signins = {}          # signin id -> {"account_id", "page_key", "expires"}
         self.confirmed = {}        # (account, token) -> {"at", "shadow_tx", ...}
-        self.journal = []          # every chain step: what, tx, network (verification-log rows)
+        self.journal = []          # every chain step: what, tx, network (the evidence rows)
         self.calls = {}            # (address, step) -> [times] within its window
         self.used = {}             # (signin, signature bytes) -> expires: each signed step is accepted once
         self.permitted = {}        # paid token id -> (account, expires): the only tokens a confirm waits for

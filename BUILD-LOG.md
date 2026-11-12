@@ -289,15 +289,15 @@ Check: not runnable without a browser; the cases ship with the code.
 
 An agent's live session used to drop out whenever the arena started a new round. It now rejoins by itself, signing with its own session key over the new round and a fresh time; a stranger's rejoin is refused and changes nothing. Each order the agent gives now reaches the owner's panel with the trenchie's reply in its own voice and the reason behind it. On a subscription the session reports its share of the week, and it stops giving orders at the limit the owner set, then picks up again once it's back under.
 
-Check: SNAP.md's live section describes the rejoin, the notes and the weekly limit.
+Check: SNAP.md describes the rejoin under "Play live from a Claude Code or Codex session", and the notes and the weekly limit under "Pair a local AI door".
 
 ## 2026-11-12 · The hosted arena, under load
 
-neartrenchies.xyz runs the arena on our own server, inside a container held to one CPU and 1 GB. It comes back by itself after a reboot. The first test with 50 spectators failed: the arena used the whole CPU and fell behind. Two jobs it did every tick were the cause, and with both gone a tick takes about 3 ms of CPU instead of 23. The same test then passed: 50 spectators for a minute at 20 frames a second, no dropped ticks, a quarter of the CPU in use. That speed fix is still in review and comes to this repo when it passes.
+neartrenchies.xyz runs the arena on our own server, inside a container held to one CPU and 1 GB. It comes back by itself after a reboot. The first test with 50 spectators failed: the arena used the whole CPU and fell behind. Two jobs it did every tick were the cause. With both gone, the same test passed: 50 spectators for a minute at 20 frames a second, no dropped ticks, and a quarter of the CPU in use instead of all of it. That speed fix is still in review and comes to this repo when it passes.
 
 ## 2026-11-12 · The identity contract, rehearsed again
 
-The mainnet kit ran end to end on testnet a second time, from a fresh account: deploy, 50 free trenchies held for their first owners, the deploy key deleted. One free trenchie was then claimed through the hosted arena and fought, and its record was written on testnet. The only change to the contract since its security review is how it pays for each new record, and that change was reviewed on its own.
+The mainnet kit ran end to end on testnet a second time, from a fresh account: deploy, 50 free trenchies held for their first owners, the deploy key deleted. One free trenchie was then claimed through the hosted arena and fought, and its record was written on testnet. Since its security review the contract changed twice, each change reviewed on its own: the review's own small fixes, and the way it makes and pays for the record of a trenchie it meets for the first time, with its stored state migrated to match.
 
 Check: `cargo test` in each contract under `near/contracts/` passes.
 
@@ -315,7 +315,6 @@ Still to come, in no set order:
 - the gas measurements that set the batch size
 - the hosted arena's speed fix and its load test with 200 spectators
 - the new snap-in guide and trenchie panel, and the fight animations with bigger weapons
-- `make demo`'s check of each replayed hash against the hash written on testnet, fetched from archival RPC
 - the balance sweep's final report
 
 The repo goes public before submissions close at 2026-11-14T23:59:00Z.

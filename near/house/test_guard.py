@@ -61,7 +61,7 @@ class Rules(unittest.TestCase):
 
 
 class Variants(unittest.TestCase):
-    """MED-C (critic-c): spacing, case, punctuation and invisible characters must not slip a listed name past the
+    """Spacing, case, punctuation and invisible characters must not slip a listed name past the
     guard (it also signs persona permits). Every name here is the invented stand-in from LIST."""
 
     def setUp(self):
@@ -100,7 +100,7 @@ class Variants(unittest.TestCase):
             self.assertFalse(g.check(line)["blocked"], repr(line))                 # the spoof is still the longest match
 
     def test_gaps_inside_one_word_are_read_as_the_word_for_terms_of_four_letters_or_more(self):
-        # guard-confusables (critic-c LOW-1, slot 1's call): was a stated limit in guard-norm.
+        # guard-confusables: was a stated limit in guard-norm.
         for line in ("you b-l-o-r-p", "you bl orp", "you b.l.o.r.p", "you b\u200bl\u200bo\u200br\u200bp"):
             self.assertTrue(self.blocked(line), repr(line))
 
@@ -109,7 +109,7 @@ class Variants(unittest.TestCase):
 
 
 class Lookalikes(unittest.TestCase):
-    """guard-confusables (critic-c LOW-1 and LOW-2 on guard-norm; slot 1: fixed before any mainnet identity, since a
+    """guard-confusables (two lookalike gaps after guard-norm, fixed before any mainnet identity, since a
     mainnet NFT title is permanent). Invented names only; every non-ASCII character is written as an escape."""
 
     def setUp(self):

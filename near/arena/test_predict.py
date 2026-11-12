@@ -197,7 +197,7 @@ class ArenaRows(unittest.TestCase):
 
 
 class HouseFlag(unittest.TestCase):
-    """seal-house-flag (critic-b on board 2): a house trenchie whose life ends and who swims home before the seal is
+    """seal-house-flag (found on board 2): a house trenchie whose life ends and who swims home before the seal is
     no longer a member or a fighter at the seal; its row must still say house, and a player's must not."""
 
     def test_every_house_life_seals_house_true_even_after_it_swims_home(self):
@@ -259,7 +259,7 @@ class Served(unittest.TestCase):
 
 
 class OneRecordPerHost(unittest.TestCase):
-    """critic-c's MEDIUM: the record and the boards survive a round restart and a host start (one file per state dir)."""
+    """The record and the boards survive a round restart and a host start (one file per state dir)."""
 
     def lives(self, dev, days_ago, *names):
         """End one life per name in the host's current round, sealed `days_ago` days back, through its real arena's
