@@ -26,8 +26,10 @@ test:
 	$(PY) -I tools/check_snap.py
 	$(PY) -I tools/check_words.py --selftest
 	$(PY) -I tools/check_words.py
+	$(PY) -I web/test_docs_page.py
 	$(PY) -B tools/test_gate.py
 	$(PY) -B tools/test_check_deps.py
+	$(PY) -B tools/test_readme_steps.py
 	$(PY) -I lore/check_sheets.py --kits
 	$(PY) -I lore/check_sheets.py --selftest
 	$(PY) -I lore/check_personas.py

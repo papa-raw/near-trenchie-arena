@@ -1,7 +1,7 @@
 // When the DEV host holds new joins for a lapsed player's unread round
 // result, only that player's own browser may read it. Two browsers on the real DEV arena:
 //   X snaps in through the guide, closes every tab and lapses, so the host holds new joins for X's unread result.
-//   Y (another browser) arrives and snaps in: Y waits on the host's countdown ("Back in the ring in N s…") and never asks
+//   Y (another browser) arrives and snaps in: Y waits on the host's countdown ("In the ring in N s…") and never asks
 //   for the round's result.
 //   X comes back and presses "Snap Xray Pip back in": X's browser says "Reading the last round's result…", reads it and
 //   keeps it, which lifts the hold; X is back in the ring and Y gets in right after, still without reading it.
@@ -9,7 +9,7 @@
 'use strict';
 const path = require('path'), fs = require('fs'), os = require('os');
 const { chromium } = require('playwright');
-const HOSTS = require('./hosts.cjs');
+const HOSTS = require('./hosts.cjs'), G = require('./board1_flow.cjs');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -28,13 +28,9 @@ const TMP = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'held-re
     bx = await chromium.launchPersistentContext(path.join(TMP, 'x'), { args: ['--single-process', '--no-zygote'] });
     let reads = { x: 0, y: 0 };
     bx.on('request', (r) => { if (/\/room\/result/.test(r.url())) reads.x++; });
+    await G.fakeNearAI(bx);
     let px = await bx.newPage(); const errs = []; px.on('pageerror', (e) => errs.push('x: ' + e.message));
-    await px.goto(guide + '?step=wallet'); await ready(px);
-    await px.click('[data-act="wallet-dev"]'); await sleep(300);
-    await px.evaluate(() => { Object.assign(Snapin.state, { name: 'Xray Pip', agreed: true, termsVersion: '1', step: 'agree' }); localStorage.setItem('trenchie.snapin.v1', JSON.stringify(Snapin.state)); });
-    await px.goto(guide + '?step=ring'); await ready(px);
-    await px.click('[data-act="join"]');
-    await px.waitForFunction(() => SnapRoom.status().phase === 'in', null, { timeout: 60000 });
+    await G.snapIn(px, { url: guide, name: 'Xray Pip', preset: 'Survivor Beam' });   // through board 1's guide, as a player
     ok(await present('Xray Pip'), 'X (Xray Pip) is in the arena');
     // the host holds new joins for an unread result only once the round has passed its first segment (snap_local.py
     // maybe_restart): X stays in until the arena is past segment:0
@@ -52,7 +48,7 @@ const TMP = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'held-re
     py.evaluate(() => SnapRoom.join({ name: 'Yankee Pip', preset: 'survivor-beam', termsVersion: '1' }).catch(() => {}));
     await sleep(6000);
     console.log('  Y saw:', JSON.stringify([...new Set(seenY)]).slice(0, 400), '| Y phase:', await py.evaluate(() => SnapRoom.status().phase));
-    const yWaits = seenY.filter((m) => /Back in the ring in \d+ s/.test(m || ''));
+    const yWaits = seenY.filter((m) => /^In the ring in \d+ s/.test(m || ''));   // Y was never in: not "Back in the ring"
     ok(yWaits.length > 0 && reads.y === 0 && !(await present('Yankee Pip')), `Y waits on the host's countdown ("${yWaits[yWaits.length - 1] || 'none'}") and has not read the held result (reads ${reads.y})`);
     // ---- X comes back and snaps itself back in: its own browser reads its own result
     reads.x = 0; px = await bx.newPage(); px.on('pageerror', (e) => errs.push('x: ' + e.message));

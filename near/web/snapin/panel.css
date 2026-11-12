@@ -1,0 +1,195 @@
+/* snapin/panel.css: board 1's trenchie panel on the arena page (fight, thinking, changecap, capped, bench, agent, closed),
+ * the board's own rules scoped under .b1p so they never reach the arena's styles. Generated from board1.css's panel rules;
+ * the phone layout keys off .b1p.w390 (panel.js sets it from the window width). */
+.b1p{font:14px/1.45 'Space Mono',monospace;color:#2a2622;--ink:#2a2622;--muted:#655541;--paper:#fff8ea;--field:#efe3c9;--rule:#bbaa8c;--wood:#c9966a;--gold:#f7cf6b;--mint:#9fdcc5;--green:#20553f;--coral:#b85a3c;--danger:#c2453a;--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px}
+.b1p *{box-sizing:border-box}.b1p h2,.b1p h3{font-family:'Lilita One';font-weight:400;margin:0}
+.b1p button{font:700 13px/1.25 'Space Mono';color:var(--ink);border:0;background:none;cursor:pointer;position:relative;isolation:isolate;min-height:44px;padding:10px 16px}
+.b1p button[disabled]{cursor:not-allowed;color:#8c7d68}
+.b1p textarea{font:14px/1.45 'Space Mono';color:var(--ink);background:var(--field);border:1px solid #a68a62;border-radius:3px;padding:10px 12px;width:100%;resize:none}
+.b1p button:focus-visible,.b1p a:focus-visible,.b1p textarea:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+@font-face{font-family:'Lilita One';src:url(fonts/LilitaOne-400.woff2) format('woff2');font-display:block}
+@font-face{font-family:'Space Mono';src:url(fonts/SpaceMono-400.woff2) format('woff2');font-weight:400;font-display:block}
+@font-face{font-family:'Space Mono';src:url(fonts/SpaceMono-700.woff2) format('woff2');font-weight:700;font-display:block}
+.b1p .material{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;overflow:visible}
+.b1p .link{color:var(--green);text-decoration:underline;text-underline-offset:3px;font:700 13px 'Space Mono';background:none;min-height:auto;padding:0;cursor:pointer}
+.b1p .link .material{display:none}
+.b1p .eyebrow{font:700 11px 'Space Mono';letter-spacing:.1em;text-transform:uppercase;color:#675440}
+.b1p .muted{color:var(--muted)}
+.b1p .small{font-size:12px}
+.b1p .row{display:flex;align-items:center;gap:var(--s3)}
+.b1p .spread{display:flex;align-items:center;justify-content:space-between;gap:var(--s3)}
+.b1p .grow{flex:1;min-width:0}
+.b1p .sign{position:absolute;isolation:isolate;padding:14px;display:flex;flex-direction:column}
+.b1p .face{background:var(--paper);display:flex;flex-direction:column;min-height:0;flex:1;position:relative}
+.b1p .gold{font:20px 'Lilita One';padding:10px 22px;min-height:50px}
+.b1p .gold.wide{width:100%}
+.b1p .plate{min-height:44px}
+.b1p .chipline{display:flex;gap:var(--s2);flex-wrap:wrap}
+.b1p .chip{font:700 12px 'Space Mono';padding:7px 11px;border:1.5px solid var(--rule);background:var(--paper);border-radius:4px;min-height:34px}
+.b1p .chip .material{display:none}
+.b1p .chip.on{background:var(--mint);border-color:#5fb79a}
+.b1p .note{font-size:12px;color:var(--muted)}
+.b1p .hp{height:8px;background:#e6dac2;border-radius:4px;overflow:hidden;margin-top:6px}
+.b1p .hp i{display:block;height:100%;background:#5fb79a;border-radius:4px}
+.b1p .state{font:700 11px 'Space Mono';letter-spacing:.06em;padding:3px 7px;border-radius:3px;background:#e5f4ec;color:var(--green);white-space:nowrap}
+.b1p .state.warn{background:#f7e0d6;color:#8c2e1f}
+.b1p .state.bench{background:#efe3c9;color:#5a4528}
+.b1p .icons{display:flex;gap:6px}
+.b1p .ib{width:36px;min-height:36px;padding:0;font-size:15px}
+.b1p .money{padding:8px var(--s4) 10px;border-bottom:1px dashed var(--rule);font-size:12px}
+.b1p .meter{height:6px;background:#e6dac2;border-radius:3px;overflow:hidden;margin:5px 0 2px}
+.b1p .meter i{display:block;height:100%;background:#d39e2a}
+.b1p .meter.full i{background:var(--danger)}
+.b1p .log{flex:1;overflow:auto;padding:var(--s3) var(--s4);display:flex;flex-direction:column;gap:10px;min-height:0}
+.b1p .ev{font-size:11px;color:var(--muted)}
+.b1p .ev b{color:var(--ink)}
+.b1p .you{align-self:flex-end;background:#e8f1f7;border:1px solid #b8d2e4;padding:7px 10px;border-radius:8px 8px 2px 8px;font-size:13px;max-width:88%}
+.b1p .you .t{display:block;font-size:10px;color:var(--muted);text-align:right}
+.b1p .reply{font-size:13px;line-height:1.45}
+.b1p .reply .who{font:18px 'Lilita One';color:var(--coral);margin-right:6px}
+.b1p .slip{background:#fbf3e2;border:1px dashed #b39b72;padding:8px 10px;font-size:11.5px;line-height:1.5;margin-top:5px}
+.b1p .slip .h{font:700 10px 'Space Mono';letter-spacing:.1em;color:#5a4528;display:flex;justify-content:space-between;gap:8px}
+.b1p .slip ul{margin:4px 0 2px;padding:0 0 0 14px}
+.b1p .slip .why{color:var(--muted);margin-top:3px}
+.b1p .thinking{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.b1p .dots{display:inline-flex;gap:3px}
+.b1p .dots i{width:6px;height:6px;border-radius:50%;background:var(--coral);opacity:.35;animation:d 1s infinite}
+.b1p .dots i:nth-child(2){animation-delay:.2s}
+.b1p .dots i:nth-child(3){animation-delay:.4s}
+@keyframes d{50%{opacity:1}}
+.b1p .order{padding:var(--s3) var(--s4) var(--s4);border-top:1px dashed var(--rule)}
+.b1p .order textarea{height:58px}
+.b1p .order .spread{margin-top:8px}
+.b1p .blocked{background:#f9e5dc;border:1px solid #e2b3a0;padding:10px 12px;font-size:12px;border-radius:3px;margin-bottom:10px}
+.b1p .blocked b{color:#8c2e1f}
+.b1p .readonly{background:#f1e9d8;border:1px dashed var(--rule);padding:12px;font-size:12px;border-radius:3px}
+.b1p .gear{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.b1p .slot{display:grid;grid-template-columns:40px 1fr;gap:8px;align-items:center;padding:7px;background:#fbf3e2;border:1px solid #e0d2b6;border-radius:4px;font-size:11px;text-align:left;min-height:auto;font-weight:400}
+.b1p .slot .material{display:none}
+.b1p .slot b{display:block;font-size:12px}
+.b1p .slot .ico{width:40px;height:40px;background:#efe3c9;border-radius:4px;display:flex;align-items:center;justify-content:center}
+.b1p .slot.swap{outline:2px dashed #5fb79a;outline-offset:-2px;background:#eef8f2}
+.b1p .bag{display:flex;gap:8px;flex-wrap:wrap}
+.b1p .bag .slot{grid-template-columns:32px auto;padding:5px 9px 5px 5px}
+.b1p .bag .slot .ico{width:32px;height:32px}
+.b1p .switch{display:flex;align-items:center;gap:10px;font:700 13px 'Space Mono'}
+.b1p .switch i{width:40px;height:22px;border-radius:11px;background:#5fb79a;position:relative;flex-shrink:0}
+.b1p .switch i:after{content:'';position:absolute;right:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff}
+.b1p .switch.off i{background:#cdbfa4}
+.b1p .switch.off i:after{right:auto;left:3px}
+.b1p .edge-tab{position:absolute;right:0;top:120px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px 10px 12px;isolation:isolate;width:96px;font:700 11px 'Space Mono';text-align:center}
+.b1p .edge-tab img{width:62px;height:64px;object-fit:contain}
+.b1p .edge-tab .hp{width:64px;margin:0}
+.b1p .ping{position:absolute;top:8px;left:10px;width:12px;height:12px;border-radius:50%;background:var(--coral);border:2px solid var(--paper)}
+.b1p .toast{position:absolute;background:var(--paper);border:1.5px solid #8a6f4a;border-radius:6px;padding:8px 12px;font-size:12px;box-shadow:0 3px 0 #0002;max-width:300px}
+.b1p .toast .who{font:16px 'Lilita One';color:var(--coral)}
+.b1p.w390 .gold{font-size:18px;padding:10px 16px}
+.b1p .log{-webkit-mask-image:linear-gradient(transparent,#000 22px);mask-image:linear-gradient(transparent,#000 22px)}
+.b1p.w390 .money{padding:6px 12px 7px}
+.b1p.w390 .log{padding:8px 12px;gap:8px}
+.b1p.w390 .order{padding:8px 12px 10px}
+.b1p.w390 .order textarea{height:42px}
+.b1p.w390 .ib{width:32px;min-height:32px}
+.b1p.w390 .slip{font-size:11px;padding:6px 8px}
+.b1p.w390 .reply{font-size:12px}
+.b1p.w390 .you{font-size:12px}
+.b1p .gold{white-space:nowrap}
+.b1p .log.nomask{-webkit-mask-image:none;mask-image:none}
+.b1p .who{font:18px 'Lilita One';color:var(--coral);margin-right:6px}
+.b1p .pnl .face{font-size:13px}
+.b1p .ph{display:grid;grid-template-columns:60px 1fr auto;gap:12px;align-items:start;padding:14px 16px 10px}
+.b1p .ph img{width:60px;height:66px;object-fit:contain;background:#f1e6cf;border-radius:6px}
+.b1p .ph h2{font-size:22px;line-height:1.08;overflow-wrap:anywhere}
+.b1p .ph .sub{font-size:13px;color:var(--muted);margin-top:3px}
+.b1p .hprow{display:flex;align-items:center;gap:8px;margin-top:6px}
+.b1p .hpl,.b1p .hpn{font:700 13px 'Space Mono'}
+.b1p .hprow .hp{margin:0;height:9px}
+.b1p .ph-r{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.b1p .state{font-size:13px;letter-spacing:.02em}
+.b1p .fol{min-height:36px;padding:6px 10px;font-size:13px}
+.b1p .ib{width:38px;min-height:36px}
+.b1p .gearrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 16px;border-top:1px dashed var(--rule);font-size:13px}
+.b1p .gearrow .gh{font:700 13px 'Space Mono';color:#5a4528}
+.b1p .gi{display:inline-flex;align-items:center;gap:4px;font-size:13px}
+.b1p .gi svg{background:#efe3c9;border-radius:4px}
+.b1p .bagl{margin-left:auto;font-size:13px}
+.b1p .mny{padding:8px 16px 10px;border-top:1px dashed var(--rule);border-bottom:1px dashed var(--rule);font-size:13px}
+.b1p .mny .link{font-size:13px}
+.b1p .capedit{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.b1p .log{font-size:13px;padding:12px 16px;gap:10px}
+.b1p .ev{font-size:13px;color:var(--muted)}
+.b1p .ev .t,.b1p .you .t{color:var(--muted);font-size:13px}
+.b1p .you{font-size:13px}
+.b1p .you .t{display:block;text-align:right}
+.b1p .you.ses{background:#efe6f6;border-color:#cdb6e4}
+.b1p .you .sl{display:block;font-size:13px;color:#6b4f8a;font-weight:700}
+.b1p .reply{font-size:13px}
+.b1p .slip{font-size:13px}
+.b1p .slip .h{font-size:13px;letter-spacing:.04em}
+.b1p .thinking{font-size:13px}
+.b1p .order{padding:10px 16px 14px}
+.b1p .order .muted{font-size:13px}
+.b1p .blocked,.b1p .readonly{font-size:13px}
+.b1p .benchb{padding:10px 16px;border-bottom:1px dashed var(--rule);font-size:13px}
+.b1p .benchb .bh{font:20px 'Lilita One'}
+.b1p .benchb .switch{margin:8px 0 4px;font-size:13px}
+.b1p .benchb .note{font-size:13px;margin:0 0 8px}
+.b1p .benchb .eyebrow{font-size:13px;letter-spacing:.04em;margin-bottom:6px}
+.b1p .slot{font-size:13px}
+.b1p .slot b{font-size:13px}
+.b1p .slot .muted{display:block;font-size:13px}
+.b1p .edge-tab{width:104px;font-size:13px;top:130px}
+.b1p .edge-tab b{font:17px 'Lilita One'}
+.b1p .pill{position:absolute;left:12px;right:12px;bottom:14px;min-height:64px;display:flex;align-items:center;gap:12px;text-align:left;font-size:13px}
+.b1p .pill img{width:44px;height:48px;object-fit:contain}
+.b1p .pill b{font:19px 'Lilita One'}
+.b1p .toast{font-size:13px}
+.b1p.w390 .ph{grid-template-columns:44px 1fr auto;padding:10px 12px 8px;gap:10px}
+.b1p.w390 .ph img{width:44px;height:48px}
+.b1p.w390 .ph h2{font-size:18px}
+.b1p.w390 .gearrow{padding:6px 12px;gap:8px}
+.b1p.w390 .gi span{display:none}
+.b1p.w390 .mny,.b1p.w390 .log,.b1p.w390 .order,.b1p.w390 .benchb{padding-left:12px;padding-right:12px}
+.b1p .slip .h{flex-wrap:wrap;column-gap:10px}
+.b1p .slip .h span+span{font-weight:400}
+.b1p .mny .link{white-space:nowrap}
+.b1p .pnl .face{min-height:0}
+.b1p .benchb{flex:0 1 auto;overflow:auto;min-height:0}
+.b1p .pnl .log{min-height:90px}
+.b1p.w390 .slip,.b1p.w390 .reply,.b1p.w390 .you,.b1p.w390 .ev,.b1p.w390 .gi,.b1p.w390 .mny,.b1p.w390 .slip .h{font-size:13px}
+.b1p .pnl .chip{font-size:13px}
+.b1p .hprow .state{margin-left:4px}
+.b1p .ph{align-items:center}
+.b1p .pnl .log{position:relative}
+.b1p.w390 .ph{grid-template-columns:40px 1fr auto;padding:8px 12px 6px}
+.b1p.w390 .ph img{width:40px;height:44px}
+.b1p.w390 .ph h2{font-size:17px}
+.b1p.w390 .ph .sub{margin-top:1px}
+.b1p.w390 .fol{min-height:32px;padding:4px 8px}
+.b1p.w390 .gearrow{display:grid;grid-template-columns:repeat(4,1fr) auto;gap:4px;align-items:end;padding:6px 12px}
+.b1p.w390 .gearrow .gh{display:none}
+.b1p.w390 .gi{flex-direction:column;gap:1px;text-align:center;line-height:1.15}
+.b1p.w390 .gi span{display:block}
+.b1p.w390 .bagl{margin:0;align-self:center}
+.b1p.w390 .mny{padding:6px 12px}
+.b1p.w390 .benchb .gear{grid-template-columns:repeat(4,1fr);gap:6px}
+.b1p.w390 .benchb .slot{grid-template-columns:1fr;justify-items:center;text-align:center;padding:5px 3px;gap:2px}
+.b1p.w390 .benchb .slot .muted{display:none}
+.b1p.w390 .benchb .slot .ico{width:34px;height:34px}
+.b1p.w390 .benchb .note{margin:0 0 6px}
+.b1p .hprow .hp{min-width:70px}
+.b1p.w390 .onbench .log{display:none}
+.b1p.w390 .onbench .benchb{flex:1 1 auto}
+.b1p.w390 .rate{display:none}
+.b1p.w390 .capped-rate{display:inline}
+.b1p .ph-mid{min-width:0}
+.b1p.w390 .ph .ib{width:32px;min-height:30px}
+.b1p.w390 .ph{align-items:start}
+.b1p.w390 .hprow{flex-wrap:wrap;row-gap:4px}
+.b1p.w390 .gearrow{align-items:start}
+.b1p.w390 .bagl{align-self:start;margin-top:8px}
+/* on the arena page the panel, its tab and its toast sit over the live view */
+.b1p .sign,.b1p .edge-tab,.b1p .toast,.b1p .pill{position:fixed;z-index:40}   /* above every arena layer (a hovered fighter tag is 30) */
+.b1p .log{display:flex;flex-direction:column}
+body.has-panel #snapin-cta,body.has-panel #order-mini{display:none!important}
+.b1p .readonly a.nodoor{display:inline-block;line-height:20px;padding:12px 2px;margin:-12px 0}   /* a 44 px tap target, as chat.js's door link, that keeps the sentence's line */

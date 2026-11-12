@@ -1,6 +1,9 @@
 """Dev spectator server: the 14 house trenchies brawl on the current rules table.
 
-Run:  python3 -B near/arena/dev_brawl.py [--port 8765] [--seed 1] [--ticks N]
+Run:  python3 -B near/arena/dev_brawl.py [--port 8765] [--seed 1] [--ticks N] [--crowd 16]
+
+--crowd N adds newcomers (crowd-1, crowd-2, ...) to the 14 house trenchies until N fight, each on a fixed free-menu kit
+that cycles the lob, beam, shot and swing with the beam sweep and the shockwave, so every move is on screen in a crowd.
 
 Spectator-only WebSocket (text frames) on 127.0.0.1. Add ?codec=1 to the URL for the compact W14 frames
 (codec.py: a tables frame, then a tick frame per tick) instead of the canonical snapshot. Every frame is one
@@ -31,13 +34,26 @@ GUID = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 MAX_BUFFER = 1 << 20
 
 
-def new_brawl(seed, rules=sim.DEFAULT_RULES):
-    """All house trenchies joined at spread angles; combat, loot and respawn on."""
+# the newcomers' kits for --crowd: free-menu items only (no bag), weapon and signature cycling
+CROWD_KITS = (("looter", "c-lob", "c-beam-sweep"), ("guardian", "c-beam", "c-shockwave"),
+              ("hunter", "c-shot", "c-shockwave"), ("brawler", "c-swing", "c-beam-sweep"))
+
+
+def new_brawl(seed, rules=sim.DEFAULT_RULES, crowd=0):
+    """All house trenchies joined at spread angles, plus newcomers up to `crowd` fighters; combat, loot and respawn on."""
     game = sim.Sim(seed, rules)
     names = sim.ordered_ids(rules["house"])
+    extra = max(0, crowd - len(names))
+    total = len(names) + extra
     for index, name in enumerate(names):
         game.enqueue(sim.Input(0, "join", name, 0,
-                               {"house": True, "angle": index * rules["full_turn"] // len(names)}))
+                               {"house": True, "angle": index * rules["full_turn"] // total}))
+    for i in range(extra):
+        style, weapon, trinket = CROWD_KITS[i % len(CROWD_KITS)]
+        loadout = dict(rules["default_loadout"], weapon=weapon, trinket=trinket)
+        game.enqueue(sim.Input(0, "join", "crowd-" + str(i + 1), 0,
+                               {"style": style, "loadout": loadout, "bag": {},
+                                "angle": (len(names) + i) * rules["full_turn"] // total}))
     return game
 
 
@@ -68,8 +84,8 @@ async def read_frame(reader):
 
 
 class Brawl:
-    def __init__(self, seed=1, rules=sim.DEFAULT_RULES, ticks=None):
-        self.game = new_brawl(seed, rules)
+    def __init__(self, seed=1, rules=sim.DEFAULT_RULES, ticks=None, crowd=0):
+        self.game = new_brawl(seed, rules, crowd)
         self.rules = rules
         self.limit = ticks
         self.latest = server.encode_snapshot(self.game)
@@ -170,10 +186,12 @@ def main(argv):
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--ticks", type=int, default=None, help="stop after N ticks (default: run forever)")
+    parser.add_argument("--crowd", type=int, default=0, help="fighters in all: newcomers join the 14 house trenchies up to N")
     args = parser.parse_args(argv)
-    brawl = Brawl(args.seed, ticks=args.ticks)
-    print("brawl: %d house trenchies, rules %s, ws://127.0.0.1:%d (spectator only, 20 Hz)"
-          % (len(brawl.rules["house"]), brawl.game.rules_hash[:12], args.port), flush=True)
+    brawl = Brawl(args.seed, ticks=args.ticks, crowd=args.crowd)
+    print("brawl: %d fighters (%d house), rules %s, ws://127.0.0.1:%d (spectator only, 20 Hz)"
+          % (len(brawl.game.state["fighters"]) or max(args.crowd, len(brawl.rules["house"])), len(brawl.rules["house"]),
+             brawl.game.rules_hash[:12], args.port), flush=True)
     try:
         asyncio.run(serve(brawl, args.port))
     except KeyboardInterrupt:

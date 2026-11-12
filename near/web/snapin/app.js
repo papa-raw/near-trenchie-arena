@@ -54,8 +54,10 @@
     V.closed = false; V.step = step; V.msg = ''; V.flash = ''; V.confirmNew = false; P.step = step; save();
     try { root.history[replace ? 'replaceState' : 'pushState']({ step: step }, '', stepURL(step)); } catch (e) { /* file: or sandboxed: no history */ }
     if (step === 'doors') D.reset();
+    if (root.SnapGuide) root.SnapGuide.leave(step);
     if (step === 'agree') loadTerms();
     render();
+    if (boardMode()) root.SnapGuide.enter(step, guideHost);
   }
   function save() { try { var c = Object.assign({}, P); U.store.set(SAVE, JSON.stringify(c)); } catch (e) { /* kept in memory */ } }
   var app, cache = new Map();
@@ -105,7 +107,7 @@
   // the trenchie this browser put in the ring is out of it (the arena restarted, every page was closed until the seat ran
   // out, or the browser lost its key): only the seat is gone. The draft stays, and the guide offers the two ways on.
   var ENDED = { context_mismatch: 'the arena restarted', not_found: 'the arena restarted', 'no-key': 'this browser no longer holds its key' };
-  function seatEnded(f, code) { P.ended = { name: f.name, why: ENDED[code] || 'no page was open to keep it' }; P.fighter = null; save(); render(); }
+  function seatEnded(f, code) { P.ended = { name: f.name, why: ENDED[code] || 'no page was open to keep it', at: Date.now() }; P.fighter = null; save(); render(); }
   function endedLine() {
     if (!P.ended || V.mode !== 'flow' || V.step === 'ring' || mineDriven()) return '';
     return '<div class="in-banner" role="status">' + esc('DEV ' + P.ended.name + ' is out of the arena (' + P.ended.why + '). Your trenchie is kept.') + ' ' +
@@ -135,11 +137,13 @@
   // premint/meta/options.json: option id -> {file, digest, name, temper, quirks, voice, look, ...}. A claim names that digest,
   // and while the claimed persona is unchanged the sheet sent and downloaded is the premint file itself, byte for byte.
   var PM = { opts: null, error: '', loading: false };
-  function loadPremint() {
-    if (PM.opts || PM.loading) return; PM.loading = true;
-    root.fetch('premint/meta/options.json', { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('answered ' + r.status); return r.json(); })
+  // after a failed read it is tried again only when the player asks for it (Use this preset), never on every render
+  function loadPremint(retry) {
+    if (PM.opts) return Promise.resolve(); if (PM.loading) return PM.loading; if (PM.error && !retry) return Promise.resolve();
+    PM.loading = root.fetch('premint/meta/options.json', { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('answered ' + r.status); return r.json(); })
       .then(function (j) { PM.opts = j; PM.error = ''; }, function (e) { PM.error = 'The premint personas could not be read (' + e.message + ').'; })
       .then(function () { PM.loading = false; if (V.mode === 'flow' && /^(presets|personality)$/.test(V.step)) render(); });
+    return PM.loading;
   }
   function premintFor(id) { return PM.opts && PM.opts[id] || null; }
   function short(dg) { return dg ? dg.slice(0, 12) + '…' + dg.slice(-4) : ''; }
@@ -154,8 +158,9 @@
   function claimedHere() { return !!(P.claim && P.claim.digest && P.claim.preset === P.preset); }
   async function claimOption() {
     if (claimedHere()) return go('personality');
+    await loadPremint(true);   // pressed before the premint personas arrived (or after a failed read): wait for them rather than fail
     var id = presetId(), e = premintFor(id), SS = root.SnapSheet;
-    if (!e) return say(PM.error || 'The premint personas are still loading. Try again in a moment.', true);
+    if (!e) return say(PM.error ? PM.error + ' Claiming is off until they can; Build a fighter still works.' : 'The premint personas are still loading. Try again in a moment.', true);
     try {
       var sh = await root.fetch('premint/' + e.file, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(e.file + ' answered ' + r.status); return r.json(); });
       var lk = await root.fetch('premint/' + e.look, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(e.look + ' answered ' + r.status); return r.json(); });
@@ -281,11 +286,11 @@
       var lp = f.lastPick, took = P.timing && P.timing.wallet && P.timing.ring ? elapsed(P.timing.ring - P.timing.wallet) : '';
       return { head: 'In the arena', content: '<div class="split ring-split"><div>' + hero() + receipt('<div class="eyebrow">' + (CHAIN ? 'Arena' : 'DEV arena') + ' · life ' + esc(f.lives || 1) + '</div><h2>' + (CHAIN ? '' : 'DEV ') + esc(f.name) + '</h2><div class="notice" style="margin-top:12px">Fight. Fall. Respawn.</div>' +
         (CHAIN && P.wallet && P.wallet.chain && P.wallet.chain.token ? U.line('Trenchie', esc(P.wallet.chain.token) + ' · owned by ' + esc(shortAcct(P.wallet.accountId)) + ' on ' + esc(NETWORK)) + (P.wallet.chain.tx ? U.line('Mint', esc(String(P.wallet.chain.tx).slice(0, 10)) + '…') : '') : '') +
-        U.line('Battle option', esc(P.preset)) + U.line('Persona', claimIntact() ? esc(P.claim.name) + ' (premint, ' + esc(P.claim.digest.slice(0, 8)) + '…)' : 'your own') + U.line('Prediction for this life', lp ? (lp.state === 'accepted' ? 'locked in' : lp.state === 'none' ? 'none (your AI chose none)' : 'not accepted') : 'not sent yet') +
+        U.line('Battle option', esc(P.preset)) + U.line('Persona', claimIntact() ? esc(P.claim.name) + ' (premint, ' + esc(P.claim.digest.slice(0, 8)) + '…)' : 'your own') + U.line('Prediction for this life', esc(U.pickLine(lp))) +
         U.line('AI', esc(P.door ? P.door.identity + (brainOn() ? '' : ' (saved, not driving yet)') : 'none yet')) + (took ? U.line('Wallet to the ring', esc(took)) : '') +
-        '<div class="sub" id="brain-chip">' + esc(brainLine()) + '</div><div class="sub">Keep this page or the arena page open: closing every tab sends your trenchie home.</div>' +
+        '<div class="sub" id="brain-chip">' + esc(brainLine()) + '</div><div class="sub">' + (st.keyPersisted === false ? 'This browser keeps your trenchie only on this page (it cannot store the key): closing this page sends your trenchie home.' : 'Keep this page or the arena page open: closing every tab sends your trenchie home.') + '</div>' +
         (st.message ? '<div class="sub" role="status">' + esc(st.message) + '</div>' : '')) +
-        '</div><div>' + (root.SnapChat ? receipt(root.SnapChat.html({ name: (CHAIN ? '' : 'DEV ') + f.name, card: true })) : '') + '</div></div>' + btn('Watch your trenchie', 'watch-mine', 'main-action') + '<div class="row">' + btn('Change next life', 'corner', 'textlink') + btn('Leave the arena', 'leave', 'textlink') + '</div>' + newButton() };
+        '</div><div>' + (root.SnapChat ? receipt(root.SnapChat.html({ name: (CHAIN ? '' : 'DEV ') + f.name, card: true })) : '') + '</div></div>' + (st.keyPersisted === false ? '' : btn('Watch your trenchie', 'watch-mine', 'main-action')) + '<div class="row">' + btn('Change next life', 'corner', 'textlink') + btn('Leave the arena', 'leave', 'textlink') + '</div>' + newButton() };
     }
     if (st.phase === 'elsewhere') return { head: 'In the arena', content: receipt('<div class="sub" role="status">' + esc(st.message) + '</div>') + btn('Watch the arena', 'step:watch', 'main-action') };
     if (st.phase === 'error') {
@@ -311,7 +316,9 @@
     if (joining || !root.SnapRoom) return; joining = true;
     // the player chose: snap this trenchie back in (a failure shows its own reason). Its own held round result may be read
     // only when the trenchie snapping in is the one whose seat ended (another player's result is never read here)
-    var ownHeld = !!(P.ended && String(P.ended.name || '').toLowerCase() === String(P.name || 'Newcomer').toLowerCase());
+    // and only within the host's grace for an unread result (180 s from its round's claim; 210 s from when this page saw the
+    // seat end): a trenchie that lapsed long ago does not own whatever round is held now
+    var ownHeld = !!(P.ended && String(P.ended.name || '').toLowerCase() === String(P.name || 'Newcomer').toLowerCase() && P.ended.at && Date.now() - P.ended.at < 210000);
     if (P.ended) { P.ended = null; save(); }
     var sh = buildSheet(), look = root.SnapSheet && root.SnapSheet.lookFile ? root.SnapSheet.lookFile(sheetState()) : null;
     if (sh && !sh.error) { P.sheet = sh; save(); }   // the player's AI reads it from here on either page (prompt prefix)
@@ -333,7 +340,9 @@
       // the trenchie a new one replaced may still be swimming home: the join waits for it (kept in the draft across a reload)
       var swim = P.swimming && Date.now() - P.swimming.at < 60000 ? P.swimming.id : null;
       await root.SnapRoom.join({ chain: chain, waitFor: swim, ownHeldResult: ownHeld, name: P.name || 'Newcomer', preset: presetId(), sheet: sh && !sh.error ? sh : null, look: look, termsVersion: P.termsVersion || '1',
-        order: { preset: presetId(), spread: P.spread.map(Number), zero: Number(P.zeroKo) || 0 },
+        // no prediction by default: nothing picks a level for the player (the record files it as none); the player or their
+        // AI picks one later (rules integer-16: one level, 1+ to 4+)
+        order: { preset: presetId(), prediction: false },
         compute: { harness: 'browser', model: P.door && P.door.door ? String(P.door.door).slice(0, 96) : 'none-yet', source: 'owner', effort: 'standard' } });
       if (P.timing && P.timing.wallet && !P.timing.ring) { P.timing.ring = Date.now(); save(); }   // measured once: the first brawl after connecting
     } catch (e) { /* the status carries the message; the view shows it with a way back */ }
@@ -556,6 +565,8 @@
     // keep keyboard focus on the same control across a re-render (a toggle, a status change)
     var fa = doc.activeElement, refocus = fa && fa.dataset && fa.dataset.act ? '[data-act="' + fa.dataset.act.replace(/"/g, '\\"') + '"]' : fa && fa.dataset && fa.dataset.spread != null ? '[data-spread="' + fa.dataset.spread + '"]' : (fa && fa.id && app.contains(fa) ? '#' + fa.id : '');
     var caret = fa && typeof fa.selectionStart === 'number' ? [fa.selectionStart, fa.selectionEnd] : null;
+    css(boardMode());
+    if (boardMode()) return renderBoard(refocus, caret);
     var flowAI = V.mode === 'flow' && (V.step === 'doors'), v = V.mode === 'login' || flowAI ? viewLogin() : V.mode === 'workshop' ? viewWorkshop() : viewFlow();
     var draft = v.ai ? 'b' : 'a', board = V.mode === 'login' || flowAI ? 'S4' : V.mode === 'workshop' ? 'S2' : 'S1';
     doc.body.className = 'draft-' + draft + ' board-' + board + (v.ai ? ' ai-mode' : '');
@@ -566,6 +577,69 @@
     if (refocus) { var back = app.querySelector(refocus); if (back) { back.focus({ preventScroll: true }); if (caret && typeof back.setSelectionRange === 'function') try { back.setSelectionRange(caret[0], caret[1]); } catch (e) { /* number inputs have no caret */ } } }
     root.requestAnimationFrame(function () { U.paint(app); root.__SNAPIN_READY = true; });
   }
+  // ------------------------------------------------------------------ board 1: the guide's steps before the ring (guide.js)
+  function boardMode() { return !!root.SnapGuide && V.mode === 'flow' && V.step !== 'ring' && !V.closed; }
+  function css(board) {   // board 1's sheet and the older panels' sheet never apply together (their class names overlap)
+    var a = doc.getElementById('css-snapin'), b = doc.getElementById('css-board1'); if (a) a.disabled = board; if (b) b.disabled = !board;
+  }
+  var lastPhone = null;
+  function renderBoard(refocus, caret) {
+    var G = root.SnapGuide; lastPhone = G.phone();
+    doc.body.className = (lastPhone ? 'w390' : 'w1440') + ' b1';
+    app.innerHTML = G.view(guideHost);
+    if (refocus) { var back = app.querySelector(refocus); if (back) { back.focus({ preventScroll: true }); if (caret && typeof back.setSelectionRange === 'function') try { back.setSelectionRange(caret[0], caret[1]); } catch (e) { /* no caret */ } } }
+    root.requestAnimationFrame(function () { G.paint(app); root.__SNAPIN_READY = true; });
+  }
+  function bl(act, label) { return '<a href="#" class="link" data-act="' + act + '">' + label + '</a>'; }
+  // a returning player's own trenchie on the guide's screens: in the ring, out of it, or saved here (items 33 and 25)
+  function newLink() {
+    if (!V.confirmNew) return bl('new-trenchie', 'Make a new trenchie');
+    var nm = draftName(), kept = keptWords();
+    return '<b>' + esc('This forgets ' + nm + ': its name, look, temperament, quirks and voice' + (P.claim ? ', and its premint claim' : '') + '. Keep it or start fresh?') + '</b> ' +
+      (mineDriven() ? esc(nm + ' swims home first: this browser drives one trenchie at a time.') + ' ' : '') + (kept ? esc(kept) + ' ' : '') + bl('new-trenchie-yes', 'Start fresh') + ' · ' + bl('new-trenchie-no', 'Keep ' + esc(nm));
+  }
+  function returningLine() {
+    if (V.flash) return esc(V.flash);
+    var live = mineDriven();
+    if (live) return esc('DEV ' + live.fighter.name + ' is in the arena now.') + ' ' + bl('back-ring', 'Back to your trenchie') + ' · ' + newLink();
+    if (P.ended) return esc('DEV ' + P.ended.name + ' is out of the arena (' + P.ended.why + '). Your trenchie is kept.') + ' ' + bl('rejoin', 'Snap ' + esc(P.ended.name) + ' back in') + ' · ' + newLink();
+    if (V.step === 'wallet' && hasDraft()) return esc('Your trenchie: ' + draftName() + ', saved in this browser.') + ' ' + newLink();
+    return '';
+  }
+  async function ringNames() {   // the names in the ring now, squashed (an agent's fighter shows its id, "DEV lanternlou")
+    var out = new Set();
+    try { var o = await root.fetch('/room/observe', { cache: 'no-store' }).then(function (r) { return r.json(); }); (o.fighters || []).forEach(function (f) { var n = String(f.public_name || '').replace(/^DEV /, '').split(' · ')[0]; out.add(n.toLowerCase().replace(/[^a-z0-9]/g, '')); }); } catch (e) { /* no arena: nothing known to be taken */ }
+    var mine = mineDriven(); if (mine) out.delete(String(mine.fighter.name).toLowerCase().replace(/[^a-z0-9]/g, ''));   // this browser's own trenchie is not a clash
+    return out;
+  }
+  // chain mode for board 1's views: the host's identity network, and what this wallet's sign-in found (main's own sentences)
+  function chainInfo() {
+    var ch = P.wallet && P.wallet.chain;
+    var signed = !CHAIN || !ch ? '' : 'Signed in. ' + (ch.owned && ch.owned.length ? 'Your trenchie: ' + ch.owned[0].token_id + '.' : ch.offer && ch.offer.kind === 'claim' ? 'A free trenchie is waiting for you (' + ch.offer.held + ' left).' : 'A new trenchie is a paid mint: ' + yoctoNear(ch.offer && ch.offer.cost_yocto) + ' NEAR, signed in your wallet when you enter the arena.');
+    var fighter = !CHAIN ? '' : ch && ch.offer && ch.offer.kind === 'claim' ? 'Use this preset to claim its premint for free (one per wallet, first come); a fighter you build is a paid mint.' : 'Every free premint is claimed: a new trenchie is a paid mint your wallet signs when you enter the arena.';
+    return { on: !!CHAIN, network: NETWORK, signed: signed, fighter: fighter };
+  }
+  // board 1: Snap in lands on the trenchie panel in the arena (SPEC state 'fight'), when the session can cross pages (its
+  // key kept in this browser's storage); a browser that cannot keep it stays here, where the trenchie is safe while this
+  // page is open (item 39's one real failure: moving pages lost the trenchie)
+  async function snapIn() {
+    // a plan door: the player's own agent session joined with the door's code; this page sends no join of its own, it
+    // goes to the arena, where the panel reads the session's log by the code
+    if (P.door && P.door.route === 'plan' && P.planCode) { save(); root.location.href = arenaURL(); return; }
+    var cur = root.SnapRoom.status(); if (cur.fighter && /^(in|joining|offline)$/.test(cur.phase)) { go('ring'); return; }   // already in: no second join
+    P.left = 0; go('ring'); await startJoin();
+    var st = root.SnapRoom.status();
+    if (st.phase === 'in' && st.fighter && st.keyPersisted !== false && V.step === 'ring') { save(); root.location.href = arenaURL() + (WS ? '&' : '?') + 'follow=' + encodeURIComponent(st.fighter.id); }
+  }
+  function devWallet() {
+    var NA = root.NearApi; if (!NA || !NA.KeyPairEd25519) return say('The wallet library did not load. Reload the page.', true);
+    var raw = NA.KeyPairEd25519.fromRandom().getPublicKey().data;   // the secret half is dropped at once: a throwaway id, never funded or used to sign
+    var id = Array.prototype.map.call(raw, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+    P.wallet = { id: 'dev-throwaway', accountId: id, network: NETWORK }; P.timing = { wallet: Date.now() }; go('presets');
+  }
+  var guideHost = { P: P, V: V, go: function (s) { go(s); }, save: function () { save(); }, render: function () { render(); }, say: function (m, e) { say(m, e); }, backToArena: function () { backToArena(); },
+    devWallet: function () { devWallet(); }, connectWallet: function (id) { connectWallet(id); }, setPreset: function (n) { setPreset(n); }, claim: function () { return claimOption(); },
+    ringNames: ringNames, loadTerms: function () { loadTerms(); }, chain: chainInfo, loadPremint: function () { return loadPremint(); }, shortAcct: function (a) { return shortAcct(a); }, snapIn: function () { snapIn(); }, returning: returningLine };
   function say(m, err) { V.msg = m; V.msgErr = !!err; var fb = doc.querySelector('#feedback'); if (fb) { fb.textContent = m; fb.classList.toggle('err', !!err); } else render(); }
 
   // ------------------------------------------------------------------ actions
@@ -591,8 +665,10 @@
     V.busy = false;
   }
   async function onClick(e) {
-    var b = e.target.closest('button'); if (!b || b.disabled) return;
+    var b = e.target.closest('[data-act],button'); if (!b || b.disabled) return;
+    if (b.tagName === 'A') e.preventDefault();
     var a = b.dataset.act || '';
+    if (a.indexOf('g:') === 0 && root.SnapGuide) return root.SnapGuide.act(a, guideHost, b);
     if (a.indexOf('ai:') === 0) {
       if (a === 'ai:authorize') { P.resume = { mode: V.mode, step: V.step }; save(); }
       await D.act(a); return;
@@ -615,12 +691,7 @@
       P.left = 0; go('ring'); startJoin();
     }
     else if (a === 'terms-reload') loadTerms();
-    else if (a === 'wallet-dev') {
-      var NA = root.NearApi; if (!NA || !NA.KeyPairEd25519) return say('The wallet library did not load. Reload the page.', true);
-      var raw = NA.KeyPairEd25519.fromRandom().getPublicKey().data;   // the secret half is dropped at once: a throwaway id, never funded or used to sign
-      var id = Array.prototype.map.call(raw, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
-      P.wallet = { id: 'dev-throwaway', accountId: id, network: NETWORK }; P.timing = { wallet: Date.now() }; go('presets');
-    }
+    else if (a === 'wallet-dev') devWallet();
     else if (a === 'wallet-forget') { P.wallet = null; save(); render(); }
     else if (a === 'claim') await claimOption();
     else if (a === 'claim-restore') { if (P.claim) { P.preset = P.claim.preset; adoptClaim(); render(); } }
@@ -655,6 +726,7 @@
   }
   function onInput(e) {
     var t = e.target;
+    if (boardMode() && root.SnapGuide.input(t, guideHost)) return;
     if (t.type === 'checkbox') { V.ticks = V.ticks || {}; V.ticks[t.id] = t.checked; if (V.msgErr) say(''); }   // kept across re-renders; a tick clears the "Tick all three" note
     if (t.id === 'name') { P.name = t.value; save(); var g = root.SnapSheet && root.SnapSheet.guard(P.name || 'Newcomer'); var old = t.parentNode.querySelector('[role=alert]'); if (old) old.remove(); if (g && !g.ok) t.insertAdjacentHTML('afterend', '<div class="sub" role="alert">' + esc(g.reason) + '</div>'); }
     else if (t.id === 'personality') { P.voice = t.value; save(); }
@@ -698,14 +770,14 @@
       V.step = st; V.msg = ''; V.closed = false; P.step = st; save(); if (st === 'doors') D.reset(); if (st === 'agree') loadTerms(); render();
     });
     if (V.mode === 'flow') { P.step = V.step; save(); try { root.history.replaceState({ step: V.step }, '', stepURL(V.step)); } catch (e) { /* no history */ } }
-    root.addEventListener('resize', function () { U.paint(app); });
+    root.addEventListener('resize', function () { if (boardMode()) { if (root.SnapGuide.phone() !== lastPhone) render(); else root.SnapGuide.paint(app); } else U.paint(app); });
     // the last step follows the arena client's progress; a saved fighter carries on after a reload
     if (root.SnapBrain && root.SnapBrain.on) root.SnapBrain.on(function (b) { brainState = b; var el = doc.querySelector('#brain-chip'); if (el) el.textContent = brainLine(); });
     if (root.SnapRoom) {
       var lastPhase = '';
       var lastBanner = '';
       root.SnapRoom.on(function (st) {
-        var k = st.phase + '|' + st.step + '|' + st.message + '|' + (st.fighter ? st.fighter.lives + (st.fighter.lastPick ? st.fighter.lastPick.state : '') : '');
+        var k = st.phase + '|' + st.step + '|' + st.message + '|' + (st.fighter ? st.fighter.lives + (st.fighter.lastPick ? st.fighter.lastPick.state + (st.fighter.lastPick.seated ? '+seated' : '') : '') : '');
         if (k === lastPhase) return; lastPhase = k;
         if (st.phase === 'in' && st.fighter && (!P.fighter || P.fighter.id !== st.fighter.id || P.ended || P.swimming)) { P.fighter = { id: st.fighter.id, name: st.fighter.name }; P.left = 0; P.ended = null; P.swimming = null; save(); }
         if ((V.mode === 'flow' && V.step === 'ring' && !V.closed) || cornerOpen()) return render();
@@ -724,6 +796,7 @@
     if (V.mode === 'flow' && V.step === 'agree') loadTerms();
     if (root.SnapIdentity) root.SnapIdentity.mode().then(function (m) { CHAIN = m; if (m) { NETWORK = m.identity_network; if (P.wallet) { P.wallet = null; save(); if (V.mode === 'flow' && V.step !== 'wallet') go('wallet'); } } render(); });   // chain mode: a page's sign-in lives in its memory, so a fresh page signs in again (a DEV wallet never carries over)
     render();
+    if (boardMode()) root.SnapGuide.enter(V.step, guideHost);
     if (V.mode === 'workshop' && V.tab === 'respawn') startCorner();
   }
   root.Snapin = { boot: boot, state: P, view: V, render: render, buildSheet: buildSheet, setPreset: setPreset, corner: C };

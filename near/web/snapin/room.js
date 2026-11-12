@@ -20,7 +20,9 @@
 (function (root) {
   'use strict';
   var SAVE = 'trenchie.snapin.room.v1', DB = 'trenchie-snapin', STORE = 'keys', KEY_ID = 'session';
-  var MEMBER_READ_TTL_MS = 15000, ORDER_DEFAULT = { preset: null, spread: [40, 30, 20, 10], zero: 0 };
+  // the room takes a signed member read that expires within 15 s of its clock (room/service.py _OWNER_READ_WINDOW_MS); now()
+  // below runs ahead of the room's between replies, so a read asks for 1 s less (as snap_client.py _MEMBER_READ_TTL_MS)
+  var MEMBER_READ_TTL_MS = 15000 - 1000, ORDER_DEFAULT = { preset: null, spread: [40, 30, 20, 10], zero: 0 };
   var enc = new TextEncoder();
 
   // ------------------------------------------------------------------ canonical bytes (room/policy.py _canonical)
@@ -230,7 +232,38 @@
     return ready;
   }
 
+  // ------------------------------------------------------------------ join retries under the room's join limit
+  // The room allows 5 join attempts a minute per address and per account (room/service.py _attempt,
+  // join_attempts_per_minute), and a try is a challenge plus a join: 2 attempts. A challenge is used up by its join
+  // (room/identity.py resolve pops it before the chain read), so it can't be reused. So at most 2 tries in any
+  // JOIN_WINDOW_MS of room time (4 attempts, one spare; the room counts on its own clock, which a join hold freezes for
+  // up to 10 s): a quick second try JOIN_GAP_MS of real time after the first (a read that lands in a few seconds seats
+  // at once), then each try waits until the try before last has left the window on the room's clock. The page asks for
+  // up to JOIN_WAIT_MS of real time.
+  var JOIN_GAP_MS = 8000, JOIN_WINDOW_MS = 63000, JOIN_WAIT_MS = 180000, JOIN_REFRESH_MS = 1000;
+  function joinNextAt(tries) {   // room time from which the next try fits the window (tries: room times so far)
+    return tries.length >= 2 ? tries[tries.length - 2] + JOIN_WINDOW_MS : -Infinity;
+  }
+  async function joinWithWait(tryOnce, io) {
+    var started = io.real(), tries = [], reply;
+    for (;;) {
+      tries.push(io.room());
+      var sent = io.real();
+      reply = await tryOnce();
+      if (!(reply && reply.type === 'error' && reply.code === 'ownership_unavailable')) return reply;
+      if (io.real() - started >= JOIN_WAIT_MS) return reply;
+      // the window waits on the room's clock, refreshed by a read that costs no attempt (it stands still while paused)
+      var next = joinNextAt(tries);
+      while (io.real() - sent < JOIN_GAP_MS || io.room() < next) {
+        io.waiting(Math.max(1, Math.ceil(Math.max(JOIN_GAP_MS - (io.real() - sent), next - io.room()) / 1000)));
+        await io.sleep(JOIN_REFRESH_MS);
+        await io.refresh();
+      }
+    }
+  }
+
   // ------------------------------------------------------------------ the keeper: per-life pick, lease renewals
+  var SEAT_QUEUE_CODES = ['room_full', 'ownership_unavailable'];   // the room locked the pick and queued the seat
   function predictionPayload(o) {
     var s = (o.spread || ORDER_DEFAULT.spread).map(function (n) { return Math.round(Number(n) * 100); });
     return { loadout: { menu_row: o.preset, bag_serials: [] }, spread_bps: { one: s[0], two: s[1], three: s[2], four_plus: s[3] }, zero_bps: Math.round(Number(o.zero || 0) * 100), stake: null, moves: [], lock: false };
@@ -243,7 +276,10 @@
     // the player's AI may choose to file no prediction for a life (F75's explicit marker): nothing is sent and the room locks "none"
     if (S.order && S.order.prediction === false) { S.lastPick = { life: life, state: 'none', order: clone(S.order), at: Date.now() }; persist(); emit(); return null; }
     var r = await control('prediction', predictionPayload(S.order), life);
-    S.lastPick = { life: life, state: r.state, order: clone(S.order), at: Date.now() }; persist(); emit();
+    // a full ring (or an owner check still running) refuses the seat, not the pick: the room has locked this prediction
+    // for this life and seats it, same life and same lock, when a place opens (as snap.py: SEAT_QUEUE_CODES)
+    var state = r.state === 'refused' && SEAT_QUEUE_CODES.indexOf(r.code) >= 0 ? 'queued' : r.state;
+    S.lastPick = { life: life, state: state, reason: r.state === 'accepted' ? null : (r.reason || r.code || null), order: clone(S.order), at: Date.now() }; persist(); emit();   // a refusal keeps its reason
     return r;
   }
   var listeners = [], status = { phase: 'idle', step: '', message: '', error: null }, loop = null, notes = [];
@@ -258,6 +294,17 @@
     var list = await send('GET', '/room/control/private?cid=' + encodeURIComponent(S.connection));
     if (list && list.type === 'error') throw Refusal(list.code);
     for (var i = 0; i < (list || []).length; i++) { var n = await notice(list[i]); if (n.reservation.life_id !== S.life) await filePrediction(n); }
+    // a queued pick (locked, seat refused while the ring was full) is seated with the same lock when a place opens; the
+    // public view says when this fighter is in the ring, at no join attempt
+    var lp = S.lastPick;
+    if (lp && lp.state === 'queued' && !lp.seated && lp.life === S.life && Date.now() - (S.seatCheckAt || 0) >= 2000) {
+      S.seatCheckAt = Date.now();
+      var ob = null; try { ob = await call('GET', '/room/observe'); } catch (e) { ob = null; }
+      if (seatSeen(ob, S.ident.nft_token_id)) { lp.seated = Date.now(); persist(); emit(); }
+    }
+  }
+  function seatSeen(ob, token) {
+    return !!(ob && (ob.fighters || []).some(function (f) { return f.nft_token_id === token && (f.state === 'ring' || f.state === 'disconnected'); }));
   }
   function runLoop() {
     if (loop) return;
@@ -345,6 +392,9 @@
     },
     /* a behaviour for this life (the player's AI, the engine's raw behaviour object): the room's signed battle_receipt, checked */
     behaviour: function (payload) { if (!payload || typeof payload !== 'object') return Promise.reject(Refusal('bad_message')); return battle('behaviour', payload); },
+    /* the bench (board 1): {hold: true|false} (false = Send back in) or {equip: {slot, item_id}}; the room's signed battle_receipt,
+       checked; ack {type: 'bench_ack', status: 'applied'|'refused', bench, summary} */
+    bench: function (payload) { if (!payload || typeof payload !== 'object') return Promise.reject(Refusal('bad_message')); return battle('bench', payload); },
     /* a line for the feed with its emoji (or null): the room's signed battle_receipt, checked; ack.summary says posted/blocked/muted */
     speech: function (o) { o = o || {}; var t = String(o.text == null ? '' : o.text).trim(); if (!t) return Promise.reject(Refusal('bad_message')); return battle('speech', { text: t, emoji: o.emoji == null ? null : String(o.emoji) }); },
     /* the next life's pick (the corner): applies from the next life the room announces */
@@ -419,7 +469,7 @@
         var mineHeld = !!o.ownHeldResult;
         for (var u = 0; u < 200 && ident && /result its player has not read/.test(ident.error || ''); u++) {
           var secs = Number(((ident.error || '').match(/retry in (\d+) s/) || [])[1]) || 0;
-          set('joining', 'identity', mineHeld && u === 0 ? 'Reading the last round’s result…' : 'Back in the ring in ' + Math.max(1, secs) + ' s…');
+          set('joining', 'identity', mineHeld && u === 0 ? 'Reading the last round’s result…' : (mineHeld ? 'Back in the ring in ' : 'In the ring in ') + Math.max(1, secs) + ' s…');
           if (mineHeld && u % 5 === 0) await keepResult();
           await sleep(1000);
           ident = await call('POST', '/dev/identity', enc.encode(JSON.stringify(body)));
@@ -431,9 +481,9 @@
         if (manifest.admission !== 'open') throw Refusal('admission_closed');
         if ((manifest.proof_methods || []).indexOf(ident.proof_method) < 0) throw Refusal('proof_required');
         // a token's first life waits for the chain's owner and inventory reads: the room answers ownership_unavailable
-        // until they land (server.py reserve_life), so the join is asked again, a few times, before it is an error
+        // until they land (server.py reserve_life), so the join is asked again (joinWithWait: paced under the room's limit)
         var spk = clone(ident.session_public_key), rid, creq, ch, jreq, grant;
-        for (var attempt = 0; ; attempt++) {
+        grant = await joinWithWait(async function () {
           rid = 'web-join-' + now();
           creq = { domain: 'room.join.v1', context: clone(ident.context), grant_id: null, session_key_id: null, account_id: ident.account_id, nft_token_id: ident.nft_token_id,
                        persona_digest: ident.persona_digest, session_public_key: spk, request_id: rid, purpose: 'join' };
@@ -443,12 +493,10 @@
           jreq = { domain: 'room.join.v1', context: clone(ident.context), grant_id: null, session_key_id: null, challenge: ch, persona_digest: ident.persona_digest,
                        session_public_key: spk, request_id: rid, declared_compute: o.compute || { harness: 'browser', model: 'player-choice', source: 'owner', effort: 'standard' }, resume: null };
           jreq.proof = { method_id: ident.proof_method, key_id: 'dev_local', proof_bytes: await sign(concat(enc.encode('dev-wallet|'), canonicalBytes(jreq))) };
-          grant = await send('POST', '/room/join', canonicalBytes(jreq));
-          if (grant && grant.type === 'error' && grant.code === 'ownership_unavailable' && attempt < 15) {
-            set('joining', 'join', 'Waiting for the chain to read your trenchie’s owner…'); await sleep(2000); continue;
-          }
-          break;
-        }
+          return send('POST', '/room/join', canonicalBytes(jreq));
+        }, { room: now, real: function () { return root.performance.now(); }, sleep: sleep,
+             refresh: function () { return call('GET', '/dev/clock').catch(function () { return null; }); },
+             waiting: function (secs) { set('joining', 'join', 'Waiting for the chain to read your trenchie’s owner… asking again in ' + secs + ' s'); } });
         if (grant && grant.status === 'spectating') throw Object.assign(new Error('The ring is full: you are queued as a spectator. Keep watching; try again when a seat frees up.'), { code: 'queued' });
         grant = await verified(grant, ident.context, ident);
         var jd = await digest(jreq, ['proof']);
@@ -513,6 +561,8 @@
   }
   root.SnapRoom = {
     canonicalBytes: canonicalBytes, digest: digest, canon: canon, WORDS: WORDS,
+    // pure pieces the worker runs, for the tests: the join pacing, the queued-pick seat check, the member-read expiry
+    joinWithWait: joinWithWait, seatSeen: seatSeen, MEMBER_READ_TTL_MS: MEMBER_READ_TTL_MS, joinNextAt: joinNextAt,
     supported: function () { return !!(root.Worker && root.crypto && root.crypto.subtle); },
     // a quick, synchronous hint for the page (the worker confirms on resume): is a fighter saved in this browser?
     saved: function () { try { return JSON.parse(root.localStorage.getItem(FLAG) || 'null'); } catch (e) { return null; } },
@@ -525,6 +575,7 @@
     setOrder: function (o) { return ask('setOrder', o); },
     intent: function (o) { return ask('intent', o); },
     behaviour: function (p) { return ask('behaviour', p); },
+    bench: function (p) { return ask('bench', p); },
     speech: function (o) { return ask('speech', o); },
     leave: function () { return ask('leave'); },
     observe: function () { return ask('observe'); },

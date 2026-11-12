@@ -7,19 +7,24 @@ import * as THREE from 'three';
 import { placeQuirkPanel } from './hover.mjs';
 import { isDev, shortName } from './names.mjs';
 import { layoutTags, TIER } from './tag-layout.mjs';
-import { placeReplayStatus } from './layout.mjs';
+import { placeBanner, placeReplayStatus } from './layout.mjs';
+import { HudPanelCache } from './hud-cache.mjs';
+import { rosterLabels } from './roster.mjs';
 import { quirkText } from './quirks.mjs';
 import { styleWord } from './style.mjs';
 import { circlesModel, circlesNode, circlesKey, crowdGroups, cardSpot, reachFor } from './pips.mjs';
 import { Feed, nameColour } from './feed.mjs';
-import { Sign } from './sign.mjs';
 import { Corner } from './corner.mjs';
 import { Prejump } from './prejump.mjs';
 import { Lives } from './lives.mjs';
 import { itemStill, houseFace, playerFace } from './stills.mjs';
-import { hudLayout, panelBoxes } from './hud-layout.mjs';
+import { hudLayout, panelBoxes, cornerHidden } from './hud-layout.mjs';
+import { placeLegendSigns, bodyBox } from './legend-place.mjs';
 
 const LEG_FADE_MS = 300;
+const LEG_OPEN_MS = 3000;   // a tapped picture shows the full sign this long
+const REMOUNT_MS = 600;   // the top-left KO banner (as at ebb97a0): redrawn when its content changes, at most this often
+const BANNER_MS = 4200;   // the lead banner shows this long after the leader changes
 
 export class Hud {
   constructor({ stage, actors, KITS, ITEMS, root, status = null, itemRenderer = null, LOOK3 = null }) {
@@ -40,7 +45,10 @@ export class Hud {
     // the HUD proper: sign, feed, buttons, pre-jump cards
     this.ui = document.createElement('div'); this.ui.className = 'b2'; root.appendChild(this.ui);
     this.lives = new Lives();
-    this.sign = new Sign(document, this.ui, { name: (id) => this.nameOf(id), face: (id) => this.faceOf(id), dev: isDev });
+    // the top-left KO banner, as at ebb97a0: the panel art's hanging tags (House, and Players when any), their labels, the lead banner
+    this.layerHost = document.createElement('div'); this.layerHost.style.cssText = 'position:absolute;left:0;top:0;z-index:3;'; root.appendChild(this.layerHost);
+    this.cardLayer = document.createElement('div'); this.cardLayer.className = 'ha-layer ha-candle'; this.cardLayer.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:3;'; root.appendChild(this.cardLayer);
+    this.artCache = null; this.artRects = {}; this.cardList = []; this.cardRects = []; this.mounting = false; this.lastMount = 0; this.sig = ''; this.bannerLead = null; this.leadAt = 0; this.board = null; this.roster = null;
     this.feed = new Feed(document, this.ui, { name: (id) => this.nameOf(id), colour: (id) => this.colourOf(id), dev: isDev });
     this.feed.list.classList.add('arena-say-feed');
     this.onMute = null; this.soundState = 'waiting for a click';
@@ -80,7 +88,7 @@ export class Hud {
     const rows = [...(b.players || []), ...(b.house || [])].filter((r) => r.kos > 0).sort((x, y) => y.kos - x.kos || y.lives - x.lives || (x.persona < y.persona ? -1 : 1));
     return rows.length ? rows[0].persona : null;
   }
-  setBoards(json) { this.boards = json; this.sign.setData(json); }
+  setBoards(json) { this.boards = json; }
 
   // ---- events --------------------------------------------------------------------------------------------------------
   // a KO, with whether it was an ambush (moments.mjs)
@@ -104,10 +112,19 @@ export class Hud {
     const sign = document.createElement('div'); sign.className = 'legsign'; sign.dataset.drop = d.key;
     const pic = this.itemRenderer ? itemStill(this.itemRenderer, this.LOOK3, d.item) : null;
     if (pic) { const img = document.createElement('img'); img.src = pic; img.alt = ''; sign.appendChild(img); } else { const s = document.createElement('span'); s.className = 'noimg'; sign.appendChild(s); }
-    const t = document.createElement('span'), b = document.createElement('b'); b.textContent = 'LEGENDARY:'; t.append(b, document.createTextNode(' ' + String(it.name).toUpperCase())); sign.appendChild(t);
+    const t = document.createElement('span'), b = document.createElement('b'); b.textContent = 'LEGENDARY:'; t.className = 'legtext'; t.append(b, document.createTextNode(' ' + String(it.name).toUpperCase())); sign.appendChild(t);
+    sign.title = 'LEGENDARY: ' + String(it.name).toUpperCase(); sign.setAttribute('aria-label', sign.title);   // the shorter forms keep their words here
     const pin = document.createElement('i'); pin.className = 'legpin';
     this.legLayer.append(sign, pin);
-    this.legends.set(d.key, { sign, pin, x: d.x / 1000, z: d.y / 1000, gone: null, w: 0, h: 0 });
+    const lg = { sign, pin, x: d.x / 1000, z: d.y / 1000, gone: null, w: 0, h: 0 };
+    this.wireLegend(lg); this.legends.set(d.key, lg);
+  }
+  // the picture alone opens the full sign: a tap (phone) for LEG_OPEN_MS, or while a mouse hovers it (desktop)
+  wireLegend(lg) {
+    lg.openUntil = 0; lg.hover = false;
+    lg.sign.addEventListener('click', (e) => { if (lg.form !== 'picture') return; e.stopPropagation(); lg.openUntil = lg.sign.classList.contains('open') ? 0 : performance.now() + LEG_OPEN_MS; });   // a tap on the open sign closes it
+    lg.sign.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') lg.hover = true; });
+    lg.sign.addEventListener('pointerleave', () => { lg.hover = false; });
   }
   // each drawn snapshot's drops: a new legendary gets its sign; one that left the floor (grabbed, or gone after 60 s) fades
   syncDrops(drops, nowMs) {
@@ -152,17 +169,21 @@ export class Hud {
     if (nowMs - this.layoutAt < 250) return;
     this.layoutAt = nowMs;
     const view = { w: this.w, h: this.h }, corner = this.corner.rect();
-    const L = hudLayout(view, panelBoxes(document), { w: corner.w || 260, h: corner.h || 44 });
-    this.corner.place(L); this.corner.box.classList.toggle('phone', L.phone);
-    this.sign.layout(view, L.free); this.panTarget = L.pan;
+    const full = this.corner.full = this.corner.compact ? (this.corner.full || { w: 260, h: 44 }) : { w: corner.w || 260, h: corner.h || 44 };   // the worded size, measured while worded
+    const L = hudLayout(view, panelBoxes(document), full);
+    this.corner.setCompact(L.compact); this.corner.place(L); this.corner.box.classList.toggle('phone', L.phone);
+    this.panTarget = L.pan;
+    // a phone with the panel open: the compact buttons sit above the sheet, under the plank; never on it
+    const hidden = cornerHidden(L, view, this.bannerBox()); this.corner.box.hidden = hidden;
     this.feed.setNarrow(L.phone);
     this.feed.box.classList.toggle('phone', L.phone); this.feed.box.classList.toggle('n3', L.phone); this.feed.box.classList.toggle('n5', !L.phone);
     this.feed.box.classList.toggle('hidden', L.feedHidden);
     // the feed sits above the buttons on a phone (they share the bottom edge)
     this.feed.box.style.bottom = (L.phone ? L.bottom + (corner.h || 44) + 8 : 16) + 'px';
     const rect = (el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
-    this.rects = { board: this.sign.rect(), feed: L.feedHidden ? null : rect(this.feed.box), btn0: rect(this.corner.sound), btn1: rect(this.corner.menu) };
-    this.cardRects = [this.rects.board];   // the quirk panel keeps off the sign (hover.mjs)
+    const cta = document.getElementById('snapin-cta'), ctaRect = cta ? rect(cta) : null;   // the guide and its snap-in button (when shown)
+    this.rects = { board: this.bannerBox(), feed: L.feedHidden ? null : rect(this.feed.box), btn0: hidden ? null : rect(this.corner.sound), btn1: hidden ? null : rect(this.corner.menu), cta: ctaRect && ctaRect.w > 0 ? ctaRect : null };
+    this.cardRects = (this.bannerRects || []).slice();   // the quirk panel keeps off the banner's cards (hover.mjs)
   }
 
   // ---- name tags, circles and crowd cards -----------------------------------------------------------------------------
@@ -277,23 +298,48 @@ export class Hud {
   }
 
   // ---- the legendary floor signs ------------------------------------------------------------------------------------
-  placeLegends(nowMs) {
-    const phone = this.w <= 600;
+  // Each sign keeps its pin on the item and takes the first clear spot around it (legend-place.mjs): clear of the bodies,
+  // the tags and crowd cards, the fixed HUD and the other signs; with no clear spot, its short form (the picture alone).
+  placeLegends(pos, nowMs) {
+    const phone = this.w <= 600, live = [];
     for (const [key, lg] of this.legends) {
       const fade = lg.gone == null ? 1 : 1 - (nowMs - lg.gone) / LEG_FADE_MS;
       if (fade <= 0) { lg.sign.remove(); lg.pin.remove(); this.legends.delete(key); continue; }
+      if (lg.phone !== phone) { lg.phone = phone; lg.sign.classList.toggle('phone', phone); lg.w = 0; }
+      if (!lg.w) {   // measure each form once: the full sign, the picture and the name, the picture alone (a square)
+        const c = lg.sign.classList; c.remove('short', 'nameonly', 'open');
+        lg.w = lg.sign.offsetWidth; lg.h = lg.sign.offsetHeight;
+        c.add('nameonly'); lg.nw = lg.sign.offsetWidth; lg.nh = lg.sign.offsetHeight; c.remove('nameonly');
+        lg.cw = lg.ch = lg.h; lg.form = null;
+      }
       const at = this.toScreen(lg.x, 0.05, lg.z);
-      if (!lg.w) { lg.w = lg.sign.offsetWidth; lg.h = lg.sign.offsetHeight; }
-      lg.sign.classList.toggle('phone', phone);
-      const x = Math.max(6, Math.min(this.w - lg.w - 6, at.x - lg.w / 2)), y = Math.max(6, at.y - 22 - lg.h);
-      lg.sign.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'; lg.sign.style.opacity = fade.toFixed(3);
-      lg.pin.style.transform = 'translate(' + at.x.toFixed(1) + 'px,' + at.y.toFixed(1) + 'px)'; lg.pin.style.opacity = fade.toFixed(3);
+      live.push({ key, lg, fade, at, ax: at.x, ay: at.y, w: lg.w, h: lg.h, nw: lg.nw, nh: lg.nh, cw: lg.cw, ch: lg.ch });
     }
+    if (!live.length) return;
+    const bodies = [...(pos || new Map())].filter(([, q]) => q.state === 'alive' && q.f.status !== 2)
+      .map(([, q]) => bodyBox(this.toScreen(q.x, 0, q.z), this.toScreen(q.x, 1.5 + (q.lift || 0), q.z)));
+    const r = this.rects || {}, fixed = [r.board, r.feed, r.btn0, r.btn1, r.cta].filter(Boolean);
+    const spots = placeLegendSigns(live, [...bodies, ...(this.tagRects || []), ...fixed], { w: this.w, h: this.h }, fixed);
+    for (const s of live) {
+      const p = spots.get(s.key), lg = s.lg;
+      lg.pin.style.transform = 'translate(' + s.at.x.toFixed(1) + 'px,' + s.at.y.toFixed(1) + 'px)'; lg.pin.style.opacity = s.fade.toFixed(3);
+      lg.sign.style.visibility = p.hidden ? 'hidden' : '';   // off screen, or no room even for the picture: the pin alone
+      if (p.hidden) { lg.sign.dataset.pos = 'hidden: ' + p.hidden; continue; }
+      if (lg.form !== p.form) { lg.form = p.form; lg.sign.classList.toggle('nameonly', p.form === 'name'); lg.sign.classList.toggle('short', p.form === 'picture'); lg.sign.dataset.form = p.form; }
+      // the picture, opened (tap or hover): the full sign over the picture's spot, kept on screen, above the rest
+      const open = p.form === 'picture' && (lg.hover || nowMs < lg.openUntil);
+      if (lg.sign.classList.contains('open') !== open) lg.sign.classList.toggle('open', open);
+      const x = open ? Math.max(6, Math.min(this.w - 6 - lg.w, p.x)) : p.x;
+      lg.sign.dataset.pos = p.pos;
+      lg.sign.style.transform = 'translate(' + x.toFixed(1) + 'px,' + p.y.toFixed(1) + 'px)'; lg.sign.style.opacity = s.fade.toFixed(3);
+    }
+    this.legendRects = live.map((s) => spots.get(s.key)).filter((p) => !p.hidden);   // read by the review tooling
   }
 
   toScreen(x, y, z) {
     const v = new THREE.Vector3(x, y, z).project(this.stage.camera);
-    return { x: (v.x + 1) / 2 * this.w, y: (1 - v.y) / 2 * this.h };
+    const vw = this.stage.view.w || this.w, vh = this.stage.view.h || this.h;   // the canvas's size (a phone with board 1's panel open draws only above it)
+    return { x: (v.x + 1) / 2 * vw, y: (1 - v.y) / 2 * vh };
   }
 
   /** Each frame. lead: the KO leader's id (alive) or null; delayMs: the snapshot buffer's delay (lives catch up to it). */
@@ -301,12 +347,13 @@ export class Hud {
     const list = [];
     for (const [id, p] of pos) if (p.state === 'alive') { const s = this.toScreen(p.x, 0, p.z), a = this.actors.get(id); list.push({ id, x: s.x, y: s.y, hp: Math.max(0, Math.min(1, p.f.hp / (a ? a.hpMax : 100))) }); }
     this.list = list;   // the fighters on screen this frame (read by the review tooling)
+    this.frameBanner(pos, list, nowMs);
     for (const met of this.lives.advance(nowMs - delayMs)) this.feed.push({ kind: 'res', who: met.id, level: met.level, points: met.points });
     this.corner.setSound(this.soundState);
     this.layoutHud(nowMs);
     this.placeBars(list);
     this.placeTags(pos, lead, nowMs);
-    this.placeLegends(nowMs);
+    this.placeLegends(pos, nowMs);
     this.prejump.frame(nowMs, (id) => { const p = pos.get(id); return p ? this.toScreen(p.x, 0.6, p.z) : null; },
       (id) => { const p = pos.get(id); return p ? this.toScreen(p.x, 1.6, p.z) : null; });
     this.placeStatus();
@@ -323,4 +370,117 @@ export class Hud {
     box = placeReplayStatus(box, r.feed, this.w, this.h);
     el.style.left = box.x + 'px'; el.style.top = box.y + 'px'; el.style.bottom = 'auto'; el.style.transform = 'none';
   }
+
+  /** Correct predictions today, house and players together, from the live record (/house/leaderboards.json): the
+   *  banner's predictions string. [{id, n}] best first; empty while nobody has one today. */
+  correctToday() {
+    const b = this.boards && this.boards.boards && this.boards.boards.most_correct_day;
+    if (!b) return [];
+    return [...(b.players || []), ...(b.house || [])].filter((r) => r.correct > 0).sort((x, y) => y.correct - x.correct || (x.persona < y.persona ? -1 : 1)).map((r) => ({ id: r.persona, n: r.correct }));
+  }
+
+  // ---- the top-left KO banner, as at ebb97a0 (hud-art's candle board: hanging tags, faces, ▲ KOs per hour played, ATH;
+  // a Players string under the House one when players are in; their labels; the lead banner) ---------------------------
+  bannerBox() {
+    const r = this.bannerRects; if (!r || !r.length) return null;
+    const x = Math.min(...r.map((q) => q.x)), y = Math.min(...r.map((q) => q.y)), right = Math.max(...r.map((q) => q.x + q.w)), bottom = Math.max(...r.map((q) => q.y + q.h));
+    return { x, y, w: right - x, h: bottom - y };
+  }
+  frameBanner(pos, list, nowMs) {
+    const rows = this.board ? this.board.rows(nowMs) : [], top1 = rows[0];
+    const lead = top1 && top1.kos > 0 && pos.get(top1.id) && pos.get(top1.id).state === 'alive' ? top1.id : null;   // the board's leader: KOs per hour played
+    if (lead !== this.bannerLead) { this.bannerLead = lead; this.leadAt = nowMs; }
+    this.allIds = [...pos.keys()].filter((id) => pos.get(id).f.status !== 2);
+    const rl = this.roster ? rosterLabels(this.roster, this.w < 600) : null;
+    const top = rows.slice(0, 5).map((r) => r.id + ':' + Math.round(r.perHour)).join(','), preds = this.correctToday().slice(0, 5).map((r) => r.id + ':' + r.n).join(',');
+    const sig = [lead, top, preds, list.length, this.w, this.h, rl ? rl.house + rl.players : ''].join('|');
+    if (!this.mounting && sig !== this.sig && nowMs - this.lastMount > REMOUNT_MS && window.HUDART) { this.sig = sig; this.remount(list, lead, nowMs); }
+    const banner = this.layerHost.querySelector('[data-panel="banner"]');
+    if (banner) banner.style.display = lead && nowMs - this.leadAt < BANNER_MS && this.leadAt > 0 && nowMs > 8000 ? '' : 'none';
+    this.applyBanner();
+  }
+  remount(list, lead, nowMs) {
+    this.mounting = true; this.lastMount = nowMs;
+    if (!list.length) { this.mounting = false; return; }
+    if (!this.artCache) this.artCache = new HudPanelCache(window.HUDART);
+    const effLead = lead || list[0].id;   // with no KOs yet the panel art names the first body; we say so by naming it ourselves
+    const rows = this.board ? this.board.rows(nowMs) : [], rateOf = new Map(rows.map((r) => [r.id, Math.round(r.perHour)]));
+    const inGame = (this.allIds || list.map((f) => f.id)).filter((id, i, a) => a.indexOf(id) === i);
+    const rl = this.roster ? rosterLabels(this.roster) : null;
+    const isHouse = (id) => (rl && rl.houseIds.size ? rl.houseIds.has(id) : (this.KITS.roster || []).some((r) => r.trenchieId === id));
+    const rank = new Map(rows.map((r, i) => [r.id, i])), byRank = (a, b) => (rank.has(a) ? rank.get(a) : 99) - (rank.has(b) ? rank.get(b) : 99);
+    const houseIds = inGame.filter(isHouse).sort(byRank), mainIds = (houseIds.length ? houseIds : inGame).slice(0, this.w < 700 ? 3 : 5);
+    this.playerIds = inGame.filter((id) => !isHouse(id));
+    const fighters = mainIds.map((id) => { const f = list.find((q) => q.id === id) || { x: -999, y: -999, hp: 1 }; return { x: f.x, y: f.y, tag: this.tagOf(id), hp: f.hp, kos: rateOf.get(id) || 0, state: '', name: this.tagOf(id) }; });
+    const o = { concept: 'candle', draft: 'a', w: this.w, h: this.h, fighters, topN: this.w < 700 ? 3 : 5, lead: { tag: this.tagOf(effLead), kos: rateOf.get(effLead) || 0 }, feed: [] };
+    this.artCache.mount(this.layerHost, o, { only: ['board', 'banner'] }).then((meas) => {
+      const layer = this.layerHost.querySelector(':scope > .ha-layer'); if (!layer) { this.mounting = false; return; }
+      layer.style.pointerEvents = 'none';
+      this.artRects = {}; for (const r of meas.rects) this.artRects[r.id] = r;
+      if (this.artRects.board) { this.bannerRects = this.estimateCards(this.artRects.board, this.playerIds.length > 0, this.correctToday().length > 0); this.applyBanner(); }
+      return this.buildCards(this.playerIds, rateOf, o.topN, this.artRects.board).then(() => { this.mounting = false; this.layoutAt = 0; });
+    }).catch((e) => { this.mounting = false; console.error('HUD mount failed', e); });
+  }
+  // the lead banner clears every card (layout.mjs); called each frame and right after a redraw
+  applyBanner() {
+    const banner = this.layerHost.querySelector('[data-panel="banner"]'), N = this.artRects.banner; if (!banner || !N) return;
+    const p = placeBanner(N, this.bannerRects || [], this.w); if (p) banner.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
+  }
+  // The banner at 80% (Pat, 2026-11-12: ropes, tags, faces and counts 20% smaller), with a small wood label over each rope
+  // ("KOs", "Predictions") in place of the old text labels. Screen layout, top down: the KOs label, the house rope, the
+  // players' rope when any, then the Predictions label and its rope.
+  bannerLayout(B) { const narrow = this.w < 600; return { S: 0.8, LH: narrow ? 14 : 17, gap: narrow ? 4 : 6, kc: narrow ? 0.72 : 1 }; }
+  // before the other ropes exist, what the banner will cover (for the lead banner's place)
+  estimateCards(B, withPlayers, withPredictions = false) {
+    const { S, LH, gap, kc } = this.bannerLayout(B), x = B.x * S, rects = [{ x, y: B.y * S, w: 60, h: LH }, { x, y: B.y * S + LH, w: B.w * S, h: B.h * S }];
+    let y = B.y * S + LH + B.h * S + gap;
+    if (withPlayers) { rects.push({ x, y, w: Math.max(90, B.w * 0.5) * S * kc, h: B.h * S * kc }); y += B.h * S * kc + gap; }
+    if (withPredictions) rects.push({ x, y, w: 110, h: LH }, { x, y: y + LH, w: B.w * S * kc, h: B.h * S * kc });
+    return rects;
+  }
+  ropeLabel(text, x, y) {
+    const el = document.createElement('div'); el.className = 'ropelabel' + (this.w < 600 ? ' narrow' : ''); el.textContent = text;
+    el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'; this.cardLayer.appendChild(el); return el;
+  }
+  // the house rope is the main mount's own board (scaled in place); players, if any, get a second rope under it; correct
+  // predictions today, when any, one more rope under its own label
+  async buildCards(playerIds, rateOf, topN, B) {
+    if (!B) return;
+    const { S, LH, gap, kc } = this.bannerLayout(B);
+    const made = [];
+    if (playerIds.length) {
+      const host = this.playerHost || (this.playerHost = document.createElement('div')); host.style.cssText = 'position:fixed;left:-6000px;top:0;width:' + this.w + 'px;height:' + this.h + 'px;pointer-events:none;'; document.body.appendChild(host);
+      const fighters = playerIds.map((id) => ({ x: -999, y: -999, tag: this.tagOf(id), hp: 1, kos: rateOf.get(id) || 0, name: this.tagOf(id) })), lead = fighters.slice().sort((a, b) => b.kos - a.kos)[0];
+      const meas = await this.artCache.mount(host, { concept: 'candle', draft: 'a', w: this.w, h: this.h, fighters, topN, lead: { tag: lead.tag, kos: lead.kos }, feed: [] }, { only: ['board'] });
+      const node = this.artCache.panel(host, 'board'), r = meas.rects.find((q) => q.id === 'board'); host.remove();
+      if (node && r) made.push({ node, w: r.w, h: r.h, label: null });
+    }
+    // correct predictions today: one more rope in the same style (✓ in place of ▲), house and players together, from the
+    // live record; hidden while nobody has one
+    const preds = this.correctToday().slice(0, topN);
+    if (preds.length) {
+      const host = this.predHost || (this.predHost = document.createElement('div')); host.style.cssText = 'position:fixed;left:-6000px;top:0;width:' + this.w + 'px;height:' + this.h + 'px;pointer-events:none;'; document.body.appendChild(host);
+      const fighters = preds.map((p) => ({ x: -999, y: -999, tag: this.tagOf(p.id), hp: 1, kos: p.n, name: this.tagOf(p.id) }));
+      const meas = await this.artCache.mount(host, { concept: 'candle', draft: 'a', w: this.w, h: this.h, fighters, topN, mark: '✓', lead: { tag: fighters[0].tag, kos: fighters[0].kos }, feed: [] }, { only: ['board'] });
+      const node = this.artCache.panel(host, 'board'), r = meas.rects.find((q) => q.id === 'board'); host.remove();
+      if (node && r) made.push({ node, w: r.w, h: r.h, label: 'Predictions' });
+    }
+    for (const c of this.cardList) { if (c.label) c.label.remove(); if (c.node) c.node.remove(); } this.cardList = [];
+    // the house rope, drawn where the art put it, scaled to 80% about the page's corner and moved down under its label
+    const house = this.layerHost.querySelector('[data-panel="board"]'), x = B.x * S, rects = [];
+    if (house) { house.style.transformOrigin = '0 0'; house.style.scale = String(S); house.style.translate = '0 ' + LH + 'px'; }
+    const top = B.y * S, ko = this.ropeLabel('KOs', x + 10, top);
+    this.cardList.push({ node: null, label: ko }); rects.push({ x: x + 10, y: top, w: ko.offsetWidth || 40, h: ko.offsetHeight || LH }, { x, y: top + LH, w: B.w * S, h: B.h * S });
+    let y = top + LH + B.h * S + gap;
+    for (const m of made) {
+      let label = null;
+      if (m.label) { label = this.ropeLabel(m.label, x + 10, y); rects.push({ x: x + 10, y, w: label.offsetWidth || 90, h: label.offsetHeight || LH }); y += LH; }
+      m.node.style.position = 'absolute'; m.node.style.left = '0'; m.node.style.top = '0'; m.node.style.transformOrigin = '0 0';
+      m.node.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) scale(' + (kc * S).toFixed(3) + ')'; this.cardLayer.appendChild(m.node);
+      rects.push({ x, y, w: m.w * kc * S, h: m.h * kc * S }); y += m.h * kc * S + gap;
+      this.cardList.push({ node: m.node, label });
+    }
+    this.bannerRects = rects; this.applyBanner();
+  }
+
 }

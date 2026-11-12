@@ -26,8 +26,9 @@ export const lerpAngle = (a, b, k) => a + angleDelta(a, b) * k;
 // forward axis from the point on the near plane; it meets the ground plane y = 0.
 export function pickMilli(ndcX, ndcY, camera) {
   const e = camera.matrixWorld.elements, z = camera.zoom || 1;
-  const vx = (camera.left + camera.right) / 2 / z + ndcX * (camera.right - camera.left) / 2 / z;
-  const vy = (camera.top + camera.bottom) / 2 / z + ndcY * (camera.top - camera.bottom) / 2 / z;
+  // three.js zooms an orthographic frustum about its own centre: the centre stays, the half-extents divide by the zoom
+  const vx = (camera.left + camera.right) / 2 + ndcX * (camera.right - camera.left) / 2 / z;
+  const vy = (camera.top + camera.bottom) / 2 + ndcY * (camera.top - camera.bottom) / 2 / z;
   const vz = -camera.near;
   // view -> world (column-major matrix)
   const ox = e[0] * vx + e[4] * vy + e[8] * vz + e[12];

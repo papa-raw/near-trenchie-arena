@@ -101,6 +101,11 @@ python3 -m pip install -r near/requirements.txt
 
 This installs the requirements for both the arena host and the client.
 
+Start the arena and its web server one way or the other, never both: both ways use ports 8765 and 8181, so a
+second start collides with the first. **The one-command way:** run `make play` from the repository root (README step 12).
+It starts the arena on 8765 and the web server on 8181 together, prints their URLs, and Ctrl-C stops both; skip the
+two hand starts below and go on to the terminal check. **The hand way,** one terminal each, is below.
+
 Start the arena in one terminal, from the repo root (it also serves the spectator socket the first-look page
 draws, at `ws://127.0.0.1:8765`):
 

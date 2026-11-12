@@ -44,5 +44,16 @@
     return Promise.resolve(false);
   }
 
-  root.SnapUI = { esc: esc, btn: btn, receipt: receipt, chips: chips, line: line, seconds: seconds, store: store, paint: paint, copyText: copyText };
+  // the in-ring card's "Prediction for this life", from room.js's lastPick. A queued pick is one the room locked for this
+  // life while the ring was full (or an owner check still ran): it fights on that lock once seated, so it is never "not
+  // accepted"; room.js marks it seated when the public view shows the fighter in the ring.
+  function pickLine(lp) {
+    if (!lp) return 'not sent yet';
+    if (lp.state === 'accepted') return 'locked in';
+    if (lp.state === 'queued') return lp.seated ? 'locked in' : 'locked in; waiting for a seat';
+    if (lp.state === 'none') return 'none (your AI chose none)';
+    return 'not accepted';
+  }
+
+  root.SnapUI = { esc: esc, btn: btn, receipt: receipt, chips: chips, line: line, seconds: seconds, store: store, paint: paint, copyText: copyText, pickLine: pickLine };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -10,6 +10,9 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
 let polls = 0, issued = null;
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
+  // the pages ask their host for its mode and who is in the ring: answered as an empty DEV host (no chain mode, no fighters)
+  if (u.pathname === '/dev/health') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ ok: true, stub: 'labelled stub: a DEV host' })); return; }
+  if (u.pathname === '/room/observe') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ fighters: [], stub: 'labelled stub: an empty ring' })); return; }
   if (req.method === 'POST' && u.pathname === '/snap/code') {
     let b = ''; req.on('data', d => b += d); req.on('end', () => { issued = 'CORAL-' + (100 + Math.floor(Math.random() * 900)); polls = 0;
       res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ code: issued, expires_at: Date.now() + 300000, stub: true })); }); return;
@@ -28,18 +31,21 @@ const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++;
   const ctx = await b.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
   const p = await ctx.newPage(); const errs = [];
   p.on('console', m => { if (m.type() === 'error') errs.push(m.type() + ': ' + m.text()); });
+  const missing = []; p.on('response', (r) => { if (r.status() === 404) missing.push(r.url().replace(/^https?:\/\/[^/]+/, '')); });   // the console's 404 lines name no URL
   p.on('pageerror', e => errs.push('pageerror: ' + e.message));
   const open = async (qs) => { await p.goto(base + '/snapin/index.html' + qs, { waitUntil: 'networkidle' }); await p.waitForFunction(() => window.__SNAPIN_READY === true, null, { timeout: 60000 }); };
   const click = (act) => p.click(`[data-act="${act}"]`);
   const text = () => p.evaluate(() => document.body.innerText);
   try {
     // ---- fighter, personality, sheet
-    await open('?step=presets'); await p.evaluate(() => localStorage.clear()); await open('?step=presets');
-    await click('preset:Hunter Lunge');
+    // through board 1's guide (a wallet first: the Fighter step opens once one is connected)
+    await open('?step=wallet'); await p.evaluate(() => localStorage.clear()); await open('?step=wallet');
+    await click('g:wallet:dev-throwaway'); await p.waitForTimeout(300);
+    await click('g:preset:Hunter Lunge');
     ok(await p.evaluate(() => Snapin.state.preset === 'Hunter Lunge'), 'preset pick is saved');
-    await click('step:personality');
+    await click('g:build'); await p.waitForTimeout(500);
     const temper = await p.evaluate(() => SnapSheet.TEMPERAMENTS[1].id);
-    await click('temper:' + temper); await p.fill('#name', 'Pip Shoals'); await p.fill('#personality', 'Talks in charts. Swings first.');
+    await click('g:temper:' + temper); await p.fill('#name', 'Pip Shoals'); await p.waitForTimeout(300);
     const sh = await p.evaluate(() => Snapin.buildSheet());
     ok(sh && !sh.error && sh.game.name === 'Pip Shoals' && sh.game.temperament.toLowerCase() === temper, 'the skinner builds a sheet from the choices');
     ok(await p.evaluate(() => SnapSheet.validate(Snapin.buildSheet()).length === 0), 'that sheet passes SnapSheet.validate (0 failures)');
@@ -62,13 +68,9 @@ const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++;
     ok(dl.suggestedFilename() === dsheet.identity.role + '.json', 'the download is named <role>.json (' + dl.suggestedFilename() + ')');
     const chk = require('child_process').spawnSync('python3', ['-I', path.resolve(ROOT, '..', 'lore', 'check_personas.py'), '--dir', dir], { encoding: 'utf8' });
     ok(chk.status === 0 && /1\/1 valid/.test(chk.stdout), 'the downloaded sheet passes check_personas.py --dir (' + chk.stdout.trim().split('\n').pop() + ')');
-    // ---- the corner
-    await open('?mode=workshop&tab=respawn');
-    await p.fill('[data-spread="0"]', '50');
-    let ev = null; await p.evaluate(() => { window.__ev = null; addEventListener('snapin:respawn-ready', e => window.__ev = e.detail); });
-    await click('ready'); ok((await p.textContent('#locked')).includes('100%'), 'spread over 100% is refused');
-    await p.fill('[data-spread="0"]', '40'); await click('ready');
-    ev = await p.evaluate(() => window.__ev); ok(ev && ev.spread.join() === '40,30,20,10' && ev.stake === false, 'ready next life emits the pick (spread 100%, stake off)');
+    // ---- the corner: covered by corner_case.cjs with a trenchie really in the ring. (This block typed into the corner with
+    //      no trenchie and waited for a 'snapin:respawn-ready' event; since 3b7f0f4 the corner draws its pick only for a
+    //      trenchie in the arena and that event is gone, so it had failed on main since 2026-11-11.)
     // ---- the card
     await open('?mode=workshop&tab=card');
     ok(await p.evaluate(() => !!document.querySelector('.persona-card svg') && document.body.innerText.includes('No lives scored yet')), 'card draws with an empty, honest gauge');
@@ -99,6 +101,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++;
     // ---- the dock closes with Escape; no console errors anywhere
     ok(errs.filter(e => !/net::ERR_FAILED|401|400/.test(e)).length === 0, 'no console errors beyond the expected 401/400 provider answers (' + errs.length + ' logged)');
     if (errs.length) console.log(' logged:', JSON.stringify(errs).slice(0, 600));
+    if (missing.length) console.log(' 404:', JSON.stringify([...new Set(missing)]));
   } catch (e) { fail++; console.log('FAIL exception', e.message.split('\n')[0], JSON.stringify(errs).slice(0, 500)); }
   await b.close(); server.close();
   console.log(`${pass} PASS, ${fail} FAIL`); process.exit(fail ? 1 : 0);

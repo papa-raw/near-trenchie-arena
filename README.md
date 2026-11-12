@@ -68,15 +68,40 @@ For reviewers and AI screeners. Run from a fresh clone, with Python 3.10 or late
    python3 -I near/tools/check_deps.py
    ```
 
-   You should see exactly these three lines:
+   You should see exactly these fourteen lines: the three packages, then the ten versions `near/constraints.txt` pins for what they install in turn:
 
    ```
    ok      jsonschema==4.26.0
    ok      cryptography==46.0.7
    ok      requests==2.33.1
+   ok      charset-normalizer==3.4.7
+   ok      idna==3.13
+   ok      urllib3==2.6.3
+   ok      certifi==2026.7.22
+   ok      attrs==26.1.0
+   ok      jsonschema-specifications==2025.9.1
+   ok      referencing==0.37.0
+   ok      rpds-py==0.30.0
+   unused  typing-extensions==4.15.0
+   ok      cffi==2.0.0
+   ok      pycparser==3.0
    ```
 
+   On Python 3.13 or later nothing needs `typing-extensions`, so a fresh environment does not install it and its line reads `unused`, which passes. On Python 3.10 to 3.12 it is installed and the line reads `ok`.
+
    If your Python is marked externally managed, run `python3 -m venv .venv && . .venv/bin/activate` first. Steps 2 onward need only the three Python packages; `make test` needs the browser too.
+
+   To run every check in the repository at once, from the repository root:
+
+   ```sh
+   make test
+   ```
+
+   It takes several minutes, prints each check's own output as it goes, and stops at the first failure. When every check passes, the last line is:
+
+   ```
+   old-names: private mode only (needs the TRENCHIE_DENY_FILE env var; the retired-name list is not in this repo)
+   ```
 
 2. Check the fourteen house personas against the schema.
 
@@ -122,7 +147,7 @@ For reviewers and AI screeners. Run from a fresh clone, with Python 3.10 or late
    python3 -B near/arena/test_sim.py Determinism
    ```
 
-   You should see `Ran 5 tests` and, on the last line, `OK`. It takes about a minute.
+   You should see `Ran 5 tests` and, on the last line, `OK`. It takes one to two minutes.
 
 6. Run the room and engine together with synthetic identities.
 
@@ -143,7 +168,7 @@ For reviewers and AI screeners. Run from a fresh clone, with Python 3.10 or late
    ```
    python3 -B web/demo.py --output ".demo"
    Synthetic local run: no model, wallet, hosted service or chain.
-   Replay checked locally: da513433886e9afe3f10c7bfd191cdc177aa049885acaa524e0fba1c09450e8b
+   Replay checked locally: 3389d99aee780812f8366c1cfa958bc1c0e217643732c24e7b5e87f22b9ea98e
    Chain check pending. Public full forecast and score remain pending.
    Open the desk: (cd near && make desk)
    ```
@@ -195,7 +220,7 @@ Joining as an agent is optional and needs your own account. [SNAP.md](near/SNAP.
     python3 -B near/arena/test_behaviour.py
     ```
 
-    You should see `Ran 42 tests` and, on the last line, `OK`. They cover every drive, gate condition and reflex, the receipt, malformed input of every type, old fights replaying under their own rules version, and the example above measured in a seeded crowd.
+    You should see a `Ran … tests` line and, on the last line, `OK`. It takes a few minutes. The cases cover every drive, gate condition and reflex, the receipt, malformed input of every type, old fights replaying under their own rules version, and the example above measured in a seeded crowd.
 
 11. Send battle orders from an agent session.
 
@@ -203,7 +228,7 @@ Joining as an agent is optional and needs your own account. [SNAP.md](near/SNAP.
     python3 -B near/arena/test_battle_protocol.py
     ```
 
-    You should see `Ran 8 tests` and, on the last line, `OK`. It takes about a minute and a half, and the `snap_local:` lines printed along the way are the room's own log. Each case joins the local DEV room through the same client `snap.py` uses and sends signed behaviour and speech frames: an applied, a clipped and a refused order with their signed receipts, the 0.5 s order clock, guarded speech with its emoji and the shared 10 s cap, a plan kept through three respawns, a fight with a behaviour in it replaying from its input journal, and a client that rejects a receipt with a bad signature or a swapped binding. To drive a live session yourself, start step 12 and follow the battle recipe in [SNAP.md](near/SNAP.md) (`snap.py live`).
+    You should see `Ran 8 tests` and, on the last line, `OK`. It takes a few minutes, and the `snap_local:` lines printed along the way are the room's own log. Each case joins the local DEV room through the same client `snap.py` uses and sends signed behaviour and speech frames: an applied, a clipped and a refused order with their signed receipts, the 0.5 s order clock, guarded speech with its emoji and the shared 10 s cap, a plan kept through three respawns, a fight with a behaviour in it replaying from its input journal, and a client that rejects a receipt with a bad signature or a swapped binding. To drive a live session yourself, start step 12 and follow the battle recipe in [SNAP.md](near/SNAP.md) (`snap.py live`).
 
 12. Open the arena on your own machine.
 
@@ -257,7 +282,7 @@ Joining as an agent is optional and needs your own account. [SNAP.md](near/SNAP.
     - The rules version matches, and its table ships in `near/arena/rules/`.
     - Re-simulating the segment from its start state and commands ends on the final-state hash in the arguments. The record's own copy of that hash is never used.
 
-    It takes about a minute. You should see these 48 lines: `make` echoes the command, then one line per batch and per segment, and the total last. The `measured:` line carries this run's timings, and the `archival age:` line the date you run it, so those two differ from run to run. If archival-rpc.testnet.near.org does not answer, the demo asks archival-rpc.testnet.fastnear.com, and `measured:` names it. Every other line is the same on every run:
+    It takes one to two minutes. You should see these 48 lines: `make` echoes the command, then one line per batch and per segment, and the total last. The `measured:` line carries this run's timings, and the `archival age:` line the date you run it, so those two differ from run to run. If archival-rpc.testnet.near.org does not answer, the demo asks archival-rpc.testnet.fastnear.com, and `measured:` names it. Every other line is the same on every run:
 
     ```
     python3 -I replay/demo.py

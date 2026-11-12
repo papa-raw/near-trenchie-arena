@@ -169,9 +169,12 @@ const sameShape = (r) => r && typeof r.ok === 'boolean' && (r.ok || ('kind' in r
     ok('requestCode: POST <base>/snap/code', f.calls[0].url === 'http://127.0.0.1:8777/snap/code' && f.calls[0].init.method === 'POST', f.calls[0].url);
     ok('claude link: claude-cli://open?q=<prompt>, prompt < 1000 chars, no cwd', r.link.startsWith('claude-cli://open?q=') && decodeURIComponent(r.link.slice(20)) === r.prompt && r.prompt.length < 1000 && !/cwd/.test(r.link), r.link);
     ok('prompt names SNAP.md and the code', /SNAP\.md/.test(r.prompt) && r.prompt.includes('CORAL-482'), r.prompt);
-    ok('claude command pre-allows only the endpoint host', /^claude --allowedTools 'WebFetch\(domain:127\.0\.0\.1\)' '/.test(r.command), r.command);
+    // item 18: the copied line, split by a real shell, is exactly [claude, prompt]; no option comes before the prompt
+    const argv = require('child_process').execFileSync('sh', ['-c', 'set -- ' + r.command + '; printf "%s\\0" "$@"']).toString().split('\0').slice(0, -1);
+    ok('claude command: the shell splits it into exactly claude and the prompt (item 18)', argv.length === 2 && argv[0] === 'claude' && argv[1] === r.prompt && !argv.slice(1).some((x) => /^-/.test(x)), JSON.stringify(argv));
+    ok('prompt in board 1\'s words', r.prompt === 'Join Trenchie Arena. Read http://127.0.0.1:8777/SNAP.md and follow it. Code CORAL-482, trenchie Pebble.', r.prompt);
     const x = await P.snap.requestCode({ agent: 'codex' }, opts);
-    ok('codex link: codex://new?prompt=<text>', x.ok && x.link.startsWith('codex://new?prompt=') && decodeURIComponent(x.link.slice(19)) === x.prompt && x.command.startsWith("codex '"), JSON.stringify(x));
+    ok('codex link: codex://new?prompt=<text>', x.ok && x.link.startsWith('codex://new?prompt=') && decodeURIComponent(x.link.slice(19)) === x.prompt && x.command.startsWith('codex "'), JSON.stringify(x));
     const bad = await P.snap.requestCode({ agent: 'gemini' }, opts);
     ok('requestCode: unknown agent -> other, no request', bad.ok === false && bad.kind === 'other' && f.calls.length === 2, JSON.stringify(bad));
     const p = await P.snap.poll('CORAL-482', opts);

@@ -254,8 +254,14 @@ class Arena:
                  profile_provider=None, identity_resolver=None, receipt_signer=None,
                  admission_gate=None, life_guard=None, pick_resolver=None, sale_adapter=None,
                  house_runtime=None, server_time_ms=None, rules=sim.DEFAULT_RULES, recover=False, dev_host=None,
-                 prediction_log=None, chain=None, record=None):
+                 prediction_log=None, chain=None, record=None, room_snapshots=True):
         self.context = copy_data(context)
+        # Push the room's public snapshot to its control connections every tick (room.publish_snapshot), for a
+        # transport that delivers them through drain_snapshots. The push projects, canonicalises and schema-validates
+        # the whole snapshot each tick, so a host whose transport never drains pushed snapshots turns it off
+        # (snap_local). An explicit observe still projects and validates on demand; the sim and the spectator frames
+        # are the same either way.
+        self.room_snapshots = bool(room_snapshots)
         if self.context.get("rules_hash") != sim.digest(rules):
             raise ValueError("context rules hash mismatch")
         if rules["tick_hz"] != 20 or rules["segment_ticks"] != 1200:
@@ -561,7 +567,10 @@ class Arena:
                 self.bridge.activate(m["binding"], m["life_id"], lock["lock_ref"])
 
     def _log_key(self, life_id):
-        return str(self.context.get("deployment_id", "")) + "/" + life_id
+        """A life's key in a predictions log that outlives this arena: life ids restart at :life:0 in every arena, and
+        `record_run` (deployment and first seed) differs between arenas and host starts but not across a journal
+        recovery, so a recovered life is still refused and a restarted host's lives are not."""
+        return self.record_run + "/" + life_id
 
     def _log_player_lock(self, m, life_id, pick):
         """F79 for a player's AI: its lock (or explicit no-prediction) goes in the public log. A house life is logged
@@ -659,7 +668,7 @@ class Arena:
         self.snapshot_bytes = encode_snapshot(self.sim)
         self.serialisations += 1
         self.fanout.publish(self.snapshot_bytes)
-        if self.room is not None:
+        if self.room is not None and self.room_snapshots:
             self.room.publish_snapshot()
         self.dropped_sends = self.fanout.dropped
         if self.sim.state["tick"] - self.segment_start == self.sim.rules["segment_ticks"]:

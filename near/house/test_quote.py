@@ -90,6 +90,20 @@ class Calibration(unittest.TestCase):
         self.assertEqual(out["alpha"]["reliability_zero"]["40"]["mean_predicted_pct_milli"], 40_000)
         self.assertEqual(out["alpha"]["reliability_zero"]["40"]["observed_zero_pct_milli"], 5 * 100_000 // 12 * 1)
 
+    def test_lives_are_taken_in_write_order_never_by_their_key(self):
+        """Raw log rows, lives 1-12 of one run then lives 1-6 of a later run whose seed sorts first: calibration equals
+        the same rows numbered by write order (key order would put :life:10 before :life:2 and the later run first)."""
+        actuals = [0, 3, 1, 0, 0, 2, 4, 1, 0, 0, 1, 5, 2, 0, 3, 0, 1, 1]
+        keys = ["dev-local-r1@900000/p:life:%d" % n for n in range(1, 13)] + \
+               ["dev-local-r1@100000/p:life:%d" % n for n in range(1, 7)]
+        spreads = [[70, 20, 5, 5], [25, 25, 25, 25], [10, 20, 30, 40]]
+        rows = [{"persona": "p", "life": k, "spread_pct": spreads[i % 3], "zero_pct": (i * 13) % 100, "actual": a}
+                for i, (k, a) in enumerate(zip(keys, actuals))]
+        in_order = quote.calibration([dict(r, life=i) for i, r in enumerate(rows)])["p"]
+        by_key = quote.calibration([dict(r, life=j) for j, r in enumerate(sorted(rows, key=lambda r: r["life"]))])["p"]
+        self.assertNotEqual(in_order["skill_milli"], by_key["skill_milli"], "the fixture must tell the two orders apart")
+        self.assertEqual(quote.calibration(rows)["p"], in_order)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -235,7 +235,12 @@ are `request`, `open_control`, `frame`, `close_control`, `drain_private` and
 `drain_snapshots`, matching the service's bytes-based ingress. The port exposes
 no bridge or host-clock callback. Client identity and its distinct house
 capability still come from ordinary service authentication. Host ticks invoke
-service maintenance and snapshot publication; KOs notify `life_boundary` with
+service maintenance and snapshot publication; a host whose transport never calls
+`drain_snapshots` passes `room_snapshots=False` and publishes none (the DEV and
+hosted host, `snap_local.py`, does: its clients observe on demand, which still
+projects and validates). That host's slot store is `room_host.HostSlotStore`,
+which skips the per-tick `expire()` rewrite of the slot state until a lease could
+lapse (and at least once a second). KOs notify `life_boundary` with
 the current grant id after reserving the next engine life. Release retirement
 does not invent a new life notification.
 

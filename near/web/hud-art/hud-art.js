@@ -351,7 +351,7 @@
     var followed = F.filter(function (f) { return /follow/.test(f.state); })[0] || byKo[1] || F[0];
     var feed = (o.feed || []).map(function (e) { return { kind: e.kind, a: find(e.a), b: find(e.b), item: e.item }; });
     var drop = feed.filter(function (e) { return e.kind === 'drop'; }).pop();
-    return { F: F, top: byKo.slice(0, Math.max(1, Math.min(5, o.topN || 3))), lead: lead, followed: followed, feed: feed, drop: drop, w: o.w || 1440, h: o.h || 900, narrow: (o.w || 1440) < 600, concept: o.concept || 'sand' };
+    return { F: F, top: byKo.slice(0, Math.max(1, Math.min(5, o.topN || 3))), lead: lead, followed: followed, feed: feed, drop: drop, w: o.w || 1440, h: o.h || 900, narrow: (o.w || 1440) < 600, concept: o.concept || 'sand', mark: o.mark || '▲' };
   }
   function bodyHex(f) { return C(((f && f.row && f.row.paletteIds) || ['p06'])[0]); }
   function itemName(e) { var it = e.item; if (!it) return 'a legendary'; return typeof it === 'string' ? it : (it.name || it.id || 'a legendary'); }
@@ -687,7 +687,7 @@
     // the top 3: enamel price tags hung on a string; each a chip + ▲ count; the leader's tag green with a gold ATH ribbon
     board: function (D, uid) {
       var r = D.narrow ? 12 : 14, fs = D.narrow ? 17 : 20, font = '700 ' + fs + 'px "Space Mono"', s = '', x = 14, th = 2 * r + 12, tops = [];
-      var items = D.top.map(function (f, i) { var w = th * 0.42 + 2 * r + 12 + tw('▲' + f.kos, font) + 10; return { f: f, w: w }; });
+      var items = D.top.map(function (f, i) { var w = th * 0.42 + 2 * r + 12 + tw(D.mark + f.kos, font) + 10; return { f: f, w: w }; });   // the mark: ▲ KOs, or ✓ correct predictions
       var W = items.reduce(function (a, b) { return a + b.w + 10; }, 0) + 20, sy = 6;
       // the string, sagging between nails
       s += '<g filter="url(#ha-cast-sea-sm)">' + cord(4, sy, W - 4, sy, 20) + '</g>';
@@ -702,7 +702,7 @@
         s += flecks(it.w, th, hash(uid + 'f' + i));
         s += '<circle cx="' + f1(th * 0.42 * 0.55) + '" cy="' + f1(th / 2) + '" r="3.6" fill="#D9D3C8" stroke="#8A8378" stroke-width="1.2"/><circle cx="' + f1(th * 0.42 * 0.55) + '" cy="' + f1(th / 2) + '" r="1.6" fill="#6E5236"/><path d="M' + f1(th * 0.42 * 0.55 - 1.5) + ' ' + f1(th / 2 - 1.5) + 'l3 3" stroke="#D2AE7E" stroke-width="1.2"/>';
         s += '<g transform="translate(' + f1(th * 0.42 + r + 4) + ' ' + f1(th / 2) + ')">' + chip(f.row, r, 'enamel', uid + 'c' + i) + '</g>';
-        s += '<text x="' + f1(th * 0.42 + 2 * r + 10) + '" y="' + f1(th / 2 + fs * 0.36) + '" font-family=\'"Space Mono"\' font-weight="700" font-size="' + fs + '" fill="' + (lead ? '#1F5E4A' : INKD) + '"><tspan fill="' + GREEN + '" font-size="' + f1(fs * 0.8) + '">▲</tspan>' + f.kos + '</text>';
+        s += '<text x="' + f1(th * 0.42 + 2 * r + 10) + '" y="' + f1(th / 2 + fs * 0.36) + '" font-family=\'"Space Mono"\' font-weight="700" font-size="' + fs + '" fill="' + (lead ? '#1F5E4A' : INKD) + '"><tspan fill="' + GREEN + '" font-size="' + f1(fs * 0.8) + '">' + D.mark + '</tspan>' + f.kos + '</text>';
         if (lead) {   // the ATH ribbon: gold foil folded over the tag's top edge
           var rx = it.w - 34;
           s += '<path d="M' + rx + ' -3H' + (rx + 26) + 'V' + 9 + 'L' + (rx + 13) + ' 5L' + rx + ' 9Z" fill="#E9B23A" filter="url(#ha-cloth)"/><text x="' + (rx + 13) + '" y="3.6" text-anchor="middle" font-family=\'"Space Mono"\' font-weight="700" font-size="7.5" fill="#5A3A0A">ATH</text>';

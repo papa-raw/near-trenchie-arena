@@ -126,6 +126,56 @@ class HostedMode(unittest.TestCase):
         self.assertEqual(second.house_budget.meter.today(day), 1_250_000)
         self.assertEqual(second.house_budget.state()["spent_today_microusd"], 1_250_000)
 
+    def test_a_restart_on_the_same_state_dir_keeps_logging_and_recording_the_house_lives(self) -> None:
+        """Life ids restart at :life:0 in every start, and the predictions log and the record outlive a start in the
+        state dir. The lives of a second start lock and seal with no "already locked" refusal and no dropped row."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("house_test_live", HERE.parent / "house" / "test_live.py")
+        scripted = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(scripted)                  # its scripted model and its synchronous executor
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        state = Path(tmp.name) / "state"
+
+        def start_and_run(ticks: int):
+            dev = snap_local.DevRoom(free_port(), str(snap_local.new_run_dir(state)), house="live",
+                                     house_client=scripted.Scripted(), budget_mode="building",
+                                     public_origin=ORIGIN, state_dir=str(state))
+            arena = dev.round.arena
+            dev.round.house.runtime.executor = scripted.Sync()      # each model answer lands in the tick that asked
+            sealed = []
+            seal = arena._seal_rows
+            arena._seal_rows = lambda lives: (lambda rows: (sealed.append(rows), rows)[1])(seal(lives))
+            for _ in range(ticks):
+                arena.advance()
+            self.assertFalse(arena.failed)
+            return dev, arena, sealed
+
+        first, arena_one, _ = start_and_run(2600)                    # past two seals
+        before = first.house_log.rows()
+        self.assertTrue(before, "the first start resolved house lives into the log")
+        ids_one = {k.rsplit("/", 1)[1] for k in first.house_log.locks}
+
+        second, arena_two, sealed = start_and_run(2600)               # the restart: a new run dir, the same state dir
+        notes = second.round.house.runtime.notes
+        self.assertFalse([n for n in notes if "refused the pick" in n], notes)
+        ids_two = {k.rsplit("/", 1)[1] for k in second.house_log.locks if k not in first.house_log.locks}
+        self.assertTrue(ids_one & ids_two, "the second start reused life ids the first start logged")
+        after = second.house_log.rows()
+        self.assertEqual(after[:len(before)], before, "earlier rows keep their keys and their bytes")
+        new = after[len(before):]
+        self.assertTrue(new, "the second start's lives were resolved into the log")
+        self.assertEqual(len({r["life"] for r in after}), len(after), "one row per key")
+        self.assertTrue({r["life"].rsplit("/", 1)[1] for r in new} & ids_one, "a reused life id got its own row")
+        # the public record: every life the second start sealed has its own row, under the second start's run
+        sealed_ids = [life for rows in sealed for life in rows]
+        self.assertTrue(sealed_ids, "the second start sealed lives")
+        self.assertTrue(all(rows[life] is not None and rows[life]["run"] == arena_two.record_run
+                            for rows in sealed for life in rows), sealed)
+        self.assertNotEqual(arena_two.record_run, arena_one.record_run)
+        record = [r for r in second.record.rows if r["kind"] == "life" and r["run"] == arena_two.record_run]
+        self.assertEqual(sorted(r["life"] for r in record), sorted(set(sealed_ids)))
+
 
 if __name__ == "__main__":
     unittest.main()

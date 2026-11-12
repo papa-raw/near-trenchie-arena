@@ -130,7 +130,7 @@ class LiveHouse:
         self.graph = msggraph.attach(msggraph.MsgGraph(self.dir / "msggraph.jsonl", self.clock), feed, self.log)
         self.client = client
         self.executor = executor
-        self.life_prefix = context.get("deployment_id", "") + "/" if life_prefix is None else life_prefix
+        self.life_prefix = life_prefix          # None: each attached arena's own run name (attach), as its players' lives
         self.arena = None
         self.driver = None
         self.runtime = None
@@ -152,7 +152,7 @@ class LiveHouse:
         self.feed_base = high + 1 if high >= 0 and arena.sim.state["tick"] <= high else 0
         bindings = {n: self.binding(n) for n in self.sheets}
         self.driver = driver_mod.ArenaDriver(arena, bindings, log=self.log, feed=self.feed,
-                                             models={n: self.model for n in self.sheets}, life_prefix=self.life_prefix,
+                                             models={n: self.model for n in self.sheets}, life_prefix=self.prefix_for(arena),
                                              feed_tick=self.feed_clock)
         self.driver.behaviour_log = self._log_behaviour
         if self.feed is not None and getattr(self.feed, "game_of", None) is None:
@@ -160,6 +160,15 @@ class LiveHouse:
         self.runtime = runtime.Runtime(self.client, self.budget, None, self.sheets, self.driver, self.clock,
                                        executor=self.executor, battle=self.battle)
         return self
+
+    def prefix_for(self, arena):
+        """The house's lives go in the log under the same key the arena gives its players' lives (server._log_key): the
+        arena's run name, which differs in every round and every host start, so a restart on the same state dir never
+        meets a key the log already holds. Rows written before keep their keys."""
+        if self.life_prefix is not None:
+            return self.life_prefix
+        run = getattr(arena, "record_run", None)
+        return (run if run is not None else self.context.get("deployment_id", "")) + "/"
 
     def _log_behaviour(self, name, trigger, sent, ack):
         """Every behaviour order and the arena's answer, one JSON line each, under the data directory (no prompt, no key)."""
@@ -239,7 +248,7 @@ class LiveHouse:
         out["battle_style"] = battle_mod.style_for(self.budget.mode) if self.battle and hasattr(self.budget, "mode") else None
         out["cap_period"] = getattr(self.budget, "mode", None)                  # building | soak | judging | after
         out["period_source"] = getattr(self.budget, "source", None)             # "calendar", or "override" (--budget)
-        out["notes"] = self.notes()                  # every fallback said out loud: slug, call kind, error class
+        out["notes"] = self.notes()                  # every fallback said out loud, each with its UTC time: slug, call kind, the error and its message
         return out
 
     def notes(self):

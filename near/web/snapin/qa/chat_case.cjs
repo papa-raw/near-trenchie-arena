@@ -17,7 +17,7 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // hosts start through the shared harness: each ends with this case however it ends (qa/hosts.cjs)
-const HOSTS = require('./hosts.cjs');
+const HOSTS = require('./hosts.cjs'), G = require('./board1_flow.cjs');
 const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
 // the stand-in player AI, installed before the page's scripts when ?stubbrain is in the URL
 const ACKS = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'bm-a-acks.json'), 'utf8'));
@@ -32,10 +32,11 @@ const STUB = (ACKS) => {
       st.conversation.push({ who: 'owner', text, at: Date.now() });
       let r;
       // the engine's real ack() outputs (qa/fixtures/bm-a-acks.json), handed over exactly as the host would sign them
-      if (/hp_low|refuse/i.test(text)) r = { reply: { text: 'Hp low? Never heard of it, boss.', voice: true }, receipt: ACKS.refused };
-      else if (/clip/i.test(text)) r = { reply: { text: 'Fine, I will keep it smaller.', voice: true }, receipt: ACKS.clipped };
-      else r = { reply: { text: 'On it! Loot first, then the chase, and I bail out when I am hurt.', voice: true }, receipt: ACKS.four_reflex };
-      st.conversation.push({ who: 'trenchie', text: r.reply.text, at: Date.now() }, { who: 'host', receipt: r.receipt, at: Date.now() });
+      // the reply is a string, as brain.js's tell() answers it
+      if (/hp_low|refuse/i.test(text)) r = { reply: 'Hp low? Never heard of it, boss.', receipt: ACKS.refused };
+      else if (/clip/i.test(text)) r = { reply: 'Fine, I will keep it smaller.', receipt: ACKS.clipped };
+      else r = { reply: 'On it! Loot first, then the chase, and I bail out when I am hurt.', receipt: ACKS.four_reflex };
+      st.conversation.push({ who: 'trenchie', text: r.reply, at: Date.now() }, { who: 'host', receipt: r.receipt, at: Date.now() });
       subs.forEach((f) => f(st));
       return r;
     }
@@ -64,13 +65,8 @@ const STUB = (ACKS) => {
     await p.setViewportSize({ width: 1440, height: 900 });
     // ---- snap in (real DEV join)
     await p.goto(base + '/web/snapin/index.html?step=wallet&ws=' + encodeURIComponent(ws)); await ready();
-    await click('wallet-dev'); await click('preset:Survivor Beam'); await click('claim');
-    await p.fill('#name', 'Chatpip'); await click('step:doors');
-    await click('ai:door:NEAR AI Cloud'); await p.fill('#key', 'sk-test-player-key'); await click('ai:test');
-    await p.waitForFunction(() => SnapDoors.state.state === 'connected', null, { timeout: 20000 }); await click('ai:continue');
-    await p.waitForFunction(() => Snapin.view.terms && Snapin.view.terms.version, null, { timeout: 20000 });
-    for (const id of ['#agree-ai', '#agree-public', '#agree-gear']) await p.check(id);
-    await click('agree');
+    // snap in through board 1's guide (a cap to snap in, Pat's Q2; then none again: this case's own steps set one where it needs it)
+    await G.snapIn(p, { skipGoto: true, name: 'Chatpip', preset: 'Survivor Beam', claim: true, key: 'sk-test-player-key', clearCapAfter: true });
     await p.waitForFunction(() => SnapRoom.status().phase === 'in', null, { timeout: 90000 }); await sleep(800);
     // ---- 1. no player AI on this page: the box is off and says why
     const off = await p.evaluate(() => ({ disabled: document.querySelector('#order').disabled, text: document.querySelector('[data-chat]').innerText }));
@@ -131,35 +127,15 @@ const STUB = (ACKS) => {
       // ---- the compact box on the live arena page, for the player's own fighter
       await p.goto(base + '/web/arena.html?stubbrain=1&ws=' + encodeURIComponent(ws));
       await p.waitForFunction(() => document.getElementById('status').className === 'live' && document.querySelector('#world [data-panel="feed"]'), null, { timeout: 150000 });
-      await p.waitForFunction(() => window.SnapRoom && SnapRoom.status().phase === 'in' && document.getElementById('order-mini'), null, { timeout: 60000 });
-      // the box shows only once the finder has settled (HUD arrived, ring still, the same spot twice); a phone never gets it
-      await p.waitForFunction(() => innerWidth < 600 || document.getElementById('order-mini').dataset.wait === '', null, { timeout: 60000 }).catch(() => {});
-      await sleep(1500);
-      const m = await p.evaluate(() => {
-        const box = document.getElementById('order-mini'), cta = document.getElementById('snapin-cta').getBoundingClientRect(), shown = !box.hidden, r = box.getBoundingClientRect();
-        const world = document.getElementById('world'), layers = [...world.children].filter((c) => c.classList.contains('ha-layer'));
-        const hud = [...world.querySelectorAll('[data-panel]:not([data-kind="world"])'), ...(layers.length ? layers[layers.length - 1].children : []), ...document.querySelectorAll('.collabel, .inset:not([hidden])')].map((e) => e.getBoundingClientRect()).filter((q) => q.width && q.height);
-        const hit = (q) => !(q.right <= r.left || q.left >= r.right || q.bottom <= r.top || q.top >= r.bottom);
-        return { shown, inView: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, hud: hud.filter(hit).length, cta: hit(cta), cue: document.querySelector('#snapin-cta .cue').textContent, r: [r.left, r.top, r.right, r.bottom].map(Math.round) };
-      });
-      const ringHit = () => p.evaluate(() => {
-        const box = document.getElementById('order-mini'); if (box.hidden) return { hidden: true };
-        const r = box.getBoundingClientRect(), ring = window.__arenaRingOutline();
-        const inPoly = (x, y) => { let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], b = ring[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
-        const pts = []; for (let i = 0; i <= 10; i++) for (let k = 0; k <= 10; k++) pts.push([r.left + r.width * i / 10, r.top + r.height * k / 10]);
-        return { hidden: false, h: Math.round(r.height), cover: Math.round(100 * r.width * r.height / (innerWidth * innerHeight)), overRing: pts.some((q) => inPoly(q[0], q[1])) || ring.some((q) => q[0] > r.left && q[0] < r.right && q[1] > r.top && q[1] < r.bottom) };
-      });
-      if (m.shown) {
-        ok(m.inView && m.hud === 0 && !m.cta, `${W}: arena page: the compact order box is shown, clear of the HUD and the call to action (${JSON.stringify(m.r)})`);
-        await p.fill('#order-mini #order', 'Loot and run'); await p.focus('#order-mini #order'); await p.keyboard.press('Enter');
-        await p.waitForFunction(() => /Loot first/.test(document.getElementById('order-mini').innerText), null, { timeout: 10000 }).catch(() => {});
-        await sleep(1200);
-        const after = await ringHit(), fold = await p.evaluate(() => ({ receipt: document.querySelector('#order-mini .chat-receipt').textContent, folded: document.querySelector('#order-mini .chat-receipt').classList.contains('folded'), more: !!document.querySelector('#order-mini .chat-more'), focus: document.activeElement && document.activeElement.id }));
-        ok(fold.receipt === ACKS.four_reflex.summary && fold.folded && fold.more && fold.focus === 'order', `${W}: on the arena page the reply and the receipt (verbatim) show folded to one line with More, focus kept in the box`);
-        ok(after.hidden || (after.h <= 168 && !after.overRing), `${W}: with the engine's real 4-reflex receipt the box is ${after.hidden ? 'hidden (no free spot)' : after.h + ' px tall (cap 168), ' + after.cover + '% of the screen, never over the ring'}`);
-      } else {
-        ok(/Give orders in Your trenchie/.test(m.cue), `${W}: arena page: a phone never gets the compact box; Satrenchi points to Your trenchie ("${m.cue}")`);
-      }
+      // board 1: on the arena page the player's own trenchie has its panel, which takes the compact box's place (the box and
+      // the call to action are hidden while it shows); orders go through the panel's box
+      await p.waitForFunction(() => window.SnapRoom && SnapRoom.status().phase === 'in' && document.getElementById('pn-order'), null, { timeout: 60000 });
+      const pn = await p.evaluate(() => ({ has: document.body.classList.contains('has-panel'), mini: getComputedStyle(document.getElementById('order-mini')).display, cta: getComputedStyle(document.getElementById('snapin-cta')).display, panel: !!document.querySelector('[data-arena-panel]') }));
+      ok(pn.has && pn.mini === 'none' && pn.cta === 'none' && pn.panel, `${W}: arena page: the trenchie's own panel takes the compact box's place (compact box ${pn.mini}, call to action ${pn.cta}, panel ${pn.panel})`);
+      await p.evaluate(() => { const e = document.getElementById('pn-order'); e.focus(); e.value = 'Loot and run'; e.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('[data-pn="send"]').click(); });
+      await p.waitForFunction(() => /BEHAVIOUR SET/.test(document.getElementById('b1-panel').innerText), null, { timeout: 20000 }).catch(() => {});
+      const pt = await p.evaluate(() => document.getElementById('b1-panel').innerText);
+      ok(/On it! Loot first, then the chase/.test(pt) && /BEHAVIOUR SET/.test(pt) && !/\[object Object\]/.test(pt), `${W}: on the arena page the panel shows the trenchie's reply and the host's receipt for the order`);
       await p.evaluate(() => { window.__freeze = true; }).catch(() => {}); await sleep(250);
       await p.screenshot({ path: path.join(OUT, `arena-order-${W}.png`), timeout: 30000 }).catch(() => {});
     }

@@ -293,7 +293,7 @@ Check: SNAP.md describes the rejoin under "Play live from a Claude Code or Codex
 
 ## 2026-11-12 · The hosted arena, under load
 
-neartrenchies.xyz runs the arena on our own server, inside a container held to one CPU and 1 GB. It comes back by itself after a reboot. The first test with 50 spectators failed: the arena used the whole CPU and fell behind. Two jobs it did every tick were the cause. With both gone, the same test passed: 50 spectators for a minute at 20 frames a second, no dropped ticks, and a quarter of the CPU in use instead of all of it. That speed fix is still in review and comes to this repo when it passes.
+neartrenchies.xyz runs the arena on our own server, inside a container held to one CPU and 1 GB. It comes back by itself after a reboot. The first test with 50 spectators failed: the arena used the whole CPU and fell behind. Two jobs it did every tick were the cause. With both gone, the same test passed: 50 spectators for a minute at 20 frames a second, no dropped ticks, and a quarter of the CPU in use instead of all of it. That speed fix is in this repo.
 
 ## 2026-11-12 · The identity contract, rehearsed again
 
@@ -307,14 +307,28 @@ Newly made weapons may now be up to 4 units tall instead of 1.6, under a new ver
 
 Check: `python3 -I near/items/check_items.py` names the limits version it used for each item.
 
+## 2026-11-12 · Signing up and steering your trenchie
+
+The snap-in guide is rebuilt as clickable steps: wallet, fighter, personality, an AI door with its key and an hourly cap, one plain Arena rules notice, then Snap in. You can only snap in once your AI answers and a cap is set. Your trenchie's panel shows its gear and bag, an order box, its thinking with each reply in its own voice and the arena's receipt, what it has cost in money or weekly use, and a bench to swap gear between lives. On a phone the ring stays in view above the panel.
+
+Check: not runnable without a browser; the cases ship with the code.
+
+## 2026-11-12 · Heavier fights
+
+Weapons are drawn two and a half times bigger and carried on the shoulder between swings. A swing comes down as an overhead slam that lands on its target on the hit tick, so a stick never passes through anyone it doesn't hit. A KO arcs away, bounces and poofs, and long-range moves draw a projectile you can follow. None of this changes the fight itself: every hit and KO lands on the same tick as before.
+
+## 2026-11-12 · How it works
+
+One page explains the arena: watching and snapping in, the AI doors, the cap, how a fight and the bench work, predictions and rewards, and what sits on mainnet and on testnet. The arena's menu opens the same text in place.
+
+Check: open `near/web/docs.html`.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
 
 - the identity contract on mainnet
 - the gas measurements that set the batch size
-- the hosted arena's speed fix and its load test with 200 spectators
-- the new snap-in guide and trenchie panel, and the fight animations with bigger weapons
 - the balance sweep's final report
 
 The repo goes public before submissions close at 2026-11-14T23:59:00Z.

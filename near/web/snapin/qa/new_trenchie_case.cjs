@@ -25,7 +25,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TMP = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'new-trenchie-'));
 // hosts start through the shared harness: each ends with this case however it ends (qa/hosts.cjs)
-const HOSTS = require('./hosts.cjs');
+const HOSTS = require('./hosts.cjs'), G = require('./board1_flow.cjs');
 const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
 const KEYSTORE = 'trenchie.snapin.key.NEAR AI Cloud', FAKE_KEY = 'sk-case-not-a-real-key-0000';
 // the AI door's "Say hi" (and any later brain call) gets a canned answer: the case never reaches a provider
@@ -41,14 +41,17 @@ const phase = (p) => p.evaluate(() => (window.SnapRoom && SnapRoom.status().phas
 const draft = (p) => p.evaluate(() => { try { return localStorage.getItem('trenchie.snapin.v1') || ''; } catch (e) { return 'BLOCKED'; } });
 const ls = (p, k) => p.evaluate((k2) => { try { return localStorage.getItem(k2); } catch (e) { return null; } }, k);
 async function waitIn(p, ms) { try { await p.waitForFunction(() => window.SnapRoom && SnapRoom.status().phase === 'in', null, { timeout: ms || 45000 }); return true; } catch (e) { return false; } }
-// the guide's own path from the AI step to "Snap in": NEAR AI Cloud, the key, a cap, Say hi, Review terms, three ticks
+// board 1's path from the AI step to "Snap in": NEAR AI Cloud, the key (Test answered) or the one already saved, a cap,
+// the check page, Snap in
 async function doorAndAgree(p, typeKey) {
-  if (typeKey) { await act(p, 'ai:door:NEAR AI Cloud'); await p.fill('#key', FAKE_KEY); await p.fill('#cap', '0.5'); await act(p, 'ai:test'); }
-  else await act(p, 'ai:return');   // a returning player: "Continue with NEAR AI Cloud", the key already saved
-  await p.waitForSelector('[data-act="ai:continue"]', { timeout: 15000 }); await act(p, 'ai:continue');
-  await p.waitForSelector('#agree-ai', { timeout: 15000 }); await p.waitForFunction(() => !/Reading the arena/.test(document.querySelector('#app').innerText), null, { timeout: 15000 });
-  for (const id of ['agree-ai', 'agree-public', 'agree-gear']) await p.check('#' + id);
-  await act(p, 'agree');
+  await act(p, 'g:step:doors'); if (await p.$('[data-act="g:other"]')) await act(p, 'g:other');
+  await act(p, 'g:door:key:NEAR AI Cloud');
+  if (typeKey) { await p.fill('#key', FAKE_KEY); await act(p, 'g:test'); await p.waitForFunction(() => /It answered/.test(document.body.innerText), null, { timeout: 15000 }); }
+  await act(p, 'g:cap:0.50');
+  await act(p, 'g:step:agree'); await p.waitForFunction(() => Snapin.view.terms && Snapin.view.terms.version, null, { timeout: 15000 });
+  const guideUrl = p.url(); await act(p, 'g:snap');
+  // board 1: Snap in lands on the arena page's panel; this case's checks are on the guide's ring view, so it comes back
+  await G.afterSnap(p, { guideUrl, backToGuide: true, timeout: 90000 }).catch((e) => console.log('  after Snap in:', e.message));
 }
 async function setName(p, name) { await p.fill('#name', name); await sleep(150); }
 (async () => {
@@ -70,15 +73,16 @@ async function setName(p, name) { await p.fill('#name', name); await sleep(150);
     let p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
     await p.goto(guide + '?step=wallet'); await ready(p);
     await p.evaluate(() => { localStorage.setItem('selected-wallet', 'case-wallet-marker'); });   // a wallet library's own key: must survive
-    await act(p, 'wallet-dev'); await act(p, 'claim'); await p.waitForSelector('#name', { timeout: 15000 });
+    await act(p, 'g:wallet:dev-throwaway'); await act(p, 'g:use'); await p.waitForSelector('#name', { timeout: 15000 });
     await setName(p, 'Alfa Pip');
     await p.goBack(); await sleep(400);                                        // Back to the Fighter step (item 25)
     const back = await p.evaluate(() => Snapin.view.step), t1 = await text(p);
-    ok(/your trenchie/i.test(t1) && /Alfa Pip/.test(t1) && !/comes as/i.test(t1), `after Back the Fighter step shows the player's own trenchie (Alfa Pip), not the premint's default (${(t1.match(/[^\n]*(comes as|Your trenchie)[^\n]*\n[^\n]*/i) || [''])[0].replace(/\n/g, ' / ')})`);
-    await act(p, 'claim'); await p.waitForSelector('#name', { timeout: 15000 });
+    // board 1's Fighter step names no persona at all: never the premint's default (Barnacle Bertie for Brawler Swing)
+    ok(!/comes as/i.test(t1) && !/Barnacle Bertie/.test(t1), `after Back the Fighter step never shows the premint's default over the player's own trenchie`);
+    await act(p, 'g:use'); await p.waitForSelector('#name', { timeout: 15000 });
     const kept = await p.inputValue('#name');
     ok(back === 'presets' && kept === 'Alfa Pip', `Back to the Fighter step and on again keeps the name typed after the claim (step ${back}, name "${kept}")`);
-    await act(p, 'step:doors'); await doorAndAgree(p, true);
+    await doorAndAgree(p, true);
     ok(await waitIn(p) && await inRing('Alfa Pip'), `visit 1: A (Alfa Pip) is in the ring (${(await ring()).filter((n) => /^DEV/.test(n)).join(', ')})`);
     const wallet1 = JSON.parse(await draft(p) || '{}').wallet;
     await p.close();
@@ -99,15 +103,15 @@ async function setName(p, name) { await p.fill('#name', name); await sleep(150);
       await act(p, 'new-trenchie'); await act(p, 'new-trenchie-yes');
       await p.waitForFunction(() => Snapin.view.step === 'presets', null, { timeout: 20000 }).catch(() => {});
       await p.setViewportSize({ width: 390, height: 844 }); await sleep(300);
-      const flash = await p.evaluate(() => { const b = [...document.querySelectorAll('.in-banner')].find((x) => /is forgotten/.test(x.innerText)); return b ? { text: b.innerText.replace(/\s+/g, ' '), top: b.getBoundingClientRect().top, h: innerHeight } : null; });
+      const flash = await p.evaluate(() => { const b = [...document.querySelectorAll('.in-banner, .note')].find((x) => /is forgotten/.test(x.innerText)); return b ? { text: b.innerText.replace(/\s+/g, ' '), top: b.getBoundingClientRect().top, h: innerHeight } : null; });
       ok(!!flash && flash.top >= 0 && flash.top < flash.h, `the confirmation shows at the top of the screen at 390 px (${flash ? flash.text + ' @y=' + Math.round(flash.top) : 'none'})`);
       await p.setViewportSize({ width: 1280, height: 720 });
       const d2 = await draft(p);
       ok(!/Alfa Pip/.test(d2) && JSON.stringify(JSON.parse(d2 || '{}').wallet) === JSON.stringify(wallet1), 'the fresh draft has nothing of A and keeps the wallet');
       await p.reload(); await ready(p);                                        // L4: a reload between Make new and Snap in
       ok(!!(JSON.parse(await draft(p) || '{}').swimming || {}).id, 'the swim home that the next join waits for is kept in the draft across a reload');
-      await act(p, 'step:build'); await act(p, 'step:personality'); await setName(p, 'Bravo Pip');
-      await act(p, 'step:doors'); await doorAndAgree(p, false);
+      await act(p, 'g:build'); await setName(p, 'Bravo Pip');
+      await doorAndAgree(p, false);
       const inB = await waitIn(p), st = await p.evaluate(() => SnapRoom.status().fighter && SnapRoom.status().fighter.name);
       let gone = false; for (let i = 0; i < 30 && !gone; i++) { gone = !(await inRing('Alfa Pip')); if (!gone) await sleep(500); }
       if (!inB) console.log('  status:', JSON.stringify(await p.evaluate(() => { const s = SnapRoom.status(); return { phase: s.phase, step: s.step, error: s.error }; })));
@@ -121,7 +125,7 @@ async function setName(p, name) { await p.fill('#name', name); await sleep(150);
     const snap = (...a) => { try { return execFileSync('python3', ['-I', path.join(REPO, 'near/arena/snap.py'), '--url', arenaUrl, '--state', path.join(agentDir, 'state.json'), ...a], { cwd: agentDir, timeout: 120000, stdio: ['ignore', 'pipe', 'pipe'] }).toString(); } catch (e) { return 'ERR ' + String(e.stdout || '') + String(e.stderr || e.message).slice(0, 300); } };
     const ctx2 = await chromium.launchPersistentContext(path.join(TMP, 'profile2'), { args: ['--single-process', '--no-zygote'] }); await fakeProvider(ctx2);
     let q = await ctx2.newPage(); q.on('pageerror', (e) => errs.push(e.message));
-    await q.goto(guide + '?step=wallet'); await ready(q); await act(q, 'wallet-dev'); await act(q, 'step:build'); await act(q, 'step:personality'); await setName(q, 'Agent Pip');
+    await q.goto(guide + '?step=wallet'); await ready(q); await act(q, 'g:wallet:dev-throwaway'); await act(q, 'g:build'); await setName(q, 'Agent Pip');
     await q.close();
     // every join in this case comes from 127.0.0.1, and the host allows 5 join attempts a minute per address
     // (room/service.py join_attempts_per_minute): let visits 1 and 2's window pass, as separate players never share one
@@ -135,8 +139,8 @@ async function setName(p, name) { await p.fill('#name', name); await sleep(150);
     if (await q.$('[data-act="new-trenchie"]')) {
       await act(q, 'new-trenchie'); await act(q, 'new-trenchie-yes'); await q.waitForFunction(() => Snapin.view.step === 'presets', null, { timeout: 20000 }).catch(() => {});
       ok(await q.evaluate(() => Snapin.state.name) === '' && !/Agent Pip/.test(await draft(q)), 'the new draft has no name and nothing of Agent Pip');
-      await act(q, 'step:build'); await act(q, 'step:personality'); await setName(q, 'Charlie Pip');
-      await act(q, 'step:doors'); await doorAndAgree(q, true);
+      await act(q, 'g:build'); await setName(q, 'Charlie Pip');
+      await doorAndAgree(q, true);
       const inC = await waitIn(q), st = await q.evaluate(() => SnapRoom.status().fighter && SnapRoom.status().fighter.name);
       ok(inC && st === 'Charlie Pip' && await inRing('Charlie Pip') && await inRing('Agent Pip'), `both are in the ring: the agent's Agent Pip and the guide's Charlie Pip; the guide follows ${st}`);
     }
@@ -158,10 +162,14 @@ async function setName(p, name) { await p.fill('#name', name); await sleep(150);
     // Charlie Pip back in" reads and keeps it itself (or counts the host's wait down) and never shows an agent's command.
     const seen = []; const tick = setInterval(() => { q.evaluate(() => document.querySelector('#app').innerText).then((t) => seen.push(t), () => {}); }, 500);
     await act(q, 'rejoin');
-    const rejoined = await waitIn(q, 120000); clearInterval(tick);
+    const rejoined = await waitIn(q, 210000); clearInterval(tick);   // the host's grace for an unread result is 180 s
+    if (!rejoined) console.log('  the rejoin ended:', JSON.stringify(await q.evaluate(() => { const s = SnapRoom.status(); return { phase: s.phase, step: s.step, message: s.message, error: s.error }; })));
     const cmd = seen.some((t) => /snap\.py|`/.test(t)), keptResult = await q.evaluate(() => (SnapRoom.status().notes || []).some((n) => /kept the last round/.test(n.text)));
     ok(rejoined && await inRing('Charlie Pip') && !cmd, `"Snap Charlie Pip back in" after the lapsed seat puts it back in the ring, with no command shown (${rejoined ? 'in' : await phase(q)}; waits seen: ${[...new Set(seen.map((t) => (t.match(/Back in the ring in \d+ s|Reading the last round[^\n]*/) || [''])[0]).filter(Boolean))].slice(0, 3).join(', ') || 'none'})`);
-    ok(keptResult, 'the guide read the lapsed round\'s result and kept it in this browser before rejoining');
+    const counted = seen.some((t) => /Back in the ring in \d+ s/.test(t));
+    // the guide reads and keeps the result when the host has one to give; while the round's result is still pending it
+    // cannot, and the host's own countdown is the way back in
+    ok(keptResult || (rejoined && counted), `the guide read the lapsed round's result and kept it before rejoining, or (not readable yet) counted the host's wait down (kept: ${keptResult}, countdown: ${counted})`);
     await ctx2.close();
 
     // ---------------------------------------------------------------- 4. the DEV arena restarts while the guide is closed
@@ -195,8 +203,8 @@ async function setName(p, name) { await p.fill('#name', name); await sleep(150);
     });
     const pp = await pc.newPage(); const perr = []; pp.on('pageerror', (e) => perr.push(e.message));
     await pp.goto(guide + '?step=wallet'); await ready(pp);
-    await act(pp, 'wallet-dev'); await act(pp, 'step:build'); await act(pp, 'step:personality'); await setName(pp, 'Delta Pip');
-    await act(pp, 'step:doors'); await doorAndAgree(pp, true);
+    await act(pp, 'g:wallet:dev-throwaway'); await act(pp, 'g:build'); await setName(pp, 'Delta Pip');
+    await doorAndAgree(pp, true);
     ok(await waitIn(pp) && await inRing('Delta Pip'), `private window (IndexedDB missing, storage writes refused): wallet to snapped in (${await phase(pp)}; ${(await text(pp)).split('\n').slice(0, 2).join(' / ')})`);
     ok(perr.length === 0, 'no page errors in the private window' + (perr.length ? ': ' + perr.join(' | ') : ''));
   } catch (e) { ok(false, 'case crashed: ' + String(e && e.stack || e).slice(0, 500)); }

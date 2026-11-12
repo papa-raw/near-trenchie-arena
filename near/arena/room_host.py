@@ -12,6 +12,44 @@ from room.service import RoomService
 from room.slots import SlotStore
 
 
+class HostSlotStore(SlotStore):
+    """The room's slot store for a host whose clock calls ``expire()`` every tick (Arena.advance -> room.maintain).
+
+    ``SlotStore.expire()`` is an empty transaction: each call re-reads the state file and rewrites it, and every
+    active slot's file, with two fsyncs each, whether or not anything lapsed (20 times a second at 20 Hz). Expiry
+    changes state only once a timed lease is due, so this store runs it on the first call at or after the earliest
+    lease whose expiry would change a slot (the same call on which the plain store would expire it), and otherwise
+    at most once every ``EXPIRE_FLOOR_MS`` (in case another writer changed the file). The due time is read from the
+    state each committed transaction writes. Every other transaction is unchanged and still expires lapsed leases
+    itself first."""
+
+    EXPIRE_FLOOR_MS = 1000
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._expire_due = None  # unknown until the first transaction: the first expire() runs
+
+    @staticmethod
+    def _lapse_changes(slot) -> bool:
+        """Whether SlotStore._expire changes this slot once its lease is due (mirrors its tests exactly)."""
+        record = slot["record"]
+        timed = not slot.get("supervised") or record["state"] == "disconnected"
+        if not timed:
+            return False
+        # A house slot in a life is set to "disconnected" at expiry and stays so until the life ends.
+        return not (slot.get("house") and slot.get("in_life") and record["state"] == "disconnected")
+
+    def _publish(self, state):
+        super()._publish(state)
+        due = [int(slot["record"]["lease_until"]) for slot in self._active(state) if self._lapse_changes(slot)]
+        self._expire_due = min([self._now + self.EXPIRE_FLOOR_MS, *due])
+
+    def expire(self):
+        if self._expire_due is not None and self.clock() < self._expire_due:
+            return
+        super().expire()
+
+
 class PublicRecords(Protocol):
     """Read-only game adapter; absent records retain the room's refusal."""
 

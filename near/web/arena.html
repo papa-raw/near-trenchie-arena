@@ -124,11 +124,13 @@
       if (host) host.querySelectorAll('[data-panel]:not([data-kind="world"]), .collabel').forEach(add);
       // the feed grows with each KO, up to three lines (two on a phone): reserve its full size from the start, so the button never jumps
       var feed = host && host.querySelector('[data-panel="feed"]');
-      if (feed) { var f = feed.getBoundingClientRect(), nw = innerWidth < 600; out.push({ left: f.left, right: Math.max(f.right, f.left + (nw ? 300 : 440)), top: Math.min(f.top, f.bottom - (nw ? 52 : 100)), bottom: f.bottom }); }
+      if (feed) { var f = feed.getBoundingClientRect(), nw = innerWidth < 600; out.push({ left: f.left, right: Math.max(f.right, f.left + (nw ? 300 : 440)), top: Math.min(f.top, f.bottom - feedReserve(feed, nw)), bottom: f.bottom }); }
       // the speech ticker above it (Battle mode) grows to three lines (two on a phone), each wrapping: reserve its full size too
       var say = sayReserve(); if (say) out.push(say);
-      var layers = host ? [].filter.call(host.children, function (c) { return c.classList.contains('ha-layer'); }) : [];
-      if (layers.length) [].forEach.call(layers[layers.length - 1].children, add);   // the players' leaderboard cards
+      // board 2's two leaderboards: the wall sign (data-panel="board", also caught above; named here so a change of host
+      // never drops it). The last .ha-layer is no longer the leaderboard cards: since board 2 it is the HP candle layer,
+      // whose candles ride the fighters, so reserving it made the button dodge moving bodies.
+      document.querySelectorAll('.wallsign').forEach(add);
       document.querySelectorAll('.inset:not([hidden]), #status:not(.live), #chain-hold:not([hidden])').forEach(add);
       return out;
     }
@@ -172,10 +174,14 @@
       e.setAttribute('fill', 'none'); e.setAttribute('stroke', cs.borderBottomColor); e.setAttribute('stroke-width', bw); e.setAttribute('stroke-linejoin', 'round'); e.setAttribute('stroke-linecap', 'butt');
       svg.dataset.corner = [r(cx), r(cy), r(R), bw].join(','); svg.dataset.arc = ARC.join(','); svg.dataset.base = pt(b0) + ';' + pt(b1); svg.dataset.tip = pt(tip); svg.dataset.face = r(fx) + ',' + r(fy);   // read by the tail case
     }
+    // the feed's full height: on a phone board 2's feed caps its own box (feed.mjs PHONE_MAX, given as data-reserve), so
+    // the button reserves exactly that and never moves as slips wrap; elsewhere the old reserve
+    function feedReserve(feed, nw) { var r = parseFloat(feed.dataset.reserve); return r > 0 ? r : (nw ? 52 : 100); }
+    window.__ctaReserved = function () { return rects().map(function (r) { return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; }); };   // read by the review tooling
     function place() {
       var W = innerWidth, H = innerHeight, me = a.getBoundingClientRect(), w = me.width, h = me.height, m = W < 600 ? 10 : 16, hud = rects();
       var feed = document.querySelector('#world [data-panel="feed"]'), btn = document.querySelector('#world [data-panel="btn1"]');
-      var feedTop = feed ? Math.min(feed.getBoundingClientRect().top, feed.getBoundingClientRect().bottom - (W < 600 ? 52 : 100)) : H - m, btnTop = btn ? btn.getBoundingClientRect().top : H - m;
+      var feedTop = feed ? Math.min(feed.getBoundingClientRect().top, feed.getBoundingClientRect().bottom - feedReserve(feed, W < 600)) : H - m, btnTop = btn ? btn.getBoundingClientRect().top : H - m;
       var say = sayReserve(); if (say) feedTop = Math.min(feedTop, say.top);   // stack above the speech ticker as well
       var spots = [[(W - w) / 2, H - h - m], [m, feedTop - h - GAP], [(W - w) / 2, Math.min(feedTop, btnTop) - h - GAP], [W - w - m, btnTop - h - GAP], [W - w - m, m]];
       var freeBox = function (x, y, bw, bh) {
@@ -238,6 +244,16 @@
       // the player's AI (snapin/brain.js) drives the fighter from whichever page is open; it starts itself and is optional
       var br = document.createElement('script'); br.src = './snapin/brain.js'; document.body.appendChild(br);
       var ch = document.createElement('script'); ch.src = './snapin/chat.js'; document.body.appendChild(ch);
+      // board 1's trenchie panel (snapin/panel.js): the player's own trenchie on the right, a tab when closed; while it shows,
+      // the call to action and the small order box step aside
+      var css = document.createElement('link'); css.rel = 'stylesheet'; css.href = './snapin/panel.css'; document.head.appendChild(css);
+      var load = function (src) { return new Promise(function (ok) { var e = document.createElement('script'); e.src = src; e.onload = ok; e.onerror = ok; document.body.appendChild(e); }); };
+      load('./snapin/art/ska.js').then(function () { return load('./snapin/guide-copy.js'); }).then(function () { return load('./snapin/panel.js'); }).then(function () {
+        // page markers for the arena's own HUD: has-panel while the trenchie panel or its tab is on screen, panel-open while
+        // the panel itself is open (460 px on the right at 12 px from the edge; a bottom sheet at 390)
+        addEventListener('snappanel', function (e) { var d = e.detail || {}; document.body.classList.toggle('has-panel', !!d.shown); document.body.classList.toggle('panel-open', !!(d.shown && d.open)); place(); });
+        (window.SKA ? window.SKA.init() : Promise.resolve()).then(function () { if (window.SnapPanel) window.SnapPanel.start(); });
+      });
       var R = window.SnapRoom; if (!R) return;
       mini = document.createElement('div'); mini.id = 'order-mini'; mini.hidden = true; mini.setAttribute('aria-label', 'Orders for your trenchie'); document.body.appendChild(mini);
       var drawMini = function () {

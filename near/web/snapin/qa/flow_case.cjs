@@ -1,10 +1,11 @@
 // F52 end to end: two first-time visitors snap a trenchie into the DEV arena from the live page, in a real browser.
 // Visitor A at 1440, visitor B at 390 (separate browser contexts: separate storage, keys and tab locks).
-// Each: arena CTA -> wallet (a wallet that cannot connect here, then the DEV throwaway account) -> battle options (every one
-// clicked) -> claim or build (every look and slot option clicked) -> personality (every temperament and quirk, name, voice)
-// -> AI (help, NEAR AI Cloud: a refused key, then a good one) -> terms (refused without the ticks, then agreed) -> the join
-// -> in the ring: the fighter is in /dev/players and drawn in arena.html, followed. Mid-flow reload and Back are checked.
-// B first tries A's name while A is in the ring: a plain error and a way back. Both leave at the end.
+// Each, through board 1's guide: arena CTA -> wallet (a wallet that cannot connect here, then the DEV throwaway account) ->
+// battle options (every one clicked) -> claim or build -> personality (every temperament and quirk, the name) -> AI (NEAR AI
+// Cloud: a refused key, then a good one) -> the check page (off until a cap is set, then Snap in) -> the join -> in the ring:
+// the fighter is in /dev/players and drawn in arena.html, followed. Mid-flow reload, Back and Forward are checked.
+// B first types A's name while A is in the ring: the name step catches it before any join. Both leave at the end.
+// (Board 1's exact copy per state is board1_guide_case.cjs's; this case checks the flow end to end.)
 // The model provider's key check is answered by this test (no player key exists here): labelled in the output, and
 // a real key is Pat's click-through. The browser has no internet: every host but this machine's is cut (as a name that does
 // not resolve) and any window a wallet opens is closed, so the wallet door fails the same way on every lane (with network,
@@ -23,7 +24,7 @@ const ok = (c, m) => { report.push((c ? 'PASS ' : 'FAIL ') + m); if (c) { pass++
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // hosts start through the shared harness: each ends with this case however it ends (qa/hosts.cjs)
-const HOSTS = require('./hosts.cjs');
+const HOSTS = require('./hosts.cjs'), G = require('./board1_flow.cjs');
 const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname(NEAR));
 
 (async () => {
@@ -65,7 +66,7 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
     p.on('requestfailed', (r) => failed.push(r.url()));
     const tag = `${who}@${W}`, frames = [];
     const shot = async (name) => {
-      const wide = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, w: innerWidth, over: [...document.querySelectorAll('main *')].filter((e) => { const r = e.getBoundingClientRect(); return r.width && (r.right > innerWidth + 1 || r.left < -1); }).slice(0, 3).map((e) => e.tagName + '.' + (e.getAttribute('class') || '') + ':' + (e.textContent || '').trim().slice(0, 40)) }));
+      const wide = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, w: innerWidth, over: [...document.querySelectorAll('#app *')].filter((e) => { const r = e.getBoundingClientRect(); return r.width && (r.right > innerWidth + 1 || r.left < -1); }).slice(0, 3).map((e) => e.tagName + '.' + (e.getAttribute('class') || '') + ':' + (e.textContent || '').trim().slice(0, 40)) }));
       overflow.push([name, W, wide.sw <= wide.w && wide.over.length === 0, wide]);
       const f = `${String(frames.length + 1).padStart(2, '0')}-${name}-${W}.png`; await p.evaluate(() => { window.__freeze = true; }); await sleep(200); await p.screenshot({ path: path.join(OUT, f), fullPage: !/arena/.test(name), timeout: 30000 }); await p.evaluate(() => { window.__freeze = false; }); frames.push(f); };
     const ready = () => p.waitForFunction(() => window.__SNAPIN_READY === true, null, { timeout: 60000 });
@@ -95,117 +96,114 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
     await p.goto(base + '/web/arena.html?ws=' + encodeURIComponent(ws), { waitUntil: 'load' }); await live();
     await shot('arena-cta');
     await Promise.all([p.waitForURL(/snapin\/index\.html/), p.click('#snapin-cta')]); await ready();
-    ok((await step()) === 'wallet' && /Testnet wallet/.test(await p.innerText('main')) && !/Mainnet/.test(await p.innerText('main')), `${tag}: the call to action opens the wallet step, which says testnet (no "Mainnet")`);
+    ok((await step()) === 'wallet' && /Connect a NEAR wallet/.test(await p.innerText('#app')) && /Its fights and gear are on testnet\./.test(await p.innerText('#app')) && !/Mainnet/.test(await p.innerText('#app')), `${tag}: the call to action opens board 1's wallet step, which says testnet (no "Mainnet")`);
     await shot('wallet');
     // ---- wallet: one that cannot connect here (no wallet app or network in this browser), then the DEV throwaway account
     const cutBefore = cut.length, w0 = Date.now();
-    await click('wallet:meteor');
+    await click('g:wallet:meteor');
     await p.waitForFunction(() => /Wallet not connected/.test((document.querySelector('#feedback') || {}).textContent || ''), null, { timeout: 45000 }).catch(() => {});
     const wmsg = await p.$eval('#feedback', (e) => e.textContent).catch(() => '');
     ok(/Wallet not connected: .+\. Keep watching, or try another wallet\./.test(wmsg) && (await step()) === 'wallet', `${tag}: a wallet that cannot connect says so plainly and leaves every door open, in ${((Date.now() - w0) / 1000).toFixed(1)} s with ${cut.length - cutBefore} outside requests cut and ${popups.length} wallet windows closed so far: "${wmsg.slice(0, 140)}"`);
     await shot('wallet-error');
     if (opts.keyboard) {
-      const k = await tabTo('wallet-dev');
+      const k = await tabTo('g:wallet:dev-throwaway');
       ok(k.found && k.bare.length === 0, `${tag}: keyboard: Tab reaches "Throwaway account" in ${k.stops.length} stops, every stop with a focus ring` + (k.bare.length ? ' (no ring: ' + k.bare.join(', ') + ')' : ''));
       await p.keyboard.press('Enter'); await sleep(400);
-    } else { await click('wallet-dev'); await sleep(300); }
+    } else { await click('g:wallet:dev-throwaway'); await sleep(300); }
     t.wallet = Date.now();
     ok((await step()) === 'presets', `${tag}: the DEV throwaway account connects and moves on`);
     await p.goBack(); await sleep(400);
     const acct = await p.evaluate(() => Snapin.state.wallet);
-    ok((await step()) === 'wallet' && acct && /^[0-9a-f]{64}$/.test(acct.accountId) && acct.network === 'testnet', `${tag}: Back shows the connected account (${acct && acct.accountId.slice(0, 12)}…, testnet)`);
+    ok((await step()) === 'wallet' && acct && /^[0-9a-f]{64}$/.test(acct.accountId) && acct.network === 'testnet' && /Connected: [0-9a-f]{12}…[0-9a-f]{8}/.test(await p.innerText('#app')), `${tag}: Back shows the connected account (${acct && acct.accountId.slice(0, 12)}…, testnet)`);
     await shot('wallet-connected');
-    await click('step:presets');
+    await click('g:step:presets');
     // ---- battle options
     await shot('presets');
-    await sweep('.presets [data-act^="preset:"]', 'battle options');
-    await click('preset:' + opts.preset);
-    if (opts.build) {
-      await click('step:build'); ok((await step()) === 'build', `${tag}: "Build a fighter" opens the builder`);
-      await sweep('[data-act^="look:"]', 'look options');
-      await sweep('.slot-group [data-act^="preset:"]', 'battle options on the builder'); await click('preset:' + opts.preset);
-      ok(/its kit/i.test(await p.innerText('main')) && !/Art pending|Count pending/.test(await p.innerText('main')), `${tag}: the builder shows the battle option's kit, no placeholder`);
-      await shot('build');
-      await click('step:personality');
-    } else {
-      await click('claim'); ok(await p.evaluate(() => Snapin.state.claim && Snapin.state.claim.dev === true), `${tag}: "Use this preset" records a DEV claim, labelled not onchain`);
+    await sweep('.presets [data-act^="g:preset:"]', 'battle options');
+    await click('g:preset:' + opts.preset);
+    if (opts.build) { await click('g:build'); ok((await step()) === 'personality', `${tag}: "Build a fighter" goes on to the name and personality, with no claim`); }
+    else {
+      await click('g:use'); await p.waitForFunction(() => Snapin.view.step === 'personality', null, { timeout: 20000 }).catch(() => {});
+      ok(await p.evaluate(() => Snapin.state.claim && Snapin.state.claim.dev === true), `${tag}: "Use this preset" records the DEV claim of its premint persona`);
     }
     ok((await step()) === 'personality', `${tag}: on to personality`);
     // ---- personality, then Back and reload
-    await sweep('[data-act^="temper:"]', 'temperaments'); await click('temper:' + opts.temper);
-    const quirks = await p.$$eval('[data-act^="quirk:"]', (els) => els.map((e) => e.dataset.act));
+    await sweep('[data-act^="g:temper:"]', 'temperaments'); await click('g:temper:' + opts.temper);
+    const quirks = await p.$$eval('[data-act^="g:quirk:"]', (els) => els.map((e) => e.dataset.act));
     const had = await p.evaluate(() => Snapin.state.quirks.slice().sort());   // a claimed persona arrives with its own quirks
     for (const q of quirks) { await click(q); await click(q); }   // each flipped twice: back where it was
     const back = await p.evaluate(() => Snapin.state.quirks.slice().sort());
-    for (const q of had) await click('quirk:' + q);   // clear the claimed ones, then keep two
+    for (const q of had) await click('g:quirk:' + q);   // clear the claimed ones, then keep two (board 1: up to 2)
     for (const q of quirks.slice(0, 2)) await click(q);
     ok(JSON.stringify(back) === JSON.stringify(had) && (await p.evaluate(() => Snapin.state.quirks.length)) === 2,
       `${tag}: all ${quirks.length} quirks toggle on and off (back to ${had.length ? 'the claimed ' + had.join(', ') : 'none'}); two kept`);
-    await p.fill('#name', opts.firstName || opts.name); await p.fill('#personality', 'Swings first. Counts every KO out loud.');
+    await p.fill('#name', opts.firstName || opts.name); await sleep(900);
+    if (opts.firstName) {
+      // a name already in the ring is caught on this step now, before any join: a plain line, and Next stays off
+      await p.waitForFunction((n) => document.body.innerText.includes('✗ ' + n + ' is in the ring now. Pick another name.'), opts.firstName, { timeout: 15000 }).catch(() => {});
+      const clash = await p.evaluate(() => ({ text: document.querySelector('#app').innerText, off: !!document.querySelector('.bar .gold[disabled]') }));
+      ok(clash.text.includes('✗ ' + opts.firstName + ' is in the ring now. Pick another name.') && clash.off && /Needs a name/.test(clash.text), `${tag}: a name already in the ring is caught on the name step, before any join, and Next: AI stays off`);
+      await shot('name-in-ring');
+      await p.fill('#name', opts.name); await p.waitForFunction(() => /✓ Free/.test(document.body.innerText), null, { timeout: 15000 }).catch(() => {});
+    }
     await shot('personality');
     await p.goBack(); await sleep(400);
-    ok(['presets', 'build'].includes(await step()), `${tag}: Back from personality returns to the fighter step (${await step()})`);
+    ok((await step()) === 'presets', `${tag}: Back from personality returns to the fighter step (${await step()})`);
     await p.goForward(); await sleep(400);
-    await p.reload(); await ready();
-    ok((await step()) === 'personality' && (await p.inputValue('#name')) === (opts.firstName || opts.name), `${tag}: Forward and reload land on personality with the name kept`);
-    await click('step:doors');
+    await p.reload(); await ready(); await sleep(600);
+    ok((await step()) === 'personality' && (await p.inputValue('#name')) === opts.name, `${tag}: Forward and reload land on personality with the name kept`);
+    await click('g:step:doors');
     // ---- AI
     ok((await step()) === 'doors', `${tag}: on to the AI step`);
     await shot('ai');
-    await click('ai:help'); await click('ai:help');
-    await click('ai:door:NEAR AI Cloud'); await sleep(300); await shot('ai-key');
-    await p.fill('#key', 'sk-not-a-real-key'); keyAnswer = 401; await click('ai:test');
-    await p.waitForFunction(() => /bad-key|Paste new key/.test(document.body.innerText) || (window.SnapDoors && SnapDoors.state.state === 'bad-key'), null, { timeout: 20000 }).catch(() => {});
-    const bad = await p.evaluate(() => ({ st: SnapDoors.state.state, text: document.querySelector('main') ? document.querySelector('main').innerText : '' }));
-    ok(bad.st === 'bad-key' && /Paste new key/.test(bad.text), `${tag}: a refused key shows the bad-key state with "Paste new key" (provider answer: test-supplied 401)`);
+    await click('g:door:key:NEAR AI Cloud'); await sleep(300); await shot('ai-key');
+    await p.fill('#key', 'sk-not-a-real-key'); keyAnswer = 401; await click('g:test');
+    await p.waitForFunction(() => /The provider refused this key/.test(document.body.innerText), null, { timeout: 20000 }).catch(() => {});
+    ok(/✗ The provider refused this key\. Copy it again, all of it\./.test(await p.innerText('#app')) && !!(await p.$('.bar .gold[disabled]')), `${tag}: a refused key says so and Next: check stays off (provider answer: test-supplied 401)`);
     await shot('ai-bad-key');
-    await click('ai:new-key'); await p.fill('#key', 'sk-test-player-key'); keyAnswer = 200; await click('ai:test');
-    await p.waitForFunction(() => window.SnapDoors && SnapDoors.state.state === 'connected', null, { timeout: 20000 }).catch(() => {});
-    ok(await p.evaluate(() => SnapDoors.state.state === 'connected' && !!Snapin.state.door), `${tag}: a working key connects (provider answer: test-supplied 200)`);
+    await p.fill('#key', 'sk-test-player-key'); keyAnswer = 200; await click('g:test');
+    await p.waitForFunction(() => /It answered/.test(document.body.innerText), null, { timeout: 20000 }).catch(() => {});
+    ok(await p.evaluate(() => /✓ It answered/.test(document.body.innerText) && !!Snapin.state.door && Snapin.state.door.door === 'NEAR AI Cloud'), `${tag}: a working key answers and is the AI (provider answer: test-supplied 200)`);
     await shot('ai-connected');
-    await click('ai:continue');
-    // ---- terms
-    ok((await step()) === 'agree', `${tag}: on to the terms`);
-    await p.waitForFunction(() => window.Snapin && Snapin.view.terms && Snapin.view.terms.version && document.querySelector('.checks'), null, { timeout: 20000 });
-    await p.evaluate(() => document.querySelectorAll('.checks input').forEach((x) => { x.checked = false; }));
-    await click('agree');
-    ok(/Tick all three/.test(await p.$eval('#feedback', (e) => e.textContent)) && (await step()) === 'agree', `${tag}: Snap in without the three ticks says "Tick all three" and stays`);
-    const aiTick = await p.evaluate(() => ({ label: document.querySelector('#agree-ai').parentNode.textContent, brain: !!(window.SnapBrain && SnapBrain.on) }));
-    ok(aiTick.brain ? /until you set an hourly cap on the AI step|up to \$\d/.test(aiTick.label) : /Fights on the arena’s own tactics for now/.test(aiTick.label), `${tag}: the AI tick says what is true now (${aiTick.brain ? 'brain.js loaded' : 'no brain.js'}): "${aiTick.label}"`);
-    for (const id of ['#agree-ai', '#agree-public', '#agree-gear']) await p.check(id);
-    await shot('agree');
+    // ---- the check page: off until the cap is set, then Snap in (it replaces the terms and their ticks)
+    await click('g:step:agree');
+    await p.waitForFunction(() => window.Snapin && Snapin.view.terms && Snapin.view.terms.version, null, { timeout: 20000 });
+    ok((await step()) === 'agree' && /Needs an hourly cap/.test(await p.innerText('#app')) && !!(await p.$('.bar .gold[disabled]')), `${tag}: the check page keeps Snap in off and names what is missing: "Needs an hourly cap"`);
+    await click('g:ai'); await click('g:cap:0.20'); await click('g:step:agree');
+    await p.waitForFunction(() => !!document.querySelector('[data-act="g:snap"]'), null, { timeout: 20000 });
+    ok(/NEAR AI Cloud · answered/.test(await p.innerText('#app')) && /\$0\.20/.test(await p.innerText('#app')), `${tag}: the check page says what is true: "NEAR AI Cloud · answered", cap $0.20`);
+    await shot('check');
+    const guideUrl = p.url();
     if (opts.keyboard) {
-      await p.focus('#agree-gear');
-      const k = await tabTo('agree');
-      ok(k.found && k.bare.length === 0, `${tag}: keyboard: from the last tick box, Tab reaches "Snap in" with a focus ring`);
+      const k = await tabTo('g:snap');
+      ok(k.found && k.bare.length === 0, `${tag}: keyboard: Tab reaches "Snap in" with a focus ring on every stop` + (k.bare.length ? ' (no ring: ' + k.bare.join(', ') + ')' : ''));
       await p.keyboard.press('Enter');
-    } else await click('agree');
-    // ---- the join
+    } else await click('g:snap');
+    // ---- the join: board 1 lands on the trenchie's own panel in the arena (SPEC 'fight')
+    const where = await G.afterSnap(p, { guideUrl, backToGuide: false, timeout: 90000 }).catch((e) => 'failed: ' + e.message);
+    await p.waitForFunction(() => { const e = document.getElementById('b1-panel'); return e && !e.hidden && e.innerText.length > 0; }, null, { timeout: 30000 }).catch(() => {});
+    const pan = await p.evaluate(() => { const e = document.getElementById('b1-panel'); return e && !e.hidden ? e.innerText.replace(/\s+/g, ' ') : ''; }).catch(() => '');
+    ok(where === 'arena' && pan.includes(opts.name), `${tag}: Snap in lands on the arena with the trenchie's own panel (${where}: "${pan.slice(0, 70)}")`);
+    await shot('arena-panel');
+    const took = await p.evaluate(() => { try { return JSON.parse(localStorage.getItem('trenchie.snapin.v1')).timing; } catch (e) { return null; } }); t.timing = took;
+    await p.goto(guideUrl.replace(/([?&])step=[^&]*/, '$1step=ring')); await ready();
     await p.waitForFunction(() => { const s = window.SnapRoom && SnapRoom.status(); return s && (s.phase === 'in' || s.phase === 'error'); }, null, { timeout: 90000 });
     let st = await p.evaluate(() => SnapRoom.status());
-    if (opts.firstName) {
-      ok(st.phase === 'error' && /in the ring right now/.test(st.message) && /Change the name/.test(await p.innerText('main')), `${tag}: a name already in the ring: "${st.message}", with "Change the name"`);
-      await shot('ring-error');
-      await click('step:personality'); ok((await step()) === 'personality', `${tag}: "Change the name" goes back to personality`);
-      await p.fill('#name', opts.name); await click('step:doors');
-      await p.click('[data-act="ai:return"]').catch(async () => { await click('ai:door:NEAR AI Cloud'); await p.fill('#key', 'sk-test-player-key'); await click('ai:test'); });
-      await p.waitForFunction(() => window.SnapDoors && SnapDoors.state.state === 'connected', null, { timeout: 20000 });
-      await click('ai:continue'); await p.waitForFunction(() => window.Snapin && Snapin.view.terms && Snapin.view.terms.version && document.querySelector('.checks'), null, { timeout: 20000 });
-      ok(await p.evaluate(() => [...document.querySelectorAll('.checks input')].every((x) => !x.checked)), `${tag}: after changing the name the terms are agreed again (ticks cleared)`);
-      for (const id of ['#agree-ai', '#agree-public', '#agree-gear']) await p.check(id);
-      await click('agree');
-      await p.waitForFunction(() => { const s = window.SnapRoom && SnapRoom.status(); return s && (s.phase === 'in' || s.phase === 'error'); }, null, { timeout: 90000 });
-      st = await p.evaluate(() => SnapRoom.status());
-    }
     t.ring = Date.now();
     ok(st.phase === 'in' && st.fighter && st.fighter.id === 'dev-' + opts.name.toLowerCase(), `${tag}: in the ring as ${st.fighter && st.fighter.id} (${st.message || 'no message'})`);
-    const took = await p.evaluate(() => Snapin.state.timing); t.timing = took;
     t.shown = took && took.ring && took.wallet ? Math.round((took.ring - took.wallet) / 1000) : null;
     if (opts.timed) ok(t.shown !== null && t.shown < 180, `${tag}: wallet to ring ${t.shown} s by the page's own clock on the direct path (target < 180 s; clicks at machine speed)`);
     else console.log(`NOTE ${tag}: wallet to ring ${t.shown} s on the sweep path (every option clicked, a name clash on the way): not a timing measure`);
     await sleep(800); await shot('ring');
-    const players = await p.evaluate(async () => (await fetch('/dev/players')).json());
-    const me = players.find((x) => x.fighter_id === 'dev-' + opts.name.toLowerCase());
+    // with no prediction filed (board 1 files none), the room locks "none" when the life's 2 s prediction window closes, and
+    // only then does the first life start: read until it has (10 s at most)
+    let me = null;
+    for (let i = 0; i < 20; i++) {
+      const players = await p.evaluate(async () => (await fetch('/dev/players')).json());
+      me = players.find((x) => x.fighter_id === 'dev-' + opts.name.toLowerCase());
+      if (me && (me.state !== 'bench' || Number(String(me.life_id || '').split(':life:')[1]) > 0)) break;
+      await sleep(500);
+    }
     // a KO on the way leaves it on the bench for the 45 s respawn wait (a later life_id, :life:1 and up); the first life is never on the bench here
     const laterLife = me && Number(String(me.life_id || '').split(':life:')[1]) > 0;
     ok(me && (me.state !== 'bench' || laterLife) && me.preset === opts.presetId, `${tag}: /dev/players lists ${me && me.fighter_id} (${me && me.state}, ${me && me.life_id}, preset ${me && me.preset})`);
@@ -216,12 +214,11 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
     ok(st2.phase === 'in' && st2.fighter.id === st.fighter.id && /In the arena/.test(await p.innerText('main')), `${tag}: a reload in the ring carries on with the same fighter (${st2.phase})`);
     // ---- an earlier step while the fighter is in: a banner and a way back; Snap in again does not start a second join
     await p.goto(opts.origin + '/web/snapin/index.html?step=doors'); await ready();
-    await p.waitForFunction(() => /is in the arena now/.test(document.querySelector('main').innerText), null, { timeout: 30000 }).catch(() => {});
-    ok(/DEV .* is in the arena now/i.test(await p.innerText('main')), `${tag}: a reload on an earlier step says the fighter is in the arena, with a way back`);
+    await p.waitForFunction(() => /is in the arena now/.test(document.querySelector('#app').innerText), null, { timeout: 30000 }).catch(() => {});
+    ok(/DEV .* is in the arena now/i.test(await p.innerText('#app')), `${tag}: a reload on an earlier step says the fighter is in the arena, with a way back`);
     await p.goto(opts.origin + '/web/snapin/index.html?step=agree'); await ready();
     await p.waitForFunction(() => window.Snapin && Snapin.view.terms && Snapin.view.terms.version && SnapRoom.status().phase === 'in', null, { timeout: 30000 }).catch(() => {});
-    for (const id of ['#agree-ai', '#agree-public', '#agree-gear']) await p.check(id);
-    await click('agree'); await sleep(1500);
+    await click('g:snap'); await sleep(1500);
     const twice = await p.evaluate(async () => ({ step: Snapin.view.step, phase: SnapRoom.status().phase, players: (await (await fetch('/dev/players')).json()).length }));
     ok(twice.step === 'ring' && twice.phase === 'in' && !/another tab/.test(await p.innerText('main')), `${tag}: Snap in while already in goes to the ring view, no second join, no "another tab" (${JSON.stringify(twice)})`);
     await click('back-ring').catch(() => {});
@@ -233,10 +230,11 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
     const view = await p.evaluate((nm) => ({ tags: [...document.querySelectorAll('.atag')].map((e) => e.textContent), inset: !!document.querySelector('.inset:not([hidden])'), cta: document.getElementById('snapin-cta').innerText.replace(/\s+/g, ' '), url: location.search }), opts.name);
     ok(view.tags.some((x) => x.toLowerCase().includes(opts.name.toLowerCase())), `${tag}: arena.html draws the fighter's tag (${view.tags.filter((x) => x.toLowerCase().includes(opts.name.toLowerCase())).join(', ') || 'none of: ' + view.tags.join(', ')})`);
     ok(view.inset && /follow=/.test(view.url), `${tag}: "Watch your trenchie" opens the follow view on it`);
-    await p.waitForFunction(() => /Your trenchie/.test(document.getElementById('snapin-cta').innerText), null, { timeout: 20000 }).catch(() => {});
-    ok(/Your trenchie/.test(await p.innerText('#snapin-cta')) && /is in the ring/.test(await p.innerText('#snapin-cta')), `${tag}: the call to action becomes yours: "${(await p.innerText('#snapin-cta')).replace(/\s+/g, ' ')}"`);
+    await p.waitForFunction(() => { const e = document.getElementById('b1-panel'); return e && !e.hidden && e.innerText.length > 0; }, null, { timeout: 20000 }).catch(() => {});
+    const own = await p.evaluate(() => { const e = document.getElementById('b1-panel'); return e && !e.hidden ? e.innerText.replace(/\s+/g, ' ') : ''; }).catch(() => '');
+    ok(own.includes(opts.name) && !(await p.isVisible('#snapin-cta')), `${tag}: the arena shows the trenchie's own panel in place of the call to action: "${own.slice(0, 70)}"`);
     await shot('arena-mine');
-    t.errs = errs; t.p = p; t.tag = tag; t.frames = frames; t.st = st;
+    t.errs = errs; t.p = p; t.tag = tag; t.frames = frames; t.st = st; t.origin = opts.origin;
     return t;
   };
   let A = null, B = null;
@@ -246,9 +244,10 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
     // ---- leaving: from the corner of each
     for (const T of [B, A]) {
       const p = T.p;
-      const before = await p.evaluate(() => { const s = SnapRoom.status(); return { phase: s.phase, message: s.message, error: s.error, cta: document.getElementById('snapin-cta').innerText.replace(/\s+/g, ' ') }; });
+      const before = await p.evaluate(() => { const s = SnapRoom.status(); return { phase: s.phase, message: s.message, error: s.error }; });
       ok(before.phase === 'in', `${T.tag}: still in the ring while the other visitor played (${JSON.stringify(before).slice(0, 300)})`);
-      await Promise.all([p.waitForURL(/snapin\/index\.html/), p.click('#snapin-cta')]); await p.waitForFunction(() => window.__SNAPIN_READY === true, null, { timeout: 60000 });
+      // the guide's ring view, where Leave is (the panel in the arena stands in for the call to action)
+      await p.goto(T.origin + '/web/snapin/index.html?step=ring&ws=' + encodeURIComponent(ws)); await p.waitForFunction(() => window.__SNAPIN_READY === true, null, { timeout: 60000 });
       await p.waitForFunction(() => SnapRoom.status().phase === 'in', null, { timeout: 30000 }).catch(() => {});
       await p.click('[data-act="leave"]');
       await p.waitForFunction(() => SnapRoom.status().phase === 'ended', null, { timeout: 30000 }).catch(() => {}); await sleep(1500);

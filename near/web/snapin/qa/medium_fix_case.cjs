@@ -52,7 +52,9 @@ const row = (i, actual) => ({ actual, base_score: 120000, life: 'dev-local-r1/de
       localStorage.setItem('trenchie.snapin.cap', '0.20');
       const P = JSON.parse(localStorage.getItem('trenchie.snapin.v1') || '{}'); P.wallet = { id: 'dev-throwaway', accountId: 'a'.repeat(64), network: 'testnet' }; localStorage.setItem('trenchie.snapin.v1', JSON.stringify(P));
     });
-    await p.goto(base + '/web/snapin/index.html?step=doors'); await ready();
+    // the AI door's connection panel and its spend line live in the guide's stand-alone AI door (mode=login); board 1's
+    // steps carry the money line on the trenchie panel instead
+    await p.goto(base + '/web/snapin/index.html?mode=login'); await ready();
     await p.click('[data-act="ai:door:NEAR AI Cloud"]'); await sleep(200); await p.fill('#key', 'sk-test-player-key'); await p.click('[data-act="ai:test"]');
     await p.waitForFunction(() => SnapDoors.state.state === 'connected', null, { timeout: 20000 });
     await p.click('[data-act="ai:panel"]'); await sleep(300);

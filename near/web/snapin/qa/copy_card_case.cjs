@@ -1,6 +1,7 @@
 // F72/F70 copy + W23/F28 card case, in a real browser at 1440 and 390.
 // 1. No placeholder anywhere a player can reach by clicking: every flow step, every workshop tab, every AI door state.
-// 2. The AI step's cost per hour on each key door, with its basis (measured or list price), and the plan doors' line.
+// 2. Board 1's AI step: NEAR AI Cloud's measured estimate, "Not measured yet" on the doors nobody has measured, and the plan
+//    doors' weekly stop (the older per-door cost box and its basis line are gone with the S4 key panel).
 // 3. The card: with no fighter it says what it needs; with a record it draws the gauge from the predictions log lines
 //    (/house/predictions.jsonl: score and base_score per life) and the bag and serials from /room/observe; under 10 scored
 //    lives no needle and a plain count; a log the arena does not serve is said plainly. The log lines and the observe answer
@@ -40,29 +41,24 @@ const row = (id, i, actual, score, base) => ({ actual, base_score: base, batch_t
     for (const W of [1440, 390]) {
       await p.setViewportSize({ width: W, height: W > 700 ? 900 : 844 });
       await p.goto(base + '/web/snapin/index.html?step=wallet'); await ready(); await p.evaluate(() => { localStorage.clear(); sessionStorage.clear(); }); await p.reload(); await ready();
-      // ---- the flow, by clicks
-      await sweep(`${W} wallet`); await click('wallet-dev'); await sweep(`${W} presets`);
-      await click('step:build'); await sweep(`${W} build`); await click('step:personality'); await sweep(`${W} personality`);
-      await click('step:doors'); await sweep(`${W} AI doors`);
-      // ---- each AI door and its money line
+      // ---- board 1's guide, by clicks (each state's exact copy is board1_guide_case.cjs's; here: no placeholder anywhere)
+      await sweep(`${W} wallet`); await click('g:wallet:dev-throwaway'); await sweep(`${W} fighter`);
+      await click('g:build'); await sleep(400); await sweep(`${W} personality`);
+      await click('g:step:doors'); await sweep(`${W} AI doors`);
+      // ---- each AI door and its cost line (board 1: estimated and labelled; "Not measured yet" until someone measures)
       const doorCost = {};
-      for (const door of ['NEAR AI Cloud', 'OpenRouter']) {
-        await click('ai:door:' + door); const t = await sweep(`${W} ${door}`);
-        doorCost[door] = (t.match(/Cost per hour\s*([^\n]+)\n([^\n]+)/) || [])[0] || '';
-        if (door === 'NEAR AI Cloud') doorCost.cap = (t.match(/At 80% of the cap[^\n]*/) || [])[0] || '';
+      for (const door of ['NEAR AI Cloud', 'Claude', 'OpenRouter']) {
+        await click('g:door:key:' + door); doorCost[door] = await sweep(`${W} ${door} key`);
         if (W === 1440) await p.screenshot({ path: path.join(OUT, `door-${door.replace(/\W+/g, '-')}-${W}.png`), fullPage: true });
-        await click('ai:switch');
+        await click('g:other');
       }
-      await click('ai:door:Claude'); await sweep(`${W} Claude choice`);
-      await click('ai:credits'); { const t = await sweep(`${W} Claude credits`); doorCost.Claude = (t.match(/Cost per hour\s*([^\n]+)\n([^\n]+)/) || [])[0] || ''; }
-      await click('ai:switch'); await click('ai:door:Claude'); await click('ai:plan'); await sleep(800);
-      { const t = await sweep(`${W} Claude Code hand-off`); doorCost.plan = /usage limits apply\. This page charges nothing\./.test(t); }
-      await click('ai:switch'); await click('ai:door:Codex'); await sleep(800); await sweep(`${W} Codex hand-off`); await click('ai:switch');
-      ok(/≈ \$0\.10/.test(doorCost['NEAR AI Cloud']) && /Measured: the real AI loop on DeepSeek V4\.1 Flash through 6 minutes of a simulated fight/.test(doorCost['NEAR AI Cloud']) && /calls when the fight changes/.test(doorCost['NEAR AI Cloud']) && !/every 5 s/.test(doorCost['NEAR AI Cloud']), `${W}: NEAR AI Cloud shows the measured battle-mode cost per hour and the call rhythm (no "every 5 s"): "${doorCost['NEAR AI Cloud'].replace(/\s+/g, ' ')}"`);
-      ok(/≈ \$0\.04/.test(doorCost.OpenRouter) && /List price, GPT-6 Luna \(read 2026-11-11\), for the same calls/.test(doorCost.OpenRouter) && !/4o/.test(doorCost.OpenRouter), `${W}: OpenRouter shows a list-price cost per hour: "${doorCost.OpenRouter.replace(/\s+/g, ' ')}"`);
-      ok(/≈ \$0\.04/.test(doorCost.Claude) && !/0\.07/.test(doorCost.Claude) && /List price, Claude Haiku 5\.5, for the same calls/.test(doorCost.Claude), `${W}: Claude credits shows a list-price cost per hour: "${doorCost.Claude.replace(/\s+/g, ' ')}"`);
-      ok(/never spends more than your cap: a call that could pass it is not sent/.test(doorCost.cap), `${W}: under the hourly cap box the AI step says it never spends more than the cap (the reservation in brain.js): "${doorCost.cap}"`);
-      ok(doorCost.plan === true, `${W}: the plan doors say the player's plan limits apply and this page charges nothing`);
+      for (const door of ['Claude Code', 'Codex']) { await click('g:door:plan:' + door); await sleep(800); doorCost[door] = await sweep(`${W} ${door} plan`); await click('g:other'); }
+      ok(/About \$0\.10 an hour in a busy fight\. At the cap, your trenchie fights on its own tactics until the hour ends\./.test(doorCost['NEAR AI Cloud']),
+        `${W}: NEAR AI Cloud's key screen shows the measured estimate in board 1's words ("About $0.10 an hour in a busy fight.")`);
+      ok(['Claude', 'OpenRouter'].every((d) => /Not measured yet for this AI\. Start with a low cap\./.test(doorCost[d])),
+        `${W}: Claude and OpenRouter say "Not measured yet for this AI. Start with a low cap." (no unmeasured number shown)`);
+      ok(['Claude Code', 'Codex'].every((d) => /Your session’s own stop: it stops giving orders at this share of your plan’s week\./.test(doorCost[d])),
+        `${W}: the plan doors name the session's own weekly stop and say "not reported" when it cannot report`);
       // ---- terms, ring, workshop tabs
       await p.goto(base + '/web/snapin/index.html?step=agree'); await ready(); await sleep(800); await sweep(`${W} agree`);
       for (const tab of ['battle', 'inventory', 'look', 'persona', 'card', 'agree', 'respawn']) { await p.goto(base + '/web/snapin/index.html?mode=workshop&tab=' + tab); await ready(); await sleep(400); await sweep(`${W} workshop ${tab}`); }

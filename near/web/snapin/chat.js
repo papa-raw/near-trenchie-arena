@@ -86,7 +86,9 @@
     o = o || {};
     var door = doorState(); if (door) return doorHtml(o, door);
     var off = offReason(), n = S.draft.length, compact = !!o.compact, last = S.last;
-    var reply = last && last.reply ? '<div class="chat-reply' + (compact ? ' one-line' : '') + '" role="status" title="' + esc(last.reply.text) + '">“' + esc(last.reply.text) + '”</div>' : '';
+    // brain.js's tell() answers the reply as a string (an older stand-in answered { text }): either reads
+    var rt = last && last.reply ? (typeof last.reply === 'string' ? last.reply : last.reply.text) : '';
+    var reply = rt ? '<div class="chat-reply' + (compact ? ' one-line' : '') + '" role="status" title="' + esc(rt) + '">“' + esc(rt) + '”</div>' : '';
     var receipt = last && last.receipt ? receiptLine(last.receipt, compact) : '';
     return '<form class="chat' + (compact ? ' compact' : '') + '" data-chat novalidate>' +
       (compact ? '' : '<div class="eyebrow">Orders for ' + esc(o.name || 'your trenchie') + '</div>') +

@@ -10,7 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT/'near/arena'), str(Path(__file__).resolve().parent)]
 import member_fixture
-from near.arena.snap_client import SnapRefusal
+from near.arena.snap_client import SnapRefusal, _MEMBER_READ_TTL_MS
 from room.policy import canonical_bytes
 
 
@@ -43,7 +43,7 @@ class MemberSource(unittest.TestCase):
         self.addCleanup(host.close)
         self.assertIsNotNone(host.session.read()['snapshot']['terms'])
         request = deepcopy(host.clover_transport.owner_requests[-1])
-        self.assertEqual(request['payload'],{'expires_at':str(host.case.now+15_000)})
+        self.assertEqual(request['payload'],{'expires_at':str(host.case.now+_MEMBER_READ_TTL_MS)})
 
         def post(value: dict) -> dict:
             return host.clover_transport.request('POST','/room/owner/snapshot',canonical_bytes(value))
@@ -72,6 +72,21 @@ class MemberSource(unittest.TestCase):
         self.assertIsNotNone(host.session.read()['snapshot']['terms'])
         self.assertTrue(host.self_bound())
         print(json.dumps({'late_genuine_signed_reply_refused':True,'next_fresh_read_succeeds':True}))
+
+
+    def test_a_member_read_from_a_client_clock_ahead_of_the_room_still_passes(self) -> None:
+        # rejoin-red: the client's room clock adds the real time since its last reply, so between 50 ms ticks it runs
+        # ahead of the room's. With no margin (expiry = client now + 15 000, the room's whole window) a client 1 ms
+        # ahead was refused proof_required; LiveRejoin failed that way. Ahead by up to 999 ms must still read.
+        host = member_fixture.MemberCases()
+        self.addCleanup(host.close)
+        for ahead in (1, 50, 999):
+            host.clover._now_ms = lambda ahead=ahead: host.case.now + ahead
+            snapshot = host.clover.member_snapshot(request_id=f'clock-ahead-{ahead}')
+            self.assertIsNotNone(snapshot['terms'])
+            request = host.clover_transport.owner_requests[-1]
+            self.assertLessEqual(int(request['payload']['expires_at']), host.case.now + 15_000)
+        print(json.dumps({'client_ahead_ms_read_ok':[1,50,999],'ttl_ms':_MEMBER_READ_TTL_MS}))
 
 
 if __name__ == '__main__':

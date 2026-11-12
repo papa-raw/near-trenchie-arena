@@ -95,10 +95,11 @@ class Transport(unittest.TestCase):
 
         def fake_run(argv, input=None, **kw):
             seen.update(argv=argv, input=input)
-            class R:
+            class R:                                   # curl's stdout: the body, then the status line (write-out)
+                returncode, stderr = 0, ""
                 stdout = json.dumps({"choices": [{"message": {"content": "hi"}}],
                                      "usage": {"prompt_tokens": 10, "completion_tokens": 2,
-                                               "prompt_tokens_details": {"cached_tokens": 4}}})
+                                               "prompt_tokens_details": {"cached_tokens": 4}}}) + "\n200"
             return R()
         import os
         with mock.patch.dict(os.environ, {"NEAR_AI_KEY": "sk-SECRET-CANARY"}), \
@@ -223,6 +224,53 @@ class Calls(unittest.TestCase):
         rt.poll(None, 2, (), 0, None)
         self.assertTrue(any("tick policy continues" in n for n in rt.notes))
 
+    def test_each_note_carries_its_utc_time_and_a_repeat_moves_its_stamp_to_the_latest(self):
+        """A stale note must never read as a live failure: each note starts with its UTC time; the same failure again
+        (within the last 3) keeps one line whose time is the latest; only the last 50 notes are kept."""
+        class Boom:
+            def chat(self, *a, **k):
+                raise RuntimeError("timeout")
+        rt, clock = self.runtime(Boom(), self.Driver(active=["satrenchi"]), now=T0 + 3725)   # 01:02:05 UTC
+        rt.poll(None, 1, (), 0, None)
+        rt.poll(None, 2, (), 0, None)
+        day = __import__("time").strftime("%Y-%m-%d", __import__("time").gmtime(T0))
+        self.assertEqual(rt.notes, [day + "T01:02:05Z satrenchi: intent call failed (RuntimeError: timeout): tick policy continues"])
+        clock.t = T0 + 3725 + 60
+        rt.poll(None, 3, (), 0, None)
+        rt.poll(None, 4, (), 0, None)
+        self.assertEqual(rt.notes, [day + "T01:03:05Z satrenchi: intent call failed (RuntimeError: timeout): tick policy continues"])
+        for i in range(60):
+            rt.note("note %d" % i)
+        self.assertEqual((len(rt.notes), rt.notes[-1].split(" ", 1)[1]), (runtime.NOTES_KEPT, "note 59"))
+
+    def test_notes_from_many_threads_stay_paired_and_none_is_lost(self):
+        """note() runs on executor threads too (_pick, _banter). Under the GIL a plain race almost never lands inside it
+        (0 of 200 rounds of 8x200 calls, measured), so each list here yields the thread right after every append: that
+        forces the switch exactly where the two lists can part. 6 threads x 30 distinct notes must leave both lists the
+        same length, each stamped note paired with its own text, and only distinct notes, NOTES_KEPT of them."""
+        import threading, time as _time
+
+        class Yielding(list):
+            def append(self, x):
+                super().append(x)
+                _time.sleep(0.0002)                     # hand the GIL to another thread mid-update
+
+        rt, _ = self.runtime(self.Client([]), self.Driver())
+        rt.notes, rt.note_texts = Yielding(), Yielding()
+        go = threading.Barrier(6)
+
+        def work(t):
+            go.wait()
+            for i in range(30):
+                rt.note("t%d n%d" % (t, i))
+        threads = [threading.Thread(target=work, args=(t,)) for t in range(6)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+        self.assertEqual(len(rt.notes), len(rt.note_texts))
+        self.assertEqual([n.split(" ", 1)[1] for n in rt.notes], list(rt.note_texts))
+        self.assertEqual((len(rt.note_texts), len(set(rt.note_texts))), (runtime.NOTES_KEPT, runtime.NOTES_KEPT))
 
 if __name__ == "__main__":
     unittest.main()

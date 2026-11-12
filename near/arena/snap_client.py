@@ -15,8 +15,12 @@ except ImportError:
 
 _BINDING = ("context", "grant_id", "session_key_id", "member_id", "nft_token_id",
             "persona_digest", "slot_id", "generation")
-# Joint member-read contract: the signed request expires within15seconds.
-_MEMBER_READ_TTL_MS = 15_000
+# Joint member-read contract: the room takes a signed read that expires within 15 s of its own clock
+# (room/service.py _OWNER_READ_WINDOW_MS). The client's clock can run ahead of the room's (it adds the real time
+# since the last reply between 50 ms ticks), so the read asks for 1 s less: a client ahead by under 1 s still passes.
+_MEMBER_READ_WINDOW_MS = 15_000
+_MEMBER_READ_MARGIN_MS = 1_000
+_MEMBER_READ_TTL_MS = _MEMBER_READ_WINDOW_MS - _MEMBER_READ_MARGIN_MS
 _CONTROL = {"observe": "ObserveRequest", "intent": "IntentRequest", "prediction": "PredictionRequest",
             "renew": "RenewRequest", "leave": "LeaveRequest", "behaviour": "BattleRequest", "speech": "BattleRequest",
             "bench": "BattleRequest", "note": "BattleRequest"}

@@ -93,7 +93,9 @@ def base_rate_bps(actuals):
 def calibration(rows, min_lives=MIN_LIVES, published=PUBLISHED_BASE_BPS):
     """Per persona: skill against its own trailing base rate, and a reliability table.
 
-    rows are log lines with persona, life (order within the persona), spread_pct, zero_pct, actual.
+    rows are log lines with persona, spread_pct, zero_pct, actual, in the order they were written (the log's own
+    order). Order is never read from the life key: a key such as "<run>/<who>:life:10" sorts as text before ":life:2",
+    and a run prefix sorts by its seed, not by time.
     A life's base rate is the persona's own lives before it (the published spread when none).
     Skill is (base - ai) / base over the same lives, in milli-units; always repeating the
     persona's own base rate scores 0. Under min_lives the skill is None, never a guess.
@@ -103,7 +105,7 @@ def calibration(rows, min_lives=MIN_LIVES, published=PUBLISHED_BASE_BPS):
         by_persona[row["persona"]].append(row)
     result = {}
     for persona in sorted(by_persona):
-        lives = sorted(by_persona[persona], key=lambda r: r["life"])
+        lives = by_persona[persona]                    # write order, as given
         ai_total = base_total = 0
         priors, zero_buckets = [], defaultdict(lambda: [0, 0, 0])
         spread_sum, spread_hits, scored = [0] * 4, [0] * 4, 0

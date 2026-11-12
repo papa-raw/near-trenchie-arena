@@ -190,6 +190,46 @@ class LiveHouse(unittest.TestCase):
             self.assertIsNone(house.public_roster()["chip"])
             comp.tmp.cleanup()
 
+    def test_a_model_call_that_fails_says_why_in_the_roster_notes_and_the_log(self):
+        """The real client on a faked curl: the public roster notes carry the HTTP status or curl's exit, with the note's
+        UTC time; the error body's message and curl's own message go to the container log (stderr) only; the key never
+        appears anywhere; the chip turns on."""
+        import contextlib, io, os, re
+        from unittest import mock
+        canary = "sk-HOUSE-CANARY-123"
+        replies = {
+            "http": (0, json.dumps({"error": {"message": "Insufficient credits for " + canary, "type": "billing"}}) + "\n402", ""),
+            "curl": (56, "", "curl: (56) Recv failure: Connection reset by peer\n"),
+            "proxy": (7, "", "curl: (7) Failed to connect to 10.0.2.2 port 18443 after 3 ms: Could not connect to server\n"),
+        }
+        for case, (rc, out, err) in replies.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as d:
+                def fake_run(argv, input=None, **kw):
+                    self.assertNotIn(canary, " ".join(argv))
+                    return type("R", (), {"returncode": rc, "stdout": out, "stderr": err})()
+                clock = [20_000 * 86400]
+                comp, arena, house, feed = compose(d, clock)
+                house.client = house.runtime.client = runtime.NearAI(key_env=live.KEY_ENV)
+                log = io.StringIO()
+                with mock.patch.dict(os.environ, {live.KEY_ENV: canary}), \
+                        mock.patch.object(runtime.subprocess, "run", fake_run), contextlib.redirect_stderr(log):
+                    run(arena, clock, 600)
+                    public = house.public_roster()
+                public_part, message = {"http": ("HTTP 402", "Insufficient credits for [key]"),
+                                        "curl": ("curl exit 56", "curl: (56) Recv failure: Connection reset by peer"),
+                                        "proxy": ("curl exit 7", "curl: (7) Failed to connect to [addr] port 18443 after 3 ms: "
+                                                                 "Could not connect to server")}[case]
+                # the public note: its UTC time and the status or exit only; the provider's message never reaches it
+                self.assertTrue(any(n.endswith("call failed (ModelCallError: %s): tick policy continues" % public_part)
+                                    and re.match(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ ", n) for n in public["notes"]), public["notes"])
+                private = {"http": "Insufficient credits", "curl": "Recv failure", "proxy": "Failed to connect"}[case]
+                self.assertNotIn(private, json.dumps(public))
+                self.assertIn("%s: %s" % (public_part, message), log.getvalue())     # the container log has it all
+                self.assertEqual(public["chip"], "autopilot (model calls failing)")
+                self.assertNotIn(canary, json.dumps(public) + log.getvalue())
+                self.assertNotIn("10.0.2.2", json.dumps(public["notes"]))
+                comp.tmp.cleanup()
+
     def test_live_house_refuses_to_start_without_the_key(self):
         with tempfile.TemporaryDirectory() as d:
             env = dict(__import__("os").environ)

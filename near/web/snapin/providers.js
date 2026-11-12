@@ -336,27 +336,28 @@
 
   // The prompt is what the player's own agent receives. Under 1000 chars (Claude Code's review
   // warning starts there; its hard cap is 5000). No cwd. It names SNAP.md and the one-time code.
+  // The words are board 1's: 'Join Trenchie Arena. Read <SNAP.md> and follow it. Code <code>, trenchie <name>.'
   function buildPrompt(code, snapMdUrl, name) {
-    var p = 'Join Trenchie Arena. Read ' + snapMdUrl + ' and follow it. Use one-time code ' + code +
-      (name ? ' for the trenchie "' + String(name).replace(/["\n\r]/g, ' ').slice(0, 40) + '"' : '') +
-      '. Only contact the host that serves SNAP.md. Do not put any API key or wallet key in the room.';
-    return p;
+    var n = String(name || '').replace(/["$`\\\n\r]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+    return 'Join Trenchie Arena. Read ' + snapMdUrl + ' and follow it. Code ' + code + (n ? ', trenchie ' + n : '') + '.';
   }
+  // one double-quoted argument, safe in sh, bash and zsh ($, `, \ and " escaped)
+  function dq(s) { return '"' + String(s).replace(/(["$`\\])/g, '\\$1') + '"'; }
 
   function buildHandoff(a) {
     var prompt = buildPrompt(a.code, a.snapMdUrl, a.name);
     if (prompt.length >= 1000) return { ok: false, prompt: prompt };
-    var host = '';
-    try { host = new URL(a.snapMdUrl).host; } catch (e) { host = ''; }
+    // the prompt is the command's only argument: no option before it can swallow it (Pat's item 18: claude's
+    // --allowedTools takes several values and took the prompt as a tool name)
     var link, command;
     if (a.agent === 'claude-code') {
       link = 'claude-cli://open?q=' + encodeURIComponent(prompt);
-      command = 'claude' + (host ? ' --allowedTools ' + shq('WebFetch(domain:' + host.replace(/:\d+$/, '') + ')') : '') + ' ' + shq(prompt);
+      command = 'claude ' + dq(prompt);
     } else {
       link = 'codex://new?prompt=' + encodeURIComponent(prompt);
-      command = 'codex ' + shq(prompt);
+      command = 'codex ' + dq(prompt);
     }
-    return { ok: true, prompt: prompt, link: link, command: command };
+    return { ok: true, prompt: prompt, link: link, command: command, snapUrl: a.snapMdUrl };
   }
 
   function snapBase(opts) {
@@ -391,14 +392,14 @@
       var r = await call(snapBase(opts) + '/snap/code', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ agent: args.agent, name: args.name || null })
+        body: JSON.stringify({ agent: args.agent, name: args.name || null, plan_stop_pct: args.planStop > 0 ? args.planStop : null })
       }, opts, null);
       if (isFail(r)) return r;
       if (r.status !== 200 || !r.body || typeof r.body.code !== 'string') return httpFail(r, null);
       var exp = toMs(r.body.expires_at != null ? r.body.expires_at : r.body.expiresAt);
       var h = buildHandoff({ agent: args.agent, code: r.body.code, snapMdUrl: defaultSnapMd(opts, r.body.snap_url), name: args.name });
       if (!h.ok) return fail('other', 0, 'hand-off prompt over 1000 characters');
-      return { ok: true, status: r.status, code: r.body.code, expiresAt: exp, command: h.command, link: h.link, prompt: h.prompt, stub: r.body.stub === true };
+      return { ok: true, status: r.status, code: r.body.code, expiresAt: exp, command: h.command, link: h.link, prompt: h.prompt, snapUrl: h.snapUrl, stub: r.body.stub === true };
     },
 
     // GET <base>/snap/code/<code> -> {joined, expired?}

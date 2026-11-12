@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { circlesModel, circlesLabel, crowdGroups, cardSpot, REACH } from './arena/pips.mjs';
 import { slip, nameColour, contrast, GLYPH, LINES, Feed } from './arena/feed.mjs';
 import { boards, signBox, rowsFor, signUrl, WORDS, columnsHtml, Sign, nameHtml } from './arena/sign.mjs';
-import { soundFace, COPY } from './arena/corner.mjs';
+import { soundFace, COPY, docsSections } from './arena/corner.mjs';
+import { readFileSync } from 'node:fs';
 import { Lives } from './arena/lives.mjs';
 import { pose, STAMP_MS, SHRINK_MS, LIFT_PX } from './arena/prejump.mjs';
 import { hudLayout } from './arena/hud-layout.mjs';
@@ -40,17 +41,17 @@ assert.notEqual(busy.pos, 'up'); n++;
 const name = (id) => ({ leeth: 'Leeth', sat: 'Satrenchi', lou: 'Lantern Lou', bz: 'Banana Zone', mw: 'Moonwood' })[id] || id;
 const text = (s) => s.parts.map((p) => p.text).join('');
 let s = slip({ kind: 'say', who: 'mw', emoji: '📚', text: 'Curve says you drift, Captain.' }, name);
-assert.deepEqual([s.who, s.emoji, s.glyph, text(s)], ['Moonwood', '📚', null, '“Curve says you drift, Captain.”']); n++;
+assert.deepEqual([s.who, s.emoji, s.glyph, text(s)], ['Moonwood', '📚', null, 'Curve says you drift, Captain.']); n++;
 s = slip({ kind: 'say', who: 'mw', text: 'gm', status: 'blocked line' }, name);
-assert.equal(text(s), '“gm” · blocked line'); n++;   // a blocked line says so (gate 6)
+assert.equal(text(s), 'gm · blocked line'); n++;   // a blocked line says so (gate 6)
 s = slip({ kind: 'ko', who: 'bz', victim: 'leeth' }, name);
-assert.deepEqual([s.cls, s.who, s.glyph, text(s)], ['ko', 'Banana Zone', 'KO', 'KO’d Leeth']); n++;
-s = slip({ kind: 'ko', who: 'bz', victim: 'leeth', ambush: true }, name); assert.equal(text(s), 'ambushed Leeth'); n++;
+assert.deepEqual([s.cls, s.who, s.glyph, text(s)], ['ko', 'Banana Zone', '▼', 'KO Leeth']); n++;
+s = slip({ kind: 'ko', who: 'bz', victim: 'leeth', ambush: true }, name); assert.equal(text(s), 'AMBUSHES Leeth'); n++;
 s = slip({ kind: 'leg', who: 'leeth', victim: 'sat', item: 'Stack Sats' }, name);
-assert.deepEqual([s.cls, s.glyph, text(s)], ['leg', '◆', 'KO’d Satrenchi, who dropped Stack Sats']); n++;
-s = slip({ kind: 'pred', who: 'lou', level: 2 }, name); assert.deepEqual([s.cls, s.glyph, text(s)], ['pred', '◎', 'predicts 2+ KOs']); n++;
-s = slip({ kind: 'res', who: 'lou', level: 1, points: 20 }, name); assert.deepEqual([s.cls, s.glyph, text(s)], ['res', '✓', 'made 1+ KO: correct +20 points']); n++;
-s = slip({ kind: 'escape', who: 'lou', hp: 4 }, name); assert.deepEqual([s.glyph, text(s)], [null, 'escaped at 4 HP']); n++;
+assert.deepEqual([s.cls, s.glyph, text(s)], ['leg', '◆', 'KO Satrenchi, who DROPS Stack Sats']); n++;
+s = slip({ kind: 'pred', who: 'lou', level: 2 }, name); assert.deepEqual([s.cls, s.glyph, text(s)], ['pred', '◎', 'PREDICTS 2+ KOs']); n++;
+s = slip({ kind: 'res', who: 'lou', level: 1, points: 20 }, name); assert.deepEqual([s.cls, s.glyph, text(s)], ['res', '✓', 'MADE 1+ KO: CORRECT +20 points']); n++;
+s = slip({ kind: 'escape', who: 'lou', hp: 4 }, name); assert.deepEqual([s.glyph, text(s)], ['✚', 'ESCAPES at 4 HP']); n++;
 assert.equal(new Set(Object.values(GLYPH)).size, Object.keys(GLYPH).length); n++;   // one meaning per symbol
 assert.deepEqual(LINES, { wide: 5, narrow: 3 }); n++;
 // no gambling word in any slip
@@ -100,7 +101,27 @@ assert.equal(L.bottom, 16); n++;
 assert.deepEqual([soundFace('on').label, soundFace('on').pressed, soundFace('on').off], ['Sound', 'false', false]);
 assert.deepEqual([soundFace('muted').label, soundFace('muted').pressed, soundFace('muted').aria], ['Muted', 'true', COPY.sound.offAria]);
 assert.equal(soundFace('waiting for a click').label, 'Sound'); n++;
-assert.equal(COPY.how.length, 8); assert.doesNotMatch(JSON.stringify(COPY), /\b(bet|stake|pot|payout|terms)\b/i); n++;
+assert.equal(COPY.how, undefined); assert.doesNotMatch(JSON.stringify(COPY), /\b(bet|stake|pot|payout|terms)\b/i); n++;   // the text lives in docs.html only
+// How it works renders the docs page's own <main> sections (the one source, near/web/docs.html), sanitised
+const docs = docsSections(readFileSync(new URL('./docs.html', import.meta.url), 'utf8'));
+assert.deepEqual(docs.map((x) => x.id), ['arena', 'watch', 'ai', 'cost', 'fight', 'gear', 'predictions', 'leaderboards', 'onchain', 'rules']);
+for (const x of docs) {
+  assert.match(x.html, /^<h3>[^<]+<\/h3>/, x.id + ' opens with its title, one level under the dialog');
+  assert.doesNotMatch(x.html, /<(?!\/?(h3|h4|p|ul|ol|li|a|strong|em|code)\b)[a-z]/i, x.id + ': only the text tags');
+  assert.doesNotMatch(x.html.replace(/<a href="[^"]*"( target="_blank" rel="noopener")?>/g, '<a>'), /<[a-z0-9]+ [^>]*>/i, x.id + ': no attribute but a link\'s href');
+}
+n++;
+// a hostile page: scripts, styles, frames, handlers and script links never reach the arena page
+const bad = docsSections('<nav>x</nav><main><section id="s"><h2 onclick="x()">T</h2><script>alert(1)</script><style>p{}</style>' +
+  '<p class="c">a <a href="javascript:alert(1)">j</a> <a href="//evil.example/x">e</a> <a href="/web/arena.html">ok</a> <img src=x onerror=alert(1)><iframe src="/x"></iframe></p></section></main>');
+assert.deepEqual(bad, [{ id: 's', html: '<h3>T</h3><p>a <a>j</a> <a>e</a> <a href="/web/arena.html" target="_blank" rel="noopener">ok</a> </p>' }]);
+assert.deepEqual(docsSections('<p>no main</p>'), []); n++;
+// a tag left open at a section's end (no closing '>'): it stays text, never an element (found in review: the browser closed
+// an unclosed <img onerror> on the '</section>' the dialog appends, and its handler ran)
+const open = docsSections('<main><section id="o"><p>tail</p><img src=x onerror=window.__pwned=1;// </section><section id="p"><p>a <b x="1>2">b</b> <script src=x</p></section></main>');
+assert.ok(open.every((s) => !/<(img|script|b)\b/i.test(s.html) && !/onerror/i.test(s.html.replace(/&lt;[^]*/g, ''))), 'an unclosed tag never becomes an element: ' + JSON.stringify(open)); n++;
+assert.ok(/&lt;img src=x onerror=/.test(open[0].html) && /&lt;script src=x/.test(open[1].html), 'it shows as text instead'); n++;
+assert.ok(open.every((s) => !/<(?!\/?(h3|h4|p|ul|ol|li|a|strong|em|code)\b)[a-z]/i.test(s.html)), 'only allowlisted elements remain'); n++;
 
 // ---- lives: applied only once the drawn picture caught up; one "correct" per life, none for a life met before load
 const lv = new Lives();

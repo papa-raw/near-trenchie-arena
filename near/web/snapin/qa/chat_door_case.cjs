@@ -28,7 +28,7 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // hosts start through the shared harness: each ends with this case however it ends (qa/hosts.cjs)
-const HOSTS = require('./hosts.cjs');
+const HOSTS = require('./hosts.cjs'), G = require('./board1_flow.cjs');
 const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
 (async () => {
   const port = 20000 + Math.floor(Math.random() * 20000), arenaUrl = 'http://127.0.0.1:' + port;
@@ -84,13 +84,8 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
     await p.setViewportSize({ width: 1440, height: 900 });
     // ---- snap in through the guide (NEAR AI Cloud), as corner_case does
     await p.goto(base + '/web/snapin/index.html?step=wallet&ws=' + encodeURIComponent(ws)); await ready();
-    await click('wallet-dev'); await click('preset:Hunter Lunge'); await click('claim');
-    await p.fill('#name', 'Doorpip'); await click('step:doors');
-    await click('ai:door:NEAR AI Cloud'); await p.fill('#key', 'sk-test-player-key'); await click('ai:test');
-    await p.waitForFunction(() => SnapDoors.state.state === 'connected', null, { timeout: 20000 }); await click('ai:continue');
-    await p.waitForFunction(() => Snapin.view.terms && Snapin.view.terms.version, null, { timeout: 20000 });
-    for (const id of ['#agree-ai', '#agree-public', '#agree-gear']) await p.check(id);
-    await click('agree');
+    // snap in through board 1's guide (a cap to snap in, Pat's Q2; then none again: this case's own steps set one where it needs it)
+    await G.snapIn(p, { skipGoto: true, name: 'Doorpip', preset: 'Hunter Lunge', claim: true, key: 'sk-test-player-key', clearCapAfter: true });
     await p.waitForFunction(() => SnapRoom.status().phase === 'in', null, { timeout: 90000 });
     const saved = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)).door, SAVE);
     ok(saved && saved.door === 'NEAR AI Cloud', `snapped in with the NEAR AI Cloud door (${saved && saved.door})`);
@@ -118,7 +113,7 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
             if (W === 390) { await p.screenshot({ path: path.join(OUT, 'ring-no-door-390.png'), fullPage: true }); await p.setViewportSize({ width: 1440, height: 900 }); await p.goto(ringUrl); await ready(); await p.waitForSelector('[data-chat] a', { timeout: 30000 }); }
           }
           await Promise.all([p.waitForURL(/step=doors/), p.click('[data-chat] a')]); await ready();
-          const v = await p.evaluate(() => ({ step: Snapin.view.step, mode: Snapin.view.mode, text: document.querySelector('main').innerText }));
+          const v = await p.evaluate(() => ({ step: Snapin.view.step, mode: Snapin.view.mode, text: document.querySelector('#app').innerText }));
           ok(v.mode === 'flow' && v.step === 'doors' && /NEAR AI Cloud/.test(v.text), `${label}: the link opens the guide's AI step (${p.url().replace(base, '')}: mode ${v.mode}, step ${v.step})`);
         }
       } else if (want === 'off') {
@@ -143,11 +138,24 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
     ok(a.states.length === 1 && a.states[0] === 'door:no-door | ' + NO_DOOR_ARENA, `arena.html, no door: the compact block's first second (from ${a.at} ms) shows one state, "${NO_DOOR_ARENA}" (seen: ${JSON.stringify(a.states)})`);
     const an = await noForm();
     ok(!an.input && !an.counter && !an.send && an.heading === 'Orders', `arena.html, no door: no text box, counter or Send, only "Orders" and the line`);
-    await p.waitForFunction(() => !document.getElementById('order-mini').hidden, null, { timeout: 30000 }).catch(() => {});
+    // board 1: the trenchie's own panel takes the compact box's place on the arena page; with no AI door its order box is
+    // no box at all, only where orders come from and the link to the guide's AI step (the rule the compact box kept)
+    // the arena KOs a newcomer every few seconds, and on the bench the panel shows the bench's own box: read until the
+    // trenchie is in the ring (up to 90 s for each reading)
+    const inRing = async () => { for (let i = 0; i < 180; i++) { if (await p.evaluate(() => !!document.querySelector('#b1-panel a.nodoor')).catch(() => false)) return true; await sleep(500); } return false; };
+    await inRing();
     await p.screenshot({ path: path.join(OUT, 'arena-no-door.png') });
-    const alb = await linkBox(p, '#order-mini a');
-    ok(alb && alb.h >= 44 && alb.onScreen, `arena.html, no door: the link is on screen and its box is ${alb && alb.h} px tall (≥ 44)`);
-    await Promise.all([p.waitForURL(/snapin\/index\.html\?step=doors/), p.evaluate(() => document.querySelector('#order-mini a').click())]); await ready();
+    const pnd = await p.evaluate(() => { const e = document.getElementById('b1-panel'); const ro = e && e.querySelector('.readonly'); return { line: ro ? ro.innerText.replace(/\s+/g, ' ').trim() : '', box: !!document.getElementById('pn-order'), send: !!document.querySelector('[data-pn="send"]'), mini: getComputedStyle(document.getElementById('order-mini')).display }; });
+    ok(pnd.line === 'No AI door picked: Pick an AI door to give orders.' && !pnd.box && !pnd.send && pnd.mini === 'none', `arena.html, no door: the panel's order box says "${pnd.line}" with no text box or Send (compact box ${pnd.mini})`);
+    for (const W of [1440, 390]) {
+      await p.setViewportSize(W === 390 ? { width: 390, height: 844 } : { width: 1440, height: 900 }); await sleep(900);
+      let alb = null;
+      for (let k = 0; k < 4 && !(alb && alb.h >= 44 && alb.onScreen); k++) { await inRing(); alb = await linkBox(p, '#b1-panel a.nodoor'); }
+      ok(alb && alb.h >= 44 && alb.onScreen, `arena.html, no door at ${W}: the panel's link is on screen and its box is ${alb && alb.h} px tall (≥ 44)`);
+    }
+    await inRing();
+    await p.setViewportSize({ width: 1440, height: 900 });
+    await Promise.all([p.waitForURL(/snapin\/index\.html\?step=doors/), p.evaluate(() => document.querySelector('#b1-panel a.nodoor').click())]); await ready();
     const av = await p.evaluate(() => ({ step: Snapin.view.step, mode: Snapin.view.mode }));
     ok(av.mode === 'flow' && av.step === 'doors' && /ws=/.test(p.url()), `arena.html, no door: the link opens the guide's AI step with the arena's ws (${p.url().replace(base, '').slice(0, 80)}…: step ${av.step})`);
     ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));

@@ -1,10 +1,12 @@
-// Effects and the things on the floor: telegraphs in the one reserved danger hue, projectiles, loot with its tier glow, hit
-// sparks, the KO ring, swing arcs. Telegraphs are drawn at the true hit area. At most 150 live effect shapes (feel row 14);
-// when the cap bites, ambient bursts go first and telegraphs, the KO ring and bounty markers are never dropped.
+// Effects and the things on the floor: telegraphs in the one reserved danger hue, loot with its tier glow, bounty markers and
+// the crown. The fight itself (stars, dust, arcs, shot, lob, beam, sweep, shockwave, KO, the drop's flight) is fight.mjs (board
+// 3). Telegraphs are drawn at the true hit area. At most 150 live effect shapes (feel row 14): telegraphs and bounty markers
+// come first, and the fight draws inside what is left, KOs and projectiles before dust.
 import * as THREE from 'three';
 import { milliToWorld } from './frame.mjs';
 import { TICK_MS } from './buffer.mjs';
 import { makeTelegraph, updateTelegraph, disposeTelegraph, telegraphHitArea, TELE_STYLES, TELE_DEFAULT } from './telegraph.mjs';
+import { Fight } from './fight.mjs';
 // The telegraph look: c (red candles, Pat's pick) by default; ?tele=a|b for the other drafts, ?tele=old for the earlier
 // flat danger shape. An unknown value keeps the default.
 export const teleLook = (search) => { try { const v = new URLSearchParams(search).get('tele'); return v === 'old' || (v !== null && Object.hasOwn(TELE_STYLES, v)) ? v : TELE_DEFAULT; } catch { return TELE_DEFAULT; } };
@@ -35,7 +37,9 @@ export class Effects {
   constructor(scene, LOOK3, ITEMS, itemRenderer, details = null, look = null) {
     this.details = details; this.warnedMetadata = false;
     this.scene = scene; this.LOOK3 = LOOK3; this.ITEMS = ITEMS; this.itemRenderer = itemRenderer;
-    this.tele = new Map(); this.telePool = new Map(); this.proj = new Map(); this.floor = new Map(); this.bursts = []; this.marks = new Map();
+    this.tele = new Map(); this.telePool = new Map(); this.floor = new Map(); this.marks = new Map();
+    this.fight = new Fight(scene); this.objects = new Map();   // the live shots' interpolated world points, for the fight
+    this.floorWeaponScale = (id) => 1;                         // main.mjs sets it: a dropped weapon at the held weapon's size
     this.counts = { effects: 0, peak: 0, telePeak: 0 };
     this.teleLook = look || TELE_LOOK;
     this.seenFirst = new Map();               // telegraph key -> first tick seen (the fill runs from there to resolveAt)
@@ -43,26 +47,21 @@ export class Effects {
     this.shake = { trauma: 0 };
   }
 
-  get liveShapes() { return this.tele.size + this.proj.size + this.bursts.length + this.marks.size * 2; }
+  get liveShapes() { return this.tele.size + this.fight.live + this.marks.size * 2; }
 
   // ---- state-driven: telegraphs, projectiles and loot from the interpolated snapshot ----------------------------------
   sync(snapA, snapB, k, rt, nowMs, actorPos) {
     const b = snapB;
-    // projectiles and telegraphs from `objects`
-    const liveT = new Set(), liveP = new Set();
+    // telegraphs from `objects`; the projectiles themselves are the fight's (fight.mjs), on the sim's own path
+    const liveT = new Set();
     const prev = new Map(snapA.objects.map((o) => [o.key, o]));
+    this.objects.clear();
     for (const o of b.objects) {
       const a = prev.get(o.key) || o;
       if (o.kind === 'shot') {
-        liveP.add(o.key); let m = this.proj.get(o.key);
-        if (!m) { m = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 8), new THREE.MeshToonMaterial({ color: '#3B2F25' })); m.castShadow = true; this.scene.add(m); this.proj.set(o.key, m); }
-        const p = milliToWorld(lerp(a.x, o.x, k), lerp(a.y, o.y, k), 0.7); m.position.set(p.x, p.y, p.z);
+        this.objects.set(o.key, milliToWorld(lerp(a.x, o.x, k), lerp(a.y, o.y, k)));
       } else if (o.kind === 'lob') {
-        liveP.add(o.key); let m = this.proj.get(o.key);
-        if (!m) { m = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 8), new THREE.MeshToonMaterial({ color: '#C9966A' })); m.castShadow = true; this.scene.add(m); this.proj.set(o.key, m); }
-        const sx = a.x, sy = a.y; const first = this.seenFirst.get(o.key) ?? (this.seenFirst.set(o.key, rt), rt);
-        const total = Math.max(1, o.resolveAt - first), q = Math.min(1, Math.max(0, (rt - first) / total));
-        const p = milliToWorld(lerp(o.x, o.tx, q), lerp(o.y, o.ty, q), Math.sin(Math.PI * q) * 2.2 + 0.3); m.position.set(p.x, p.y, p.z);
+        const first = this.first(o.key, rt);
         this.telegraph('t:' + o.key, liveT, { shape: 'circle', x: o.tx, y: o.ty, r: (o.radius || 1200) / 1000, from: first, to: o.resolveAt }, rt);
       } else if (o.kind === 'beam') {
         this.telegraph('t:' + o.key, liveT, { shape: 'line', x: o.x, y: o.y, angle: o.angle, r: o.range / 1000, width: Math.max(0.4, (o.width || 400) / 1000), from: this.first(o.key, rt), to: o.resolveAt }, rt);
@@ -83,7 +82,6 @@ export class Effects {
     }
     for (const [key, m] of this.tele) if (!liveT.has(key)) { this.scene.remove(m); this.releaseTele(m); this.tele.delete(key); this.seenFirst.delete(key); }
     this.counts.telePeak = Math.max(this.counts.telePeak, this.tele.size);
-    for (const [key, m] of this.proj) if (!liveP.has(key)) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); this.proj.delete(key); this.seenFirst.delete(key); }
 
     // loot on the floor, with its tier glow and an expiry that thins the ring
     const seen = new Set();
@@ -92,8 +90,15 @@ export class Effects {
       if (!g) { g = this.makeLoot(d); this.floor.set(d.key, g); }
       const p = milliToWorld(d.x, d.y); g.position.set(p.x, 0, p.z);
       const left = Math.max(0, d.expires - rt), bob = Math.sin(nowMs / 400 + d.x) * 0.05;
-      g.userData.floating.position.y = g.userData.restY + bob;
+      g.userData.floating.position.y = g.userData.restY + bob; g.userData.floating.rotation.y = 0;
       g.visible = left >= 40 || Math.floor(nowMs / 120) % 2 === 0;
+      // a KO's drop: one object from the body to where the sim put it, two bounces, then its tier glow (board 3)
+      const fly = this.fight.dropPose(d.key, rt * TICK_MS);
+      if (fly) {
+        if (fly.hidden) g.visible = false;
+        else if (!fly.landed) { g.position.set(fly.x, 0, fly.z); g.userData.floating.position.y = g.userData.restY + fly.y; g.userData.floating.rotation.y = fly.spin; }
+        for (const c of g.children) if (c !== g.userData.floating) c.visible = !!fly.landed;
+      }
     }
     for (const [key, g] of this.floor) if (!seen.has(key)) { this.scene.remove(g); this.itemRenderer.dispose(g); this.floor.delete(key); }
   }
@@ -133,40 +138,13 @@ export class Effects {
 
   makeLoot(d) {
     const g = this.itemRenderer.floor(d.item);
+    g.userData.floating.scale.multiplyScalar(this.floorWeaponScale(d.item));   // a weapon lies at the size it was held (2.5x)
     this.scene.add(g); return g;
   }
 
-  // ---- event-driven bursts ---------------------------------------------------------------------------------------------
-  burst(kind, x, z, nowMs, opts = {}) {
-    if (this.liveShapes >= EFFECT_CAP && kind !== 'ko') return; // the cap: ambient bursts yield, the KO ring never does
-    let mesh;
-    if (kind === 'spark') {
-      mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 0), new THREE.MeshBasicMaterial({ color: opts.color || '#FFF8EA', transparent: true, opacity: 1, depthWrite: false }));
-      mesh.position.set(x, 1.0, z); mesh.userData = { kind, t0: nowMs, life: 260 };
-    } else if (kind === 'ko') {
-      mesh = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.75, 40), new THREE.MeshBasicMaterial({ color: '#FFF8EA', transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide }));
-      mesh.rotation.x = -Math.PI / 2; mesh.position.set(x, 0.04, z); mesh.userData = { kind, t0: nowMs, life: 380 };
-    } else if (kind === 'arc') { // a swing: a crescent in front of the attacker at its true reach
-      const reach = opts.reach || 1.3, half = (opts.half || 60) * Math.PI / 180;
-      mesh = new THREE.Mesh(new THREE.RingGeometry(reach * 0.55, reach, 24, 1, -half, 2 * half), new THREE.MeshBasicMaterial({ color: '#FFF8EA', transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
-      mesh.rotation.x = -Math.PI / 2; mesh.rotation.z = -(opts.angle || 0) * Math.PI / 180; mesh.position.set(x, 0.55, z); mesh.userData = { kind, t0: nowMs, life: 180 };
-    } else if (kind === 'dust') {
-      mesh = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), new THREE.MeshBasicMaterial({ color: '#F7F0DC', transparent: true, opacity: 0.7, depthWrite: false }));
-      mesh.position.set(x, 0.15, z); mesh.userData = { kind, t0: nowMs, life: 420, vx: opts.vx || 0, vz: opts.vz || 0 };
-    }
-    if (!mesh) return;
-    mesh.renderOrder = 4; this.scene.add(mesh); this.bursts.push(mesh);
-  }
-
-  tick(nowMs) {
-    for (let i = this.bursts.length - 1; i >= 0; i--) {
-      const m = this.bursts[i], u = m.userData, k = (nowMs - u.t0) / u.life;
-      if (k >= 1) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); this.bursts.splice(i, 1); continue; }
-      if (u.kind === 'spark') { m.scale.setScalar(1 + k * 1.4); m.position.y = 1.0 + k * 0.6; m.material.opacity = 1 - k; }
-      else if (u.kind === 'ko') { const r = 0.5 + 1.7 * (1 - Math.pow(1 - k, 3)); m.scale.setScalar(r / 0.62); m.material.opacity = 0.95 * (1 - k); }
-      else if (u.kind === 'arc') m.material.opacity = 0.85 * (1 - k);
-      else if (u.kind === 'dust') { m.position.x += u.vx * 0.016; m.position.z += u.vz * 0.016; m.scale.setScalar(1 + k * 1.2); m.material.opacity = 0.7 * (1 - k); }
-    }
+  // the fight's frame (board 3): drawn inside what the telegraphs and bounty markers leave of the 150 shapes
+  tick(nowMs, rt = 0, actors = null) {
+    if (actors) this.fight.draw(rt * TICK_MS, { actors, objects: this.objects, budget: Math.max(0, EFFECT_CAP - this.tele.size - this.marks.size * 2) });
     this.counts.effects = this.liveShapes; this.counts.peak = Math.max(this.counts.peak, this.counts.effects);
   }
 

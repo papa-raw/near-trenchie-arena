@@ -22,7 +22,7 @@ let pass = 0, fail = 0; const report = [];
 const ok = (c, m) => { report.push((c ? 'PASS ' : 'FAIL ') + m); if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // hosts start through the shared harness: each ends with this case however it ends (qa/hosts.cjs)
-const HOSTS = require('./hosts.cjs');
+const HOSTS = require('./hosts.cjs'), G = require('./board1_flow.cjs');
 const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
 // the five kits on the live rules table, from the arena's own code
 const KITS = JSON.parse(execFileSync('python3', ['-B', '-c', "import sys,json; sys.path[:0]=['near/arena']; import presets, sim; print(json.dumps({p['name']: p['loadout'] for p in presets.all_presets(sim.DEFAULT_RULES)}))"], { cwd: REPO }).toString());
@@ -58,16 +58,11 @@ const KITS = JSON.parse(execFileSync('python3', ['-B', '-c', "import sys,json; s
     await view(1440);
     // ---- snap in through the guide, as Hunter Lunge
     await p.goto(base + '/web/snapin/index.html?step=wallet&ws=' + encodeURIComponent(ws)); await ready();
-    await click('wallet-dev'); await click('preset:Hunter Lunge'); await click('claim');
-    await p.fill('#name', 'Cornerpip'); await click('step:doors');
-    await click('ai:door:NEAR AI Cloud'); await p.fill('#key', 'sk-test-player-key'); await click('ai:test');
-    await p.waitForFunction(() => SnapDoors.state.state === 'connected', null, { timeout: 20000 }); await click('ai:continue');
-    await p.waitForFunction(() => Snapin.view.terms && Snapin.view.terms.version, null, { timeout: 20000 });
-    for (const id of ['#agree-ai', '#agree-public', '#agree-gear']) await p.check(id);
-    await click('agree');
+    // snap in through board 1's guide (a cap to snap in, Pat's Q2; then none again: this case's own steps set one where it needs it)
+    await G.snapIn(p, { skipGoto: true, name: 'Cornerpip', preset: 'Hunter Lunge', claim: true, key: 'sk-test-player-key', clearCapAfter: true });
     await p.waitForFunction(() => SnapRoom.status().phase === 'in', null, { timeout: 90000 });
     let st = await status();
-    ok(st.fighter.preset === 'hunter-lunge' && st.fighter.lastPick && st.fighter.lastPick.state === 'accepted', `in the ring as ${st.fighter.id}, battle option ${st.fighter.preset}, first life's pick ${st.fighter.lastPick && st.fighter.lastPick.state}`);
+    ok(st.fighter.preset === 'hunter-lunge' && st.fighter.lastPick && st.fighter.lastPick.state === 'none', `in the ring as ${st.fighter.id}, battle option ${st.fighter.preset}, first life filed with no prediction (the guide picks no level for the player), first life's pick ${st.fighter.lastPick && st.fighter.lastPick.state}`);
     const obs0 = await p.evaluate(() => fetch('/room/observe').then((r) => r.json()));
     const me0 = obs0.fighters.find((f) => f.fighter_id === st.fighter.id), w0 = me0 && (me0.equipped || []).find((e) => e.slot === 'weapon');
     ok(w0 && w0.item_id === KITS['Hunter Lunge'].weapon, `the first life wears Hunter Lunge's weapon (${w0 && w0.item_id}; presets.py: ${KITS['Hunter Lunge'].weapon})`);
@@ -144,8 +139,9 @@ const KITS = JSON.parse(execFileSync('python3', ['-B', '-c', "import sys,json; s
     }
     ok(!!down, `the corner showed the respawn countdown while the fighter was down (${down ? '"' + down.page + '", respawn_at_ms ' + down.respawn_at_ms + ', KO\'d by ' + (down.last_life && down.last_life.ended_by) : 'never: the host reported ' + [...seenStates].join(', ')})`);
     const lp = next && next.fighter.lastPick;
-    ok(lp && lp.state === 'accepted' && lp.order.preset === 'brawler-zap' && JSON.stringify(lp.order.spread) === '[25,25,25,25]' && lp.order.zero === 20,
-      `the corner's pick is the one filed for the next life after Ready (Ready came in life ${atReady.lives}, ${atReady.life}): life ${next && next.fighter.lives} locked in as ${lp && lp.order.preset}, spread ${lp && JSON.stringify(lp.order.spread)}, zero ${lp && lp.order.zero}% (${lp && lp.state})`);
+    // 'queued': the ring was full, so the room locked this pick for this life and seats it when a place opens
+    ok(lp && (lp.state === 'accepted' || lp.state === 'queued') && lp.life === (next && next.fighter.life) && lp.order.preset === 'brawler-zap' && JSON.stringify(lp.order.spread) === '[25,25,25,25]' && lp.order.zero === 20,
+      `the corner's pick is the one filed for the next life after Ready (Ready came in life ${atReady.lives}, ${atReady.life}): life ${next && next.fighter.lives} locked in as ${lp && lp.order.preset}, spread ${lp && JSON.stringify(lp.order.spread)}, zero ${lp && lp.order.zero}% (${lp && lp.state}${lp && lp.reason ? ': ' + lp.reason : ''}; filed for ${lp && lp.life})`);
     if (next) {
       let w1 = null;
       for (let i = 0; i < 30 && !(w1 && w1.item_id === KITS['Brawler Zap'].weapon); i++) { const o = await p.evaluate(() => fetch('/room/observe').then((r) => r.json())); const me = o.fighters.find((f) => f.fighter_id === next.fighter.id); w1 = me && me.state === 'ring' ? (me.equipped || []).find((e) => e.slot === 'weapon') : null; if (!(w1 && w1.item_id === KITS['Brawler Zap'].weapon)) await sleep(2000); }
@@ -154,8 +150,10 @@ const KITS = JSON.parse(execFileSync('python3', ['-B', '-c', "import sys,json; s
       await p.waitForFunction(() => /You predicted/.test(document.querySelector('main').innerText) && /KO’d/.test(document.querySelector('main').innerText), null, { timeout: 20000 }).catch(() => {});
       const c1 = await corner(), t1 = await p.innerText('main'), pageC = await p.evaluate(() => ({ last: Snapin.corner.data && Snapin.corner.data.last_life, age: Math.round(performance.now() - Snapin.corner.at), timer: !!Snapin.corner.timer, mode: Snapin.view.mode, tab: Snapin.view.tab }));
       console.log('page corner state', JSON.stringify(pageC));
-      const filedFirst = c1.last_life && lifeNo(c1.last_life.life_id) <= lifeNo(atReady.life);   // filed before Ready: the first pick, 40%
-      ok(c1.last_life && c1.last_life.prediction && c1.last_life.prediction.spread_bps.one === (filedFirst ? 4000 : 2500) && /You predicted/.test(t1) && /KO’d/.test(t1), `the corner shows the last life against the prediction filed for it (${c1.last_life && c1.last_life.life_id}: KOs ${c1.last_life && c1.last_life.ko_count}, predicted 1: ${c1.last_life && c1.last_life.prediction.spread_bps.one / 100}%; lives up to ${atReady.life} were filed at 40% before Ready, later lives at 25%)`);
+      // the first life is filed with no prediction (board 1's guide files none); a life after Ready carries its 25/25/25/25
+      const filedFirst = c1.last_life && lifeNo(c1.last_life.life_id) <= lifeNo(atReady.life), pr = c1.last_life && c1.last_life.prediction;
+      ok(c1.last_life && (filedFirst ? pr === null && /You predicted\s*nothing filed/.test(t1) : pr && pr.spread_bps.one === 2500 && /You predicted/.test(t1)) && /KO’d/.test(t1),
+        `the corner shows the last life against the prediction filed for it (the Ready pick went to ${lp && lp.life}; ${c1.last_life && c1.last_life.life_id}: KOs ${c1.last_life && c1.last_life.ko_count}, ${filedFirst ? 'the first life, filed with none' : 'filed after Ready'}: ${pr ? 'predicted 1: ' + pr.spread_bps.one / 100 + '%' : 'no prediction'})`);
       await shot('corner-after-ko', 1440);
     }
     // × from the corner returns to the live arena, not a stub

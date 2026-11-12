@@ -154,19 +154,23 @@ export function createStage(canvas, LOOK3, opts = {}) {
     if (shakeX || shakeY) { const r = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0), u = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1); camera.position.addScaledVector(r, shakeX).addScaledVector(u, shakeY); }
     camera.updateMatrixWorld();
   }
-  function resize(w, h) {
+  // pads (optional, {top, bottom} in px): the free band to centre the ring in, e.g. a phone with board 1's panel open, where
+  // the canvas ends at the panel's top and the sign covers its top (the scale stays the phone's: the ring's middle shows)
+  function resize(w, h, pads) {
     view.w = w; view.h = h; view.narrow = w < 700;
     renderer.setSize(w, h, false);
     // fit the arena ring (12 tiles) plus the bench shore into the width; on a phone, crop the island's sides rather than shrink the fighters
     view.elev = view.narrow ? 52 : ELEV_DEG;
     const spanX = view.narrow ? 2 * 10.5 : 2 * 18, e = view.elev * Math.PI / 180;
     const spanY = 2 * (15.4 * Math.sin(e) + 3.2 * Math.cos(e));
-    const topPad = view.narrow ? 110 : 20, botPad = view.narrow ? 150 : 20;
+    const topPad = pads ? pads.top : view.narrow ? 110 : 20, botPad = pads ? pads.bottom : view.narrow ? 150 : 20;
     view.ppt = view.narrow ? w / spanX : Math.min(w / spanX, (h - topPad - botPad) / spanY);
     camera.left = (-w / 2 + view.panPx) / view.ppt; camera.right = (w / 2 + view.panPx) / view.ppt; camera.top = h / 2 / view.ppt; camera.bottom = -h / 2 / view.ppt;
     placeCamera();
     // shift the view so the island's centre sits between the top and bottom pads
-    const dy = (topPad - botPad) / 2 / view.ppt; camera.top -= dy; camera.bottom -= dy;
+    // (the default phone pads keep their approved look; with explicit pads the centre goes to the middle of the free band:
+    // raising the frustum by (bottom - top)/2 puts the island's centre (top + h - bottom)/2 from the canvas's top)
+    const dy = (pads ? botPad - topPad : topPad - botPad) / 2 / view.ppt; camera.top -= dy; camera.bottom -= dy;
     camera.updateProjectionMatrix();
   }
   // shift the picture left by px screen pixels (board 1's panel is open on the right: the ring stays in the free part)

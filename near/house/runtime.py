@@ -12,10 +12,13 @@ Every write path is under the data directory (/srv/arena/data in the container).
 
 import json
 import os
+import re
+import sys
 from pathlib import Path
 import subprocess
 import tempfile
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 try:
@@ -39,6 +42,7 @@ SLOW_INTERVAL_S = 30
 BANTER_INTERVAL_S = 10                # at most one line per 10 s per trenchie (battle mode; it was 30 s before)
 FAILING_AFTER = 3                     # this many failed calls in a row, with no success between, shows the failing chip
 MEASURED_CACHED_SHARE_PCT = 55
+NOTES_KEPT = 50                       # the roster shows the last 5; older notes are dropped
 
 
 def cost_microusd(usage):
@@ -188,17 +192,95 @@ class NearAI:
         body = json.dumps({"model": self.model, "messages": messages, "max_tokens": max_tokens,
                            "chat_template_kwargs": {"enable_thinking": bool(thinking)}}, ensure_ascii=False)
         # The key and the body go to curl on stdin as a config file, never on argv, where `ps` could read them.
+        # No --fail: an HTTP error's own body says why, and the status comes back on the last line (write-out).
         config = "\n".join(["url = " + json.dumps(self.endpoint),
                             "header = " + json.dumps("Authorization: Bearer " + key),
                             "header = \"Content-Type: application/json\"",
                             "max-time = " + ("240" if thinking else "20"), "silent", "show-error",
+                            "write-out = \"\\n%{http_code}\"",
                             "data = " + json.dumps(body, ensure_ascii=False)])
-        out = subprocess.run(["curl", "--config", "-"], input=config, capture_output=True, text=True, check=True).stdout
-        data = json.loads(out)
-        usage = data["usage"]
-        return {"text": data["choices"][0]["message"]["content"],
-                "usage": {"prompt_tokens": usage["prompt_tokens"], "completion_tokens": usage["completion_tokens"],
-                          "cached_tokens": (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)}}
+        proc = subprocess.run(["curl", "--config", "-"], input=config, capture_output=True, text=True)
+        return self.answer(proc.returncode, proc.stdout, proc.stderr, key)
+
+    @staticmethod
+    def answer(returncode, stdout, stderr, key=""):
+        """curl's result as the answer, or a ModelCallError that says what failed: curl's exit code and its own
+        message, or the HTTP status and the error body's message. The key never appears in it."""
+        if returncode != 0:
+            raise ModelCallError("curl exit %d" % returncode, _said(stderr, key) or "no message")
+        text, _, code = stdout.rpartition("\n")
+        status = int(code) if code.strip().isdigit() else 0
+        try:
+            data = json.loads(text)
+        except ValueError:
+            data = None
+        if status != 200:
+            raise ModelCallError("HTTP %d" % status, _said(_error_message(data) or text, key) or "empty body")
+        try:
+            usage = data["usage"]
+            return {"text": data["choices"][0]["message"]["content"],
+                    "usage": {"prompt_tokens": usage["prompt_tokens"], "completion_tokens": usage["completion_tokens"],
+                              "cached_tokens": (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)}}
+        except (KeyError, IndexError, TypeError) as exc:
+            raise ModelCallError("HTTP 200 without an answer (%s missing)" % exc,
+                                 _said(_error_message(data) or text, key) or "empty body") from None
+
+
+class ModelCallError(RuntimeError):
+    """A model call that brought back no answer. `public` is what the public roster note shows: curl's exit code or the
+    HTTP status only. The full text adds curl's own message or the error body's message (a billing message could name an
+    account or a balance), and goes to stderr only. Neither carries the key."""
+
+    def __init__(self, public, detail=""):
+        super().__init__("%s: %s" % (public, detail) if detail else public)
+        self.public = public
+
+
+MESSAGE_CHARS = 160
+KEY_ENVS = ("NEARAI_API_KEY", "NEAR_AI_KEY")   # the hosted env name and the client's default; both redacted
+
+
+def _error_message(data):
+    """The message an OpenAI-compatible error body carries: {"error": {"message"}}, {"error": "..."}, {"detail": ...}."""
+    if not isinstance(data, dict):
+        return None
+    err = data.get("error")
+    if isinstance(err, dict) and err.get("message"):
+        return str(err["message"])
+    if isinstance(err, str):
+        return err
+    if data.get("detail"):
+        return data["detail"] if isinstance(data["detail"], str) else json.dumps(data["detail"])[:MESSAGE_CHARS]
+    if data.get("message"):
+        return str(data["message"])
+    return None
+
+
+def _said(text, key):
+    """One short line for a public note: whitespace collapsed, the key (and any bearer token) removed, an IPv4 address
+    (curl names the host's proxy hop, 10.0.2.2:18443) shown as [addr], cut to 160 chars."""
+    line = " ".join(str(text or "").split())
+    if key:
+        line = line.replace(key, "[key]")
+    line = re.sub(r"(?i)bearer\s+\S+", "Bearer [key]", line)
+    line = re.sub(r"\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b", "[addr]", line)
+    return line[:MESSAGE_CHARS] + ("…" if len(line) > MESSAGE_CHARS else "")
+
+
+def described_publicly(exc):
+    """What a public note says of a failed call: a ModelCallError's status or exit only; any other exception as described."""
+    if isinstance(exc, ModelCallError):
+        return "ModelCallError: " + exc.public
+    return described(exc)
+
+
+def described(exc):
+    """An exception as a note says it: its class, and its own message when it has one (a ModelCallError carries curl's
+    exit or the HTTP status and the error body's message; no exception here carries the key)."""
+    text = str(exc)
+    for env in KEY_ENVS:
+        text = _said(text, os.environ.get(env, ""))
+    return "%s: %s" % (type(exc).__name__, text) if text else type(exc).__name__
 
 
 class Autopilot(RuntimeError):
@@ -232,7 +314,9 @@ class Runtime:
         self.pending = []
         self.voices = {n: novelty.Voice(n, s["keyed"]) for n, s in sheets.items()}
         self.last_banter = {}
-        self.notes = []            # no silent fallback: every fallback is recorded here and shown
+        self.notes = []            # no silent fallback: every fallback is recorded here and shown, stamped with its UTC time
+        self.note_texts = []       # the same notes without their stamps, for the repeat check
+        self.note_lock = threading.Lock()   # note() runs on executor threads too (_pick, _banter): both lists change together
         self.log = log if log is not None else []
         self.call_times = {}       # name -> recent call times, for calls_per_min on the private status
         self.failing = 0           # failed calls in a row (a success resets it; a budget stop is not a failure)
@@ -240,8 +324,17 @@ class Runtime:
         self.stats = {"calls": 0, "banter": 0, "intent": 0, "pick": 0, "failed": 0, "autopilot_lines": 0, "plan": 0, "line": 0}
 
     def note(self, text):
-        if text not in self.notes[-3:]:
-            self.notes.append(text)
+        """A note reads "<UTC time> <text>", so a stale note never reads as a live failure. A text already among the
+        last 3 is not added again: its stamp moves to now, so the time shown is always its latest. The last 50 are kept."""
+        stamped = time.strftime("%Y-%m-%dT%H:%M:%SZ ", time.gmtime(self.clock())) + text
+        with self.note_lock:
+            recent = self.note_texts[-3:]
+            if text in recent:
+                self.notes[len(self.notes) - len(recent) + recent.index(text)] = stamped
+                return
+            self.notes.append(stamped)
+            self.note_texts.append(text)
+            del self.notes[:-NOTES_KEPT], self.note_texts[:-NOTES_KEPT]
 
     @property
     def chip(self):
@@ -366,7 +459,8 @@ class Runtime:
             try:
                 result = future.result()
             except Exception as exc:                       # a failed call is an autopilot tick, said out loud
-                self.note("%s: %s call failed (%s): tick policy continues" % (name, kind, type(exc).__name__))
+                self.note("%s: %s call failed (%s): tick policy continues" % (name, kind, described_publicly(exc)))
+                print("house: %s %s call failed: %s" % (name, kind, described(exc)), file=sys.stderr, flush=True)  # the container log: the full message
                 self.stats["failed"] += 1
                 if not isinstance(exc, Autopilot):
                     self.failing += 1

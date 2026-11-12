@@ -71,8 +71,7 @@ from cryptography.exceptions import InvalidSignature  # noqa: E402
 from cryptography.hazmat.primitives import serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey  # noqa: E402
 from room.policy import canonical_bytes  # noqa: E402
-from room.slots import SlotStore  # noqa: E402
-from room_host import RoomHost  # noqa: E402
+from room_host import HostSlotStore, RoomHost  # noqa: E402
 from battle_live_host import serve_live  # noqa: E402
 # --- house hook (near/house): the shared public feed and the live house; begin -------------------------
 sys.path.insert(0, str(ROOT / "near/house"))
@@ -208,7 +207,8 @@ class Round:
         self.consumed: set[str] = set()
         self.base = now_ms()
         self.arena = None
-        slots = SlotStore(self.tmp / "slots", self.context["room_id"], 16, clock=self.vnow)
+        # HostSlotStore: the clock loop calls expire() every tick; it writes the slot state only when a lease is due.
+        slots = HostSlotStore(self.tmp / "slots", self.context["room_id"], 16, clock=self.vnow)
         self.host = RoomHost(slots, self.context, now_ms=self.vnow, sign=dev.room_sign,
             verify_session=dev.verify_session, key_id="room_key_a", proof_methods=(PROOF_METHOD,),
             consume_nonce=self.consume, ready=lambda: True, admission_open=lambda: True,
@@ -222,6 +222,7 @@ class Round:
             receipt_signer=self.host.sign_receipt, admission_gate=self.host.admission_ready,
             life_guard=self.life_guard, server_time_ms=self.vnow, pick_resolver=pick,
             house_runtime=house, dev_host=True,  # this host seats `dev-` ids by design; a production host refuses them
+            room_snapshots=False,  # its transport never drains pushed room snapshots; observe is served on demand
             prediction_log=house.log if live else None, record=dev.record)
         self.house = house
         self.arena.battle_guard = lambda who, text: dev.feed.guard.check(text, who=who)

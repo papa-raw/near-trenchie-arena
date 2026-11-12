@@ -263,10 +263,12 @@ def main(argv=None) -> int:
                 raise SystemExit("play: stopped")
             time.sleep(0.3)
         web = args.public_origin or f"http://127.0.0.1:{args.web_port}"
+        # a non-default arena port: the pages must be told where the arena is (they assume ws://127.0.0.1:8765)
+        qs = "" if args.public_origin or args.arena_port == 8765 else f"?ws=ws%3A%2F%2F127.0.0.1%3A{args.arena_port}"
         doors = hosted_lines(args.public_origin) if args.public_origin else agent_lines(args.arena_port, args.web_port)
         print("\n".join(["", "play: READY",
-                         f"  Watch the arena:       {web}/web/arena.html",
-                         f"  Snap in (the guide):   {web}/web/snapin/index.html",
+                         f"  Watch the arena:       {web}/web/arena.html{qs}",
+                         f"  Snap in (the guide):   {web}/web/snapin/index.html{qs}",
                          f"  Host health:           {web}/dev/health", ""] + doors
                         + ["", "Ctrl-C (SIGTERM, hosted) stops everything this started.", ""]), flush=True)
         while not stopping["why"]:

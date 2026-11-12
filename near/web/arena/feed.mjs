@@ -4,8 +4,12 @@
 // glyph: KO (red edge), ◎ predicts and ✓ correct (green edge), ◆ legendary (gold edge). One meaning per symbol; an
 // escape has no glyph. 5 lines at 1440, 3 on a phone. Presentation only: nothing here enters the tick buffer.
 
-export const GLYPH = { ko: 'KO', pred: '◎', res: '✓', leg: '◆' };
+export const GLYPH = { ko: '▼', pred: '◎', res: '✓', leg: '◆', escape: '✚' };   // ebb97a0's line marks: KO red, legendary gold, escape green
 export const LINES = { wide: 5, narrow: 3 };
+// A phone's feed box never grows past this (three two-line slips, 3 x 46 + 2 x 6 gaps, and the autopilot chip, 24): when
+// the newest slips would, the oldest drops out whole (no slip is ever cut). The call to action reserves exactly this
+// height above the feed (arena.html, data-reserve), so it keeps one spot through a fight.
+export const PHONE_MAX = 176;
 const PAPER = '#fbf3e2', INK = '#2a2622';
 
 // ---- colour: a fighter's own colour (its first palette colour), darkened until it reads on the slip (WCAG AA, 4.5:1)
@@ -34,18 +38,18 @@ const kos = (n) => n + '+ KO' + (n === 1 ? '' : 's');
 export function slip(item, name) {
   const who = item.who != null ? name(item.who) : null;
   switch (item.kind) {
-    case 'say': return { cls: 'say', who, glyph: null, emoji: item.emoji || null, parts: [{ text: '“' + item.text + '”' }, ...(item.status ? [{ text: ' · ' + item.status, kind: 'status' }] : [])] };
+    case 'say': return { cls: 'say', who, glyph: null, emoji: item.emoji || null, parts: [{ text: item.text }, ...(item.status ? [{ text: ' · ' + item.status, kind: 'status' }] : [])] };
     case 'ko': return item.who == null
-      ? { cls: 'ko', who: name(item.victim), glyph: GLYPH.ko, parts: [{ text: 'knocked out' }] }
-      : { cls: 'ko', who, glyph: GLYPH.ko, parts: [{ text: item.ambush ? 'ambushed ' : 'KO’d ' }, { text: name(item.victim), who: item.victim }] };
+      ? { cls: 'ko', who: name(item.victim), glyph: GLYPH.ko, parts: [{ text: 'KNOCKED OUT' }] }
+      : { cls: 'ko', who, glyph: GLYPH.ko, parts: [{ text: item.ambush ? 'AMBUSHES ' : 'KO ' }, { text: name(item.victim), who: item.victim }] };
     case 'leg': return item.steal
-      ? { cls: 'leg', who, glyph: GLYPH.leg, parts: [{ text: 'grabbed ' }, { text: item.item, kind: 'legn' }, ...(item.from ? [{ text: ' from ' }, { text: name(item.from), who: item.from }] : [])] }
+      ? { cls: 'leg', who, glyph: GLYPH.leg, parts: [{ text: 'STEALS ' }, { text: item.item, kind: 'legn' }, ...(item.from ? [{ text: ' from ' }, { text: name(item.from), who: item.from }] : [])] }
       : item.who == null
-        ? { cls: 'leg', who: name(item.victim), glyph: GLYPH.leg, parts: [{ text: 'dropped ' }, { text: item.item, kind: 'legn' }] }
-        : { cls: 'leg', who, glyph: GLYPH.leg, parts: [{ text: 'KO’d ' }, { text: name(item.victim), who: item.victim }, { text: ', who dropped ' }, { text: item.item, kind: 'legn' }] };
-    case 'pred': return { cls: 'pred', who, glyph: GLYPH.pred, parts: [{ text: 'predicts ' + kos(item.level) }] };
-    case 'res': return { cls: 'res', who, glyph: GLYPH.res, parts: [{ text: 'made ' + kos(item.level) + ': correct' }, ...(item.points ? [{ text: ' +' + item.points + ' points', kind: 'pts' }] : [])] };
-    case 'escape': return { cls: 'escape', who, glyph: null, parts: [{ text: 'escaped at ' + item.hp + ' HP' }] };
+        ? { cls: 'leg', who: name(item.victim), glyph: GLYPH.leg, parts: [{ text: 'DROPS ' }, { text: item.item, kind: 'legn' }] }
+        : { cls: 'leg', who, glyph: GLYPH.leg, parts: [{ text: 'KO ' }, { text: name(item.victim), who: item.victim }, { text: ', who DROPS ' }, { text: item.item, kind: 'legn' }] };
+    case 'pred': return { cls: 'pred', who, glyph: GLYPH.pred, parts: [{ text: 'PREDICTS ' + kos(item.level) }] };
+    case 'res': return { cls: 'res', who, glyph: GLYPH.res, parts: [{ text: 'MADE ' + kos(item.level) + ': CORRECT' }, ...(item.points ? [{ text: ' +' + item.points + ' points', kind: 'pts' }] : [])] };
+    case 'escape': return { cls: 'escape', who, glyph: GLYPH.escape, parts: [{ text: 'ESCAPES at ' + item.hp + ' HP' }] };
     default: return null;
   }
 }
@@ -73,7 +77,7 @@ export class Feed {
     return false;
   }
   devChip() { const c = this.doc.createElement('span'); c.className = 'dev'; c.textContent = 'DEV'; return c; }
-  setNarrow(narrow) { if (narrow !== this.narrow) { this.narrow = narrow; this.render(); } }
+  setNarrow(narrow) { if (narrow !== this.narrow) { this.narrow = narrow; this.box.dataset.reserve = narrow ? String(PHONE_MAX) : ''; this.render(); } }
   shown() { return this.items.slice(-(this.narrow ? LINES.narrow : LINES.wide)); }
   render() {
     const d = this.doc;
@@ -97,5 +101,7 @@ export class Feed {
       li.appendChild(line);
       return li;
     }));
+    // a phone: the box stays within PHONE_MAX; the oldest slips drop out whole until it fits (the newest always shows)
+    if (this.narrow) while (this.list.children.length > 1 && this.box.offsetHeight > PHONE_MAX) this.list.removeChild(this.list.firstChild);
   }
 }
