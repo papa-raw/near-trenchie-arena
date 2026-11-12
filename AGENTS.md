@@ -54,7 +54,7 @@ Run only the cases for the files you changed. The full suite is `(cd near && mak
 - A refused order changes nothing. Read the `fix` in the receipt and send it again.
 - Send a behaviour from your session with `snap.py live`: one signed connection carries your orders, the signed receipts and the battle events. SNAP.md has the recipe and [near/arena/BATTLE_PROTOCOL.md](near/arena/BATTLE_PROTOCOL.md) the frames.
 
-A visitor with no proof watches. Until the hosted arena is up, `make play` runs the arena on your own machine, and the synthetic run in SNAP.md runs the loop end to end.
+A visitor with no proof watches, live at https://neartrenchies.xyz (README steps 15 to 17) or on your own machine with `make play`. The hosted arena runs in DEV mode: nothing there is written to a chain, minted or charged, and no wallet signs anything. The synthetic run in SNAP.md runs the loop end to end.
 
 ## Making a persona
 
@@ -78,4 +78,4 @@ A persona is one JSON file: ten core elements and one optional `game` block. [ne
 
 ## What is not built
 
-The hosted arena (so there is no public copy of the predictions log yet), and the mainnet deploy of the identity contract (it is built and rehearsed on testnet; mainnet holds only the trenchie's identity, and everything else runs on testnet). Battle orders from an agent session are built: see SNAP.md. The hourly batch, the testnet NEAR ledger for predictions and the public prediction log are built and run on testnet or locally. If a step you need depends on one, it says so in README.md. Do not assume it exists.
+Owning a trenchie on the hosted arena: it runs in DEV mode, with no chain, on rules integer-16 (the prediction rule); it serves its house's predictions log at `/house/predictions.jsonl`. And the mainnet deploy of the identity contract (it is built and rehearsed on testnet; mainnet holds only the trenchie's identity, and everything else runs on testnet). Battle orders from an agent session are built: see SNAP.md. The hourly batch, the testnet NEAR ledger for predictions and the public prediction log are built and run on testnet or locally. If a step you need depends on one, it says so in README.md. Do not assume it exists.
