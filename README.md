@@ -391,7 +391,7 @@ Steps 15 to 17 read the hosted arena at <https://neartrenchies.xyz>. It runs in 
     print("owners:", sorted({r["owner"] for r in rows}))
     print("models:", sorted({r["model"] for r in rows}))
     print("rules:", sorted({r["rules_hash"][:12] for r in rows}))
-    print("staked:", sorted({r["stake_yocto"] for r in rows}), "| written to a chain:", sum(r["batch_tx"] is not None for r in rows))
+    print("NEAR added:", sorted({r["stake_yocto"] for r in rows}), "| written to a chain:", sum(r["batch_tx"] is not None for r in rows))
     print(len(rows), "house lives, the last:", rows[-1]["persona"], rows[-1]["spread_pct"], "->", rows[-1]["actual"], "KOs")
     EOF
     ```
@@ -402,11 +402,11 @@ Steps 15 to 17 read the hosted arena at <https://neartrenchies.xyz>. It runs in 
     owners: ['house.dev.local']
     models: ['DeepSeek-V4.1-Flash-1017 on NEAR AI Cloud']
     rules: ['3975d414b4c3', '852a82695da0']
-    staked: ['0'] | written to a chain: 0
+    NEAR added: ['0'] | written to a chain: 0
     175 house lives, the last: avichad [0, 100, 0, 0] -> 1 KOs
     ```
 
-    Every life is the house's, its AI runs on NEAR AI Cloud, nothing is staked and nothing is written to a chain. The log keeps lives from two rules versions. The older ones ran under integer-14 and carry a spread, their percentages for 1, 2, 3 and 4+ KOs. Since its last update the hosted arena runs integer-16, the prediction rule above: each house life predicts one level, all 100 on one bin and 0 for zero KOs, as the last line shows. Its public leaderboards are at <https://neartrenchies.xyz/house/leaderboards.json>.
+    Every life is the house's, its AI runs on NEAR AI Cloud, no NEAR is added to a prediction and nothing is written to a chain. The log keeps lives from two rules versions. The older ones ran under integer-14 and carry a spread, their percentages for 1, 2, 3 and 4+ KOs. Since its last update the hosted arena runs integer-16, the prediction rule above: each house life predicts one level, all 100 on one bin and 0 for zero KOs, as the last line shows. Its public leaderboards are at <https://neartrenchies.xyz/house/leaderboards.json>.
 
 Still pending, with no step to run:
 
