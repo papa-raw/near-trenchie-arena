@@ -47,6 +47,8 @@ class Contracts:
         self.records = {}          # token -> its record {lives, kos, skill}, as the last applied row filed it
         self.applied = set()
         self.nft_paused = False
+        self.mirror = None         # trenchie_nft's mirror (nft-apply-rows): unknown tokens get a record under it
+        self.burned = set()
         # market
         self.open_batch, self.stakes, self.pot, self.market_batches = 0, {}, 0, {}
         self.stakers, self.closed, self.voided, self.now_ns = {}, None, {}, 10 ** 18
@@ -185,7 +187,12 @@ class Contracts:
             raise Panic("batch seq out of order")
         if len(rows) > self.max_rows:
             raise Panic("batch over the row cap")
-        skipped = [r["token_id"] for r in rows if r["token_id"] not in self.tokens]
+        created = []
+        if self.mirror is not None:   # as the contract: a token met for the first time gets its record under the mirror
+            for r in rows:
+                if r["token_id"] not in self.tokens and r["token_id"] not in self.burned:
+                    created.append(r["token_id"])
+        skipped = [r["token_id"] for r in rows if r["token_id"] not in self.tokens and r["token_id"] not in created]
         for r in rows:
             try:
                 batch.check_row(r, self.row_count)
@@ -193,12 +200,15 @@ class Contracts:
                 raise Panic(str(exc))
         self.applied.add(batch_id)
         self.last_seq = seq
+        for t in created:
+            self.tokens.add(t)
+            self.owners[t] = self.mirror
         for r in rows:
             if r["token_id"] in self.tokens:
                 self.bags[r["token_id"]] = [dict(e) for e in r["bag"]]   # the row's bag replaces the token's
                 self.records[r["token_id"]] = dict(r["record"])
         logs.append(event("trenchie_nft", "apply_rows", {"batch_id": batch_id, "rows": len(rows) - len(skipped),
-                                                          "skipped": skipped}))
+                                                          "skipped": skipped, "created": created}))
 
     def view_nft_trenchie(self, token_id):
         if token_id not in self.tokens:

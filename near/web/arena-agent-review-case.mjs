@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Hud } from './arena/hud.mjs';
 import * as social from './arena/social.mjs';
+import * as feed from './arena/feed.mjs';
 const modes = process.argv[2] ? [process.argv[2]] : ['dataset', 'focus', 'name', 'blocked', 'collision'];
 class Element {
   constructor() { this.children = []; this.style = {}; this.dataset = {}; this.className = ''; this.attributes = {}; this.textContent = ''; this.offsetWidth = 90; this.offsetHeight = 20; }
@@ -29,33 +30,18 @@ if (mode === 'dataset') {
 } else if (mode === 'name') {
   const hud = hudFixture(); assert.match(hud.tags.get('dev-pebble').querySelector('.name-notice')?.textContent || '', /name unchecked/);
 } else if (mode === 'blocked') {
-  // the ticker is the live path for a spoken line: a blocked one shows the emote and says so, never the original
-  const line = (row) => social.tickerParts({ type: 'say', row: { who: 'dev-pebble', ...row } }, []).parts.map((p) => p[0]).join(' ');
+  // the merged feed is the live path for a spoken line: a blocked one shows the emote and says so, never the original
+  const line = (row) => { const sl = feed.slip(social.sayItem({ id: 1, who: 'dev-pebble', ...row }), (id) => id); return sl.parts.map((p) => p.text).join(''); };
   assert.match(line({ text:'(o_o)', blocked:true, muted:false, label:null }), /blocked line/);
   assert.doesNotMatch(line({ text:'(o_o)', blocked:true, muted:false, label:null }), /fraud/);
   assert.match(line({ text:'(o_o)', blocked:true, muted:false, label:'autopilot' }), /blocked line · autopilot/);
 } else if (mode === 'collision') {
-  assert.equal(typeof social.placeSpeechPanel, 'function');
-  const intersects = (a,b) => Math.min(a.x+a.w,b.x+b.w) > Math.max(a.x,b.x) && Math.min(a.y+a.h,b.y+b.h) > Math.max(a.y,b.y);
-  for (const width of [390,1440]) {
-    const anchor = { x: 150, y: 200, w: 90, h: 20 };
-    const neighbours = [anchor, {x:140,y:222,w:100,h:25}, {x:142,y:152,w:100,h:35}];
-    const box = social.placeSpeechPanel(anchor, {w:240,h:80}, neighbours, width, 844);
-    assert.ok(box, 'a clear bubble position exists');
-    assert.ok(neighbours.every((tag) => !intersects(box,tag)), 'speech never covers a tag');
-    assert.ok(box.x>=8 && box.y>=8 && box.x+box.w<=width-8 && box.y+box.h<=836);
-    // the live path: the speaker's emoji floats over its tag, placed by the same rule, never over another tag
-    globalThis.document.createElement = () => { const el = new Element(); el.offsetWidth = 240; el.offsetHeight = 80; el.replaceChildren = (...c) => { el.children = c; }; return el; };
-    const root = new Element(), tag = new Element(), view = new social.Social({ roster: [] }, root);
-    view.latest.set('dev-pebble', { text: 'A calm shore.', emoji: '\u{1F5FF}', at: 0 });
-    view.frame(new Map([['dev-pebble', { f: { status: 0 } }]]), { w: width, h: 844, rects: {}, tagRects: [{ ...anchor, id: 'dev-pebble' }, ...neighbours.slice(1)], tags: new Map([['dev-pebble', tag]]), cardRects: [] }, 0);
-    const mark = view.marks.get('dev-pebble'); assert.ok(mark, 'the speaker gets its emoji');
-    assert.equal(mark.parentNode, view.layer, 'the emoji never grows the already-placed tag');
-    assert.equal(mark.attributes['data-fighter-id'], 'dev-pebble');
-    assert.equal(tag.children.length, 0);
-    const actual = {x:parseFloat(mark.style.left),y:parseFloat(mark.style.top),w:240,h:80};
-    assert.ok(neighbours.every((rect) => !intersects(actual,rect)), 'the rendered emoji avoids every tag');
-  }
+  // Q4 (Pat): no emoji over a head, so no speech mark can cover a tag; the emoji rides in the feed line beside the name
+  assert.equal(social.placeSpeechPanel, undefined); assert.equal(social.SAY_EMOJI_MS, undefined);
+  const said = []; const view = new social.Social({ roster: [] }, { onSay: (item) => said.push(item) });
+  view.apply({ version: 1, players: [], feed: [{ id: 7, who: 'dev-pebble', text: 'A calm shore.', emoji: '\u{1F5FF}' }] });
+  const sl = feed.slip(said[0], (id) => id);
+  assert.deepEqual([sl.who, sl.emoji, sl.parts[0].text], ['dev-pebble', '\u{1F5FF}', '“A calm shore.”']);
 } else throw new Error('Choose dataset, focus, name, blocked or collision');
 process.stdout.write(JSON.stringify({ mode, ok: true })+'\n');
 }

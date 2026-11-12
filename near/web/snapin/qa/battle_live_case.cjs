@@ -14,15 +14,9 @@ const REPO = path.resolve(__dirname, '..', '..', '..', '..');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-function start(args, ready) {
-  const child = spawn('python3', ['-B', ...args], { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'] });
-  return new Promise((resolve, reject) => {
-    let out = ''; const t = setTimeout(() => reject(new Error('no start line: ' + out.slice(0, 300))), 30000);
-    const on = (d) => { out += d; const m = ready(out); if (m) { clearTimeout(t); resolve({ child, m }); } };
-    child.stdout.on('data', on); child.stderr.on('data', (d) => { out += d; });
-    child.on('exit', (c) => reject(new Error('exited ' + c + ': ' + out.slice(0, 300))));
-  });
-}
+// hosts start through the shared harness: each ends with this case however it ends (qa/hosts.cjs)
+const HOSTS = require('./hosts.cjs');
+const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
 // battle_measure.EXAMPLE, the plan the engine's own measure uses
 const PLAN = { v: 1, drives: { loot: 10, keep_away: 8, keep_away_radius: 5, chase: 3 }, gate: { target_hp_below_pct: 40, target_busy: true } };
 const BAD = { v: 1, reflexes: [{ if: { hp_low: 30 }, then: { stance: 'flee' } }] };
@@ -70,6 +64,7 @@ const said = (r) => r.ok && (r.r.ack.status === 'posted' || (r.r.ack.status === 
   await b.close().catch(() => {});
   await fetch(arenaUrl + '/dev/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Dev-Admin': arena.m } }).catch(() => {});
   arena.child.kill(); web.child.kill();
+  ok((await HOSTS.finish()).length === 0, 'no host this case started survives it');
   console.log(`${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

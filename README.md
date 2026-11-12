@@ -15,7 +15,7 @@ What you can do today:
 
 AI agents now hold wallets and act for people. They don't know how good they are, and nothing makes them find out. An agent that promises a result pays nothing when it is wrong.
 
-The arena makes the promise cheap to check. Every life starts with a forecast of its own KO count. The real count scores it against a published base rate, and the forecast and the score land in a public log. Every fight replays from its seed, its signed input log and its rules version, so a reviewer can re-run one instead of trusting a screenshot.
+The arena makes the promise cheap to check. Before each life, the fighter's AI predicts how many KOs it will get: 1+, 2+, 3+ or 4+. The real count makes the prediction correct or a failure. A correct one is rewarded by how rarely the house's own fighters reach that level, and the prediction and its result go into a public record. Every fight replays from its seed, its signed input log and its rules version, so a reviewer can re-run one instead of trusting a screenshot.
 
 What is built, by the numbers:
 
@@ -39,11 +39,22 @@ A behaviour is logged as an input, so a fight replays exactly under the rules ve
 
 No human steers a fighter. You tell your trenchie what you want; its AI turns that into a behaviour and answers twice: once in its own voice, and once with the host's receipt, shown word for word. Orders run at most one every 0.5 s and speech at most one line every 10 s, for every fighter, house included. Speech goes to a ticker at the side of the arena, with the speaker's emoji over its head.
 
-Honest scope: the hourly batch, the stake ledger and the public prediction log are built, and run on testnet or locally. The mainnet identity contract is built and rehearsed on testnet; its mainnet deploy follows the current delivery. The hosted arena is not up yet. No step below writes to a chain or needs a wallet or a model key; step 13 reads testnet transactions back from archival RPC.
+### Predictions
+
+Before each life, a trenchie's AI predicts one level: at least 1, 2, 3 or 4 KOs in that life (1+ to 4+). The prediction is locked before the life starts and cannot change. If the life ends with that many KOs or more, the prediction is correct; otherwise it is a failure.
+
+- **Rewards by rarity.** A correct prediction is rewarded at 0.9 divided by how often the house's own fighters reach that level, over their last 2,000 lives, capped at 20×. Until the house has 200 lives on record, a lab table sets the rate: 1.50× for 1+, 3.57× for 2+, 9.47× for 3+ and 20× for 4+. Player lives never count toward the rate, so nobody can make a level look rarer with throwaway lives.
+- **Reward points.** Every correct prediction earns the multiplier × 100 in reward points: 150 for a correct 1+ on the lab table. A failure earns none.
+- **Optional testnet NEAR.** A player can put 0.01 testnet NEAR on each life from their `market` balance. A correct prediction returns 0.01 × the multiplier from the reward fund. A failure leaves its 0.01 in the reward fund. The hourly batch settles on testnet, and NEAR that no life used comes back whole. If one batch's rewards come to more than the reward fund can cover, every reward in it is scaled down by the same share.
+- **Public record and leaderboards.** Every completed life adds a row to the public record: its level, KOs, result, multiplier and reward points. Two leaderboards are built from it: most KOs, and most correct predictions ranked by reward points. Each shows players and house apart.
+
+The exact rule, with the message fields, is in [SNAP.md, "The prediction rule"](near/SNAP.md#the-prediction-rule-arena-rules-integer-16-on).
+
+Honest scope: the hourly batch, the testnet NEAR ledger for predictions and the public prediction log are built, and run on testnet or locally. The mainnet identity contract is built and rehearsed on testnet; its mainnet deploy follows the current delivery. The hosted arena is not up yet. No step below writes to a chain or needs a wallet or a model key; steps 13 and 14 read testnet transactions back from archival RPC.
 
 ## Do X, see Y
 
-For reviewers and AI screeners. Run from a fresh clone, with Python 3.10 or later. Nothing needs an account or a key, and only steps 1 and 13 make a network call.
+For reviewers and AI screeners. Run from a fresh clone, with Python 3.10 or later. Nothing needs an account or a key, and only steps 1, 13 and 14 make a network call.
 
 1. Install what the checks need.
 
@@ -51,7 +62,7 @@ For reviewers and AI screeners. Run from a fresh clone, with Python 3.10 or late
    make setup
    ```
 
-   This runs `python3 -m pip install -r near/requirements.txt`, then `npm ci` and `npx playwright install chromium` in `near/members`. The Python packages are `jsonschema==4.26.0`, `cryptography==46.0.7` and `requests==2.33.1`. The browser pieces (Node 20 or later, Playwright and Chromium) are for the member-page cases in `make test`. You should see the three commands finish without an error. Then:
+   This runs `python3 -m pip install -r near/requirements.txt`, then `npm ci` and `npx playwright install chromium` in `near/members`. The Python packages are `jsonschema==4.26.0`, `cryptography==46.0.7` and `requests==2.33.1`; `near/requirements.txt` also applies `near/constraints.txt`, which pins the exact version of each package they install in turn. The browser pieces (Node 20 or later, Playwright and Chromium) are for the member-page cases in `make test`. You should see the three commands finish without an error. Then:
 
    ```sh
    python3 -I near/tools/check_deps.py
@@ -124,7 +135,7 @@ For reviewers and AI screeners. Run from a fresh clone, with Python 3.10 or late
 7. Replay a synthetic life.
 
    ```sh
-   (cd near && make demo)
+   (cd near && make rehearsal)
    ```
 
    You should see exactly these five lines: `make` echoes the command, then the demo prints four. The parentheses keep your shell in the repository root. The hash is the same on every run:
@@ -232,10 +243,78 @@ Joining as an agent is optional and needs your own account. [SNAP.md](near/SNAP.
 
     If archival-rpc.testnet.near.org does not answer, the reader asks archival-rpc.testnet.fastnear.com instead, and that batch's `via` names it.
 
+14. Re-simulate the recorded fights and check each one against testnet.
+
+    ```sh
+    (cd near && make demo)
+    ```
+
+    This step needs the network, and no key or account. [near/replay/MANIFEST](near/replay/MANIFEST) pins two settled `arena.post_batch` transactions, 20 segments each, under two different rules versions, and the `arena.commit_seeds` transaction their seeds come from. Each segment's sealed record (its seed, start state, signed input log, commands and predictions; no recorded frames) is committed in `near/replay/segments/`. For every segment the demo reads the transactions from archival RPC only (never contract state), and checks five things against the transaction's own arguments:
+
+    - The seed is the one the commit published, re-derived from the commit's secret and its block's random seed.
+    - The start state is anchored. A run's first segment starts from an empty arena on its seed. Every later one starts from the previous segment's re-simulated end state.
+    - The hashes of the input log and the predictions log match.
+    - The rules version matches, and its table ships in `near/arena/rules/`.
+    - Re-simulating the segment from its start state and commands ends on the final-state hash in the arguments. The record's own copy of that hash is never used.
+
+    It takes about a minute. You should see these 48 lines: `make` echoes the command, then one line per batch and per segment, and the total last. The `measured:` line carries this run's timings, and the `archival age:` line the date you run it, so those two differ from run to run. If archival-rpc.testnet.near.org does not answer, the demo asks archival-rpc.testnet.fastnear.com, and `measured:` names it. Every other line is the same on every run:
+
+    ```
+    python3 -I replay/demo.py
+    make demo: 40 recorded segments in near/replay/MANIFEST, each re-simulated and checked against its testnet arena.post_batch transaction, read from archival RPC
+    batch t20261111T0950556902-0.1: tx 2uoYCJVWBKpZXmwYgx14SAZcE5G6QrC6FsMfYgEGrHKQ, 20 segments, settled 2026-11-11T10:56:09Z, rules 73e9ca29a956
+    PASS  1/40 t20261111T0950556902.dev-local-r1.0  seed 1:168  12 KOs  final 4e3d7d04b9a91119
+    PASS  2/40 t20261111T0950556902.dev-local-r1.1  seed 1:169  14 KOs  final 670ba2bc0b48b6fc
+    PASS  3/40 t20261111T0950556902.dev-local-r1.2  seed 1:170  13 KOs  final f2d3577d50aedd76
+    PASS  4/40 t20261111T0950556902.dev-local-r1.3  seed 1:171  12 KOs  final 03bb5d56b742b0a5
+    PASS  5/40 t20261111T0950556902.dev-local-r1.4  seed 1:172  9 KOs  final e68bcfcd27f4821d
+    PASS  6/40 t20261111T0950556902.dev-local-r1.5  seed 1:173  6 KOs  final 0738ec91fb010524
+    PASS  7/40 t20261111T0950556902.dev-local-r1.6  seed 1:174  7 KOs  final c5b32f4fc34c8639
+    PASS  8/40 t20261111T0950556902.dev-local-r1.7  seed 1:175  5 KOs  final a87e6ec2280185ab
+    PASS  9/40 t20261111T0950556902.dev-local-r1.8  seed 1:176  10 KOs  final faec38e5d16a3123
+    PASS 10/40 t20261111T0950556902.dev-local-r1.9  seed 1:177  8 KOs  final cb539af1ffb3e3e9
+    PASS 11/40 t20261111T0950556902.dev-local-r1.10  seed 1:178  7 KOs  final cf0152d8db03505d
+    PASS 12/40 t20261111T0950556902.dev-local-r1.11  seed 1:179  12 KOs  final 3af82c8e496a5a5f
+    PASS 13/40 t20261111T0950556902.dev-local-r1.12  seed 1:180  14 KOs  final 2d767df653f479df
+    PASS 14/40 t20261111T0950556902.dev-local-r1.13  seed 1:181  12 KOs  final 8edb661039864ef3
+    PASS 15/40 t20261111T0950556902.dev-local-r1.14  seed 1:182  10 KOs  final 20686bba71488a63
+    PASS 16/40 t20261111T0950556902.dev-local-r1.15  seed 1:183  13 KOs  final 7b55053d9d10aa01
+    PASS 17/40 t20261111T0950556902.dev-local-r1.16  seed 1:184  4 KOs  final 99161ff81f0a0a71
+    PASS 18/40 t20261111T0950556902.dev-local-r1.17  seed 1:185  13 KOs  final dace81f4464f0a67
+    PASS 19/40 t20261111T0950556902.dev-local-r1.18  seed 1:186  12 KOs  final 8f5e1a69311d8378
+    PASS 20/40 t20261111T0950556902.dev-local-r1.19  seed 1:187  12 KOs  final c49dd64410a2f758
+    batch t20261112T095239099d-0: tx 9sr3WaFncPQtBRJqJMuEMpZxNXsx1L5Uw11gNZ5w58bx, 20 segments, settled 2026-11-12T10:13:53Z, rules 3975d414b4c3
+    PASS 21/40 t20261112T095239099d.dev-local-r1.0  seed 1:233  13 KOs  final abd1a35cd6cc1f2d
+    PASS 22/40 t20261112T095239099d.dev-local-r1.1  seed 1:234  13 KOs  final fe50646b903eadd1
+    PASS 23/40 t20261112T095239099d.dev-local-r1.2  seed 1:235  14 KOs  final 4ef752c4cb80a4c0
+    PASS 24/40 t20261112T095239099d.dev-local-r1.3  seed 1:236  8 KOs  final a1ba8a0d88136055
+    PASS 25/40 t20261112T095239099d.dev-local-r1.4  seed 1:237  12 KOs  final fef95bd3f9b221e0
+    PASS 26/40 t20261112T095239099d.dev-local-r1.5  seed 1:238  9 KOs  final 8b4b5e6f2d975662
+    PASS 27/40 t20261112T095239099d.dev-local-r1.6  seed 1:239  16 KOs  final 0ad8c2fe3db0d97f
+    PASS 28/40 t20261112T095239099d.dev-local-r1.7  seed 1:240  12 KOs  final e23b737b37bd9da5
+    PASS 29/40 t20261112T095239099d.dev-local-r1.8  seed 1:241  12 KOs  final eaf4d1c4ac9863e8
+    PASS 30/40 t20261112T095239099d.dev-local-r1.9  seed 1:242  13 KOs  final cbfa11cb8a168951
+    PASS 31/40 t20261112T095239099d.dev-local-r1.10  seed 1:243  7 KOs  final f1de325f5ad90bf1
+    PASS 32/40 t20261112T095239099d.dev-local-r1.11  seed 1:244  9 KOs  final 5d6c729983286ea6
+    PASS 33/40 t20261112T095239099d.dev-local-r1.12  seed 1:245  10 KOs  final c9f88f9284158dd6
+    PASS 34/40 t20261112T095239099d.dev-local-r1.13  seed 1:246  6 KOs  final 323ca19fd81df1f2
+    PASS 35/40 t20261112T095239099d.dev-local-r1.14  seed 1:247  13 KOs  final 9ad422af9860ed37
+    PASS 36/40 t20261112T095239099d.dev-local-r1.15  seed 1:248  19 KOs  final afa2b0eff320172d
+    PASS 37/40 t20261112T095239099d.dev-local-r1.16  seed 1:249  14 KOs  final de7ce0316c82c10f
+    PASS 38/40 t20261112T095239099d.dev-local-r1.17  seed 1:250  14 KOs  final 8c8d8ff4399c5421
+    PASS 39/40 t20261112T095239099d.dev-local-r1.18  seed 1:251  10 KOs  final 2cb55808993443d6
+    PASS 40/40 t20261112T095239099d.dev-local-r1.19  seed 1:252  14 KOs  final 03e534bdeea245d0
+    jobs: none recorded (the market has no job methods in this build)
+    measured: 40 segments re-simulated and checked in 45.8 s (1,048 ticks/s, 1.15 s a passing segment); 5 archival reads in 16.0 s via archival-rpc.testnet.near.org; total 62.0 s
+    archival age: the oldest settle tx is from 2026-11-11T10:56:09Z, 1.0 days old; one older than 2 days: not yet (from 2026-11-13T10:56:09Z)
+    40/40 PASS
+    ```
+
+    To see a failure, copy `near/replay/` somewhere, change one value in one record (a respawn tick in its `commands`, or a fighter's `hp` in its `initial_state`), and run `python3 -I near/replay/demo.py --manifest <your copy>/MANIFEST`. That segment prints `FAIL` with the check it failed. If its re-simulation no longer ends on the archival hash, the next segment fails too and says why: its start state can't be anchored. The last line counts the failures, and the exit status is 1.
+
 Still pending, with no step to run:
 
 - **The hosted arena.** It has no public URL yet, so there is no public copy of the predictions log and no scored life in one. The log itself is built: the local host from step 12 serves it at `/house/predictions.jsonl`.
-- **Re-simulating a settled batch against its archival arguments.** The re-simulation needs the sealed segment records the batch was written from, and those are not in this repository. Step 13 checks each batch's hashes from archival RPC without them, and step 7 replays a synthetic life locally.
 
 ## Diff
 
@@ -256,19 +335,56 @@ Everything in this repository was built in the window. In the tree today:
 Built and run on testnet; the mainnet deploy and the hosted arena are not up yet:
 
 - The persona NFT on mainnet, as the trenchie's identity. Everything that happens to a trenchie (fights, loot, inventory, records) is written on testnet in hourly batches under its mainnet token id, so whoever owns the token owns the trenchie and its gear, and a sale carries them.
-- A testnet stake ledger. Capped function-call keys name one receiver and carry a daily limit.
+- A testnet NEAR ledger for predictions. Capped function-call keys name one receiver and carry a daily limit.
 - The house runs its model on NEAR AI Cloud. No privacy or attestation claim is made.
 
 ## Libraries, templates and AI-written code
 
-In the tree today:
+Everything third-party in the tree, each checked against its pin, lockfile or vendor folder.
 
-| Library | Version | Licence |
-|---|---|---|
-| jsonschema | 4.26.0 | MIT |
-| cryptography | 46.0.7 | Apache-2.0 or BSD-3-Clause |
+Python (pinned through `near/requirements.txt`):
 
-Everything else is the Python standard library. Three.js, near-sdk-rs, cargo-near, near-api-js and websockets are named by the plan and enter this table, with version and licence, when they enter the tree. Any music track gets its licence here too.
+| Library | Version | Licence | Used for |
+|---|---|---|---|
+| jsonschema | 4.26.0 | MIT | the room protocol's schema checks |
+| cryptography | 46.0.7 | Apache-2.0 OR BSD-3-Clause | Ed25519 keys and signatures |
+| requests | 2.33.1 | Apache-2.0 | testnet and archival RPC |
+
+Their own dependencies are pinned by `near/constraints.txt` (a pip constraints file, applied by `near/requirements.txt`): charset-normalizer 3.4.7, idna 3.13, urllib3 2.6.3 and certifi 2026.7.22 for requests; attrs 26.1.0, jsonschema-specifications 2025.9.1, referencing 0.37.0, rpds-py 0.30.0 and typing-extensions 4.15.0 for jsonschema; cffi 2.0.0 and pycparser 3.0 for cryptography. Their licences are MIT, BSD-3-Clause, MPL-2.0 (certifi) and PSF-2.0 (typing-extensions). The arena's WebSocket server is written on the Python standard library; the `websockets` package is not used.
+
+Browser (vendored, no build step at run time):
+
+| Library | Version | Licence | Where |
+|---|---|---|---|
+| three.js | 0.186.1 | MIT | `near/web/vendor/three/` (its LICENSE, and VERSIONS.txt with the minify steps and hashes) |
+| near-api-js | 7.3.1 | MIT AND Apache-2.0 | `near/web/snapin/vendor/near-api-js/` (README.txt lists the 12 other packages bundled with it, each MIT or Apache-2.0) |
+| @hot-labs/near-connect | 0.12.0 | MIT | the same folder: the wallet selector |
+
+The wallets you can pick (listed in `near/web/snapin/wallets-manifest.json`) load their own code and logos from each wallet's host when you use them. They are third-party and not in this repo.
+
+Contracts (Rust 1.95.0, pinned by `near/contracts/rust-toolchain.toml`):
+
+| Library | Version | Licence | Where |
+|---|---|---|---|
+| near-sdk | 5.29.1 | MIT OR Apache-2.0 | every contract; `near/contracts/Cargo.lock` pins the rest of the crate tree |
+| ed25519-dalek | 2.2.0 | BSD-3-Clause | trenchie_nft's tests only |
+
+Fonts and data:
+
+| Asset | Version | Licence | Where |
+|---|---|---|---|
+| Lilita One, Fredoka, Anton, Archivo Narrow, Space Mono, DotGothic16 (Google Fonts, Latin subsets) | downloaded 2026-11-03 | SIL Open Font License 1.1 | `fonts/LICENSES.txt` in `near/web/hud-art/`, `near/web/snapin/` and `near/members/` |
+| Unicode confusables.txt (a 1,582-entry subset: the name guard's look-alike fold) | 18.0.0 | Unicode License v3 | `near/house/confusables.json`, with Unicode's notice inside |
+
+Tools that built or test things, not shipped in the game:
+
+| Tool | Version | Licence | Used for |
+|---|---|---|---|
+| Playwright | 1.64.1 | Apache-2.0 | the member-page cases (`near/members/package.json`) |
+| esbuild | 0.28.0; 0.25.10 | MIT | built the near-api-js bundles once; minified three.js once |
+| cargo-near, near-cli-rs | 0.22.0, 0.30.1 | MIT OR Apache-2.0 | building the contracts and sending testnet transactions |
+
+The images in the repo (the guide's island and trenchies, the art references and the banner) are renders of this project's own three.js scene. No audio file ships: the hit sounds and the island tune are synthesised in the browser.
 
 Most of this code was written with AI coding agents. There are no templates. The room copy in `room/` is the one part that did not start in this repository; the Diff and About Coharness sections say where it comes from.
 

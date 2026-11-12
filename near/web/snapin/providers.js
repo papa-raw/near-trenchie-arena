@@ -15,6 +15,7 @@
  *   NEAR AI Cloud  https://cloud-api.near.ai/v1/chat/completions   (Bearer key; no special header)
  *   Anthropic      https://api.anthropic.com/v1/messages            (needs anthropic-dangerous-direct-browser-access: true)
  *   OpenRouter     https://openrouter.ai/api/v1/...                 (no special header)
+ *   OpenAI (Codex) https://api.openai.com/v1/chat/completions        (Bearer key; no special header)
  * Hand-off doors (Claude Code, Codex): SnapProviders.snap.* talks to <base>/snap/code, which is NOT
  * a built endpoint yet (SNAP.md asserts no hosted origin); spike/snap-stub.py stands in for it.
  */
@@ -26,6 +27,8 @@
   var ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
   var ANTHROPIC_MODEL = 'claude-haiku-5-5';
   var OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
+  var OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+  var OPENAI_MODEL = 'gpt-6-luna';   // the model OpenRouter lists as openai/gpt-6-luna; UNVERIFIED live until a real key answers
   var OPENROUTER_AUTH = 'https://openrouter.ai/auth';
   // Cheap, long-lived default; the caller may pass {model}. UNVERIFIED that it is live on the day of play.
   var OPENROUTER_MODEL = 'openai/gpt-6-luna';   // current and cheap on openrouter.ai's model list, read 2026-11-11
@@ -160,7 +163,11 @@
 
   /* ---------- Claude Console key ("Use plan credits") ---------- */
 
+  // 2026-11-12, the same run: with the opt-in header, POST /v1/messages from http://127.0.0.1:8197 came back type cors,
+  // status 401, access-control-allow-origin: *, body read (as on 2026-11-06); without the header the browser blocks it.
   var claude = {
+    corsChecked: true,
+    corsEvidence: 'passed 2026-11-12: type cors, 401 read, access-control-allow-origin * (with anthropic-dangerous-direct-browser-access)',
     test: async function (key, opts) {
       var headers = {
         'content-type': 'application/json',
@@ -184,6 +191,36 @@
       var say = '';
       try { say = r.body.content.filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('').trim(); } catch (e) { say = ''; }
       return { ok: true, say: say, status: r.status };
+    }
+  };
+
+  /* ---------- Codex with an API key (OpenAI) ---------- */
+
+  // The guide offers the Codex KEY row only when corsChecked is true: CLAUDE.md gate 5, a real browser call from a page
+  // origin to api.openai.com read back with response type 'cors' (the record: corsEvidence).
+  // 2026-11-12, headless Chromium 156 from the guide's origin (http://127.0.0.1:8197), fake key: BLOCKED. The preflight passes
+  // (200, access-control-allow-origin echoed, authorization,content-type allowed), but POST /v1/chat/completions answers a
+  // bad key with a 401 that carries no access-control-allow-origin, so the browser cannot read it ("No
+  // 'Access-Control-Allow-Origin' header is present"). /v1/models is readable (type cors, 401). Whether a valid key's 200
+  // carries the header is unproved: it needs one call with a real key. Until then the KEY row stays off.
+  var CODEX_CORS = { checked: false, evidence: 'blocked 2026-11-12: chat/completions 401 has no access-control-allow-origin (fake key); a valid key is untested' };
+
+  var codex = {
+    get corsChecked() { return CODEX_CORS.checked; },
+    get corsEvidence() { return CODEX_CORS.evidence; },
+    test: async function (key, opts) {
+      var r = await call(OPENAI_URL, {
+        method: 'POST',
+        headers: bearerJson(key),
+        body: JSON.stringify({
+          model: (opts && opts.model) || OPENAI_MODEL,
+          messages: [{ role: 'user', content: HI_PROMPT }],
+          max_completion_tokens: 24
+        })
+      }, opts, key);
+      if (isFail(r)) return r;
+      if (r.status !== 200) return httpFail(r, key);
+      return { ok: true, say: chatSay(r.body), status: r.status };
     }
   };
 
@@ -375,9 +412,9 @@
   };
 
   var api = {
-    nearai: nearai, claude: claude, openrouter: openrouter, snap: snap,
+    nearai: nearai, claude: claude, codex: codex, openrouter: openrouter, snap: snap,
     mask: mask, classify: classify,
-    constants: { NEARAI_URL: NEARAI_URL, NEARAI_MODEL: NEARAI_MODEL, ANTHROPIC_URL: ANTHROPIC_URL, ANTHROPIC_MODEL: ANTHROPIC_MODEL, OPENROUTER_BASE: OPENROUTER_BASE, OPENROUTER_MODEL: OPENROUTER_MODEL }
+    constants: { NEARAI_URL: NEARAI_URL, NEARAI_MODEL: NEARAI_MODEL, ANTHROPIC_URL: ANTHROPIC_URL, ANTHROPIC_MODEL: ANTHROPIC_MODEL, OPENROUTER_BASE: OPENROUTER_BASE, OPENROUTER_MODEL: OPENROUTER_MODEL, OPENAI_URL: OPENAI_URL, OPENAI_MODEL: OPENAI_MODEL }
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

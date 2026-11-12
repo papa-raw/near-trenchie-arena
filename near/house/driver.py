@@ -101,12 +101,32 @@ class ArenaDriver:
         name = binding["nft_token_id"]
         return self.chosen.pop(name, None) or {k: v for k, v in self.arena.sim.rules["house"][name]["kit"].items()}
 
+    @staticmethod
+    def level_of(spread, zero):
+        """The level a spread backs: the highest L in 1..4 whose own P(>= L KOs) is at least 50%, or None.
+
+        `spread` is whole percents for exactly 1, 2, 3 and 4+ KOs given at least one, and `zero` the percent chance of
+        none, so P(>= L) = (100 - zero) * (spread[L-1] + ... + spread[3]) / 100. Compared in integers: no rounding."""
+        level = None
+        for index in range(4):
+            if 2 * (100 - zero) * sum(spread[index:]) >= 100 * 100:
+                level = index + 1
+        return level
+
     def apply_pick(self, name, value):
         b, m = self.bindings[name], self.arena.members.get(name)
         if m is None or m["life_id"] in self.arena.locks:
             return None
         life_id, spread, zero = m["life_id"], value["spread_pct"], value["zero_pct"]
         pick = None
+        if value["prediction"]:
+            # A prediction counts as one level (all 10000 on one bin). The model answers a spread; the house locks the
+            # level that spread gives at least an even chance, or no prediction when even 1+ is under 50%.
+            level = self.level_of(spread, zero)
+            if level is None:
+                value = dict(value, prediction=False)
+            else:
+                spread, zero = [100 if bin_ == level else 0 for bin_ in range(1, 5)], 0
         if value["prediction"]:
             if value.get("loadout"):
                 kit = dict(self.arena.sim.rules["house"][name]["kit"])

@@ -9,6 +9,11 @@ scale 0.25-4 per axis, at most 40 nodes after kit expansion and 4 KB as authored
 slot box after scale, rotate and translate, a kit id that names a base in the kit for that slot, a
 name that passes the banned-word list, and the row agreeing with the rules table.
 
+Limits versions: an item is checked under the limits it was made with, never under a later one, so a released
+item keeps validating and keeps its hash. An item without a "limits" field is trenchie-item-limits/1
+(limits.json); one naming "trenchie-item-limits/2" (limits-2.json: Pat's wider weapon box, item 57) is checked
+under /2. Every line the checker prints names the version it used.
+
 Run: python3 -I near/items/check_items.py [--specs DIR] [--kit FILE]
 """
 import argparse
@@ -26,6 +31,10 @@ SIZE_FIELDS = {"sphere": ("r",), "hemisphere": ("r",), "cylinder": ("r", "h"), "
                "box": ("w", "h", "d"), "torus": ("r", "tube"), "tube": ("width",), "plate": ("w", "h")}
 
 
+FIRST = "trenchie-item-limits/1"
+VERSIONS = {FIRST: HERE / "limits.json", "trenchie-item-limits/2": HERE / "limits-2.json"}   # released: never edited
+
+
 def load_limits(path: str | Path = HERE / "limits.json") -> dict:
     limits = json.loads(Path(path).read_text())
     limits["banned_words"] = [
@@ -33,6 +42,31 @@ def load_limits(path: str | Path = HERE / "limits.json") -> dict:
         for word in limits["banned_words"]
     ]
     return limits
+
+
+def limits_named(name: str) -> dict:
+    """The released limits version `name`; its file must say it is that version."""
+    if name not in VERSIONS:
+        raise ValueError("unknown limits version %r (known: %s)" % (name, ", ".join(sorted(VERSIONS))))
+    limits = load_limits(VERSIONS[name])
+    if limits["spec"] != name:
+        raise ValueError("%s says it is %s, not %s" % (VERSIONS[name].name, limits["spec"], name))
+    return limits
+
+
+def version_of(spec) -> str:
+    """The limits version an item was made under: its "limits" field, else /1."""
+    return spec.get("limits", FIRST) if isinstance(spec, dict) else FIRST
+
+
+def check(spec, rules, kit):
+    """(the limits version used, the errors) for one item, checked under the version it names."""
+    name = version_of(spec)
+    try:
+        limits = limits_named(name)
+    except ValueError as exc:
+        return name, [str(exc)]
+    return name, check_item(spec, rules, kit, limits)
 
 
 def canonical_size(spec):
@@ -141,6 +175,8 @@ def expand(spec, kit):
 def check_item(spec, rules, kit, limits):
     errors = []
     name = spec.get("id", "?")
+    if version_of(spec) != limits["spec"]:
+        errors.append("item was made under %s, checked here under %s" % (version_of(spec), limits["spec"]))
     if spec.get("spec") != "trenchie-item/3":
         errors.append("spec must be trenchie-item/3")
     row = rules["items"].get(spec.get("id"))
@@ -208,11 +244,18 @@ def check_item(spec, rules, kit, limits):
     return errors
 
 
-def check_dir(specs_dir, kit, rules, limits):
+def check_dir(specs_dir, kit, rules, limits=None):
+    """{file: errors}, each item under the limits it names (or under `limits`, if given); see versions_used."""
     results = {}
     for path in sorted(Path(specs_dir).glob("*.json")):
-        results[path.name] = check_item(json.loads(path.read_text()), rules, kit, limits)
+        spec = json.loads(path.read_text())
+        results[path.name] = check(spec, rules, kit)[1] if limits is None else check_item(spec, rules, kit, limits)
     return results
+
+
+def versions_used(specs_dir):
+    """{file: the limits version its item names}."""
+    return {path.name: version_of(json.loads(path.read_text())) for path in sorted(Path(specs_dir).glob("*.json"))}
 
 
 def main(argv):
@@ -220,13 +263,17 @@ def main(argv):
     parser.add_argument("--specs", type=Path, default=HERE / "fixtures")
     parser.add_argument("--kit", type=Path, default=HERE / "fixtures" / "kit" / "kit.json")
     args = parser.parse_args(argv)
-    limits, rules = load_limits(), sim.DEFAULT_RULES
+    rules = sim.DEFAULT_RULES
     kit = json.loads(args.kit.read_text())
-    results = check_dir(args.specs, kit, rules, limits)
+    results, used = check_dir(args.specs, kit, rules), versions_used(args.specs)
     bad = {k: v for k, v in results.items() if v}
     for name, errors in sorted(bad.items()):
-        print("FAIL", name, "; ".join(errors))
-    print("%d/%d items valid (%s)" % (len(results) - len(bad), len(results), args.specs))
+        print("FAIL", name, "(%s)" % used[name], "; ".join(errors))
+    counts = {}
+    for v in used.values():
+        counts[v] = counts.get(v, 0) + 1
+    print("%d/%d items valid (%s), under %s" % (len(results) - len(bad), len(results), args.specs,
+                                                ", ".join("%s x%d" % (v, n) for v, n in sorted(counts.items()))))
     final = HERE / "specs"
     print("rules-table specs: %s" % ("checked above" if args.specs == final else
           "none yet (the kit board V3 writes near/items/specs and kit.json)" if not final.exists() else

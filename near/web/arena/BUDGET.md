@@ -160,3 +160,14 @@ These are layout/text changes only. No new scene or simulation cost measurement 
 Pat picked draft c, red candles, as the telegraph look (2026-11-11). It is the default; `?tele=a` and `?tele=b` show the other drafts and `?tele=old` the earlier flat danger shape. `&tele_n=N` adds N view-only stress telegraphs to the budget scene (lobbed circles of 1.2 to 4 tiles, which carry the most candles, and beam lines; each lives 2 s), and the result records `teleLook`, `teleStress` and `telegraphsLive` (min and max over the measured frames).
 
 Each telegraph is one shader quad plus one instanced candle mesh. The candles cast no shadow (lever 2, already in force for effects). An expired telegraph waits in a pool by shape and size (at most 8 a shape) and is reused: before the pool, every telegraph built a new material and candle mesh, and crowd 2 failed line 2 (3.1% at 1455x748; the old flat look 1.8% on the same run pair). With the pool, the budget scene and crowds 1 to 3 pass lines 1 to 3 at 12 to 18 live telegraphs, and crowd 2 passes at 20 to 26. The runs, with `renderer.info`, viewport and machine load, are kept with the review notes, outside this repo. No DPR, effect-count, aggro-line, fighter-count or low-tier lever was used. Line 4 and the 4x throttled run belong to a human viewer.
+
+## Board 2: the HUD is DOM, not the panel art (2026-11-12)
+
+This supersedes the panel-paint sections above for the board, the feed, the buttons, the lead banner and the legendary
+receipt; they stay as the record of the earlier HUD. The approved board 2 (direction C, "Wall sign") draws those as plain
+DOM (`hud.mjs`, `sign.mjs`, `feed.mjs`, `corner.mjs`, `board2.css`): the sign and the feed change only when their data
+does, and the per-body pieces (tags with their circles, the crowd card, the floor sign, the pre-jump card) are moved by a
+transform each frame. The panel cache (`hud-cache.mjs`), the client leaderboard and the roster chips went with it. The HP
+candles are still the frozen panel art's, drawn once per level and cloned per body. In a headless lane (single-process
+swiftshader, ~0.5 frames a second) `Hud.frame` measured 1.4 ms a frame (layoutHud 0.7, placeTags 0.7); the budget test
+itself is the critic's, in a real Chrome.

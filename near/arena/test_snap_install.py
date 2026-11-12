@@ -67,6 +67,8 @@ def installed_projects(path: Path) -> set[str]:
             line = raw.split('#', 1)[0].strip()
             if line.startswith('-r '):
                 pending.append(current.parent / line[3:].strip())
+            elif line.startswith('-c '):
+                continue                  # a constraints file pins versions; it installs nothing
             elif line:
                 projects.add(re.split(r'[<>=!~\[]', line, maxsplit=1)[0].lower().replace('-', '_'))
     return projects

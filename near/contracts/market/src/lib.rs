@@ -248,6 +248,24 @@ impl Market {
         U128(balance)
     }
 
+    /// Native NEAR into the reward fund (r5-predict: the operator's 0.5 testnet NEAR seed; anyone may add).
+    /// It credits no account and writes no record, so it pays no storage fee; the fund grows by exactly the
+    /// deposit, so solvency holds. Rewards for correct predictions are paid from this fund at `resolve`.
+    #[payable]
+    pub fn fund_rewards(&mut self) -> U128 {
+        let attached = env::attached_deposit().as_yoctonear();
+        require!(attached > 0, "fund_rewards needs attached NEAR");
+        self.pot += attached;
+        emit(
+            "fund_rewards",
+            near_sdk::serde_json::json!({
+                "account_id": env::predecessor_account_id(), "amount": U128(attached), "fund_after": U128(self.pot),
+            }),
+        );
+        self.assert_solvent();
+        U128(self.pot)
+    }
+
     // --------------------------------------------------------------- staking
 
     /// Lock `amount` from the ledger for the open stake batch.

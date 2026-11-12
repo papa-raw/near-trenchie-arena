@@ -16,11 +16,18 @@ protocol defines only a mainnet context, so its `network_id` field must read "ma
 `dev-nft.local` and `dev-arena.local`, which exist on no chain, and the deployment id is `dev-local-r<round>`.
 Every DEV trenchie is `dev-<name>` in the feed, in `/dev/players` and on its card. Loopback only: the host
 refuses any Host header but its own, takes POSTs only as application/json, and allows cross-origin reads of
-`/dev/players` and `/dev/health` from the first-look page's origin alone. Never expose this port.
+`/dev/players` and `/dev/health` from the first-look page's origin alone. Never expose this port directly.
+
+Hosted (`--public-origin https://<name>`, run by `make play` behind nginx, inside a capped container): the same DEV
+arena, with three differences. The public name joins the Host and Origin checks; the client address is nginx's
+X-Real-IP, so the room's per-address limits see each visitor; and /dev/shutdown does not exist (404), with no admin
+token printed. nginx stays in front: it terminates TLS, rate-limits and times out the public sockets, and refuses
+the admin route too. It is still DEV: no wallet, chain or NFT.
 
 One round: a join with no DEV trenchie present starts a fresh arena, so the joiner's life falls inside
-segment:0 (the only segment the result reader supports); the round's results stay readable until the next
-round starts. The 14 house trenchies fill the ring (six at most) and yield seats at their life boundaries.
+segment:0; a join while another DEV trenchie keeps the round going lands in a later segment, and the result
+reader signs every sealed segment for the lives locked, started and ended inside it. The round's results stay
+readable until the next round starts. The 14 house trenchies fill the ring (six at most) and yield seats at their life boundaries.
 """
 from __future__ import annotations
 
@@ -30,12 +37,15 @@ import base64
 import copy
 import hashlib
 import hmac
+import inspect
+import ipaddress
 import json
 import os
 import re
 from pathlib import Path
 import secrets
 import shlex
+import shutil
 import sys
 import tempfile
 import time
@@ -45,8 +55,10 @@ from urllib.parse import parse_qs, urlsplit
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path[:0] = [str(ROOT), str(HERE)]
+import battle_protocol  # noqa: E402
 import codec  # noqa: E402
 import dev_brawl  # noqa: E402
+import predict  # noqa: E402
 import presets as battle_options  # noqa: E402
 from dev_persona import check_sheet, sheet_digest, check_look, check_display_name  # noqa: E402
 from near.house.feed import PublicFeed  # noqa: E402
@@ -124,11 +136,24 @@ ORIGIN = "http://127.0.0.1:8181"  # the first-look page; the only origin allowed
 LOOPBACK_ORIGIN = re.compile(r"http://(127\.0\.0\.1|localhost)(:[0-9]{1,5})?")  # who may read /house/*
 
 
-def make_contexts(port: int, index: int) -> tuple[dict, dict]:
+PUBLIC_ORIGIN = re.compile(r"https://[a-z0-9.-]+(:[0-9]{1,5})?")  # a hosted arena's own origin: scheme and name only
+
+
+# What the start lines say about the chain; a host that adds one (near/chain/hosted_live.py) says so here.
+MODE_NOTE = "No wallet, chain or NFT."
+
+
+def player_token(name: str) -> bool:
+    """A joiner's fighter (not a house one). DEV joiners are `dev-` ids; a host that seats players under onchain token
+    ids (near/chain/hosted_live.py) widens this to the tokens it registered."""
+    return name.startswith("dev-")
+
+
+def make_contexts(port: int, index: int, public_origin: str | None = None) -> tuple[dict, dict]:
     schema = json.loads((ROOT / "room/protocol.schema.json").read_bytes())
     control = copy.deepcopy(schema["$defs"]["MainnetContext"]["examples"][0])
     control.update(rules_hash=sim.digest(RULES), deployment_id=f"dev-local-r{index}",
-                   audience=f"https://127.0.0.1:{port}/room#control",
+                   audience=f"{public_origin or f'https://127.0.0.1:{port}'}/room#control",
                    contract_ids=dict(nft="dev-nft.local", arena="dev-arena.local"))
     result = copy.deepcopy(control)
     result["audience"] = "near:mainnet:" + control["contract_ids"]["arena"] + ":post_batch"
@@ -150,7 +175,7 @@ class DevHouse:
 
     def poll(self, control, tick, roster, count, view) -> None:
         bridge = self.arena.bridge
-        if not any(n.startswith("dev-") for n in self.arena.members):  # keep one ring seat free for a DEV joiner
+        if not any(player_token(n) for n in self.arena.members):  # keep one ring seat free for a joiner
             count = min(count, 5 - sum(m["profile"]["house"] for m in self.arena.members.values()))
         for step in range(len(roster)):
             if count <= 0:
@@ -174,7 +199,9 @@ class Round:
     def __init__(self, dev: "DevRoom", index: int) -> None:
         self.index = index
         self.dev = dev
-        self.context, self.result_context = make_contexts(dev.port, index)
+        # Loopback calls keep the two-argument form (tests stand in their own make_contexts(port, index)).
+        self.context, self.result_context = (make_contexts(dev.port, index, dev.public_origin) if dev.public_origin
+                                             else make_contexts(dev.port, index))
         self.tmp = Path(dev.data_dir) / f"round-{index}"
         self.tmp.mkdir(parents=True)
         self.security: list[dict] = []
@@ -195,9 +222,14 @@ class Round:
             receipt_signer=self.host.sign_receipt, admission_gate=self.host.admission_ready,
             life_guard=self.life_guard, server_time_ms=self.vnow, pick_resolver=pick,
             house_runtime=house, dev_host=True,  # this host seats `dev-` ids by design; a production host refuses them
-            prediction_log=house.log if live else None)
+            prediction_log=house.log if live else None, record=dev.record)
         self.house = house
         self.arena.battle_guard = lambda who, text: dev.feed.guard.check(text, who=who)
+        # board 1's panel: item names for the bench card, the fighter's own log, owner notes and receipts
+        self.arena.item_names = dev.item_names
+        self.arena.fighter_event = dev.fighter_event
+        self.arena.battle_note = dev.post_note
+        self.arena.battle_receipt_seen = dev.receipt_seen
         house.attach(self.arena) if live else setattr(house, "arena", self.arena)
         self.feed = dev.feed
         apply_intent = self.arena.bridge.apply
@@ -260,8 +292,10 @@ class Round:
             sim.unsigned(ticks, "ticks")
             for _ in range(ticks):
                 forecasts = self.corner_forecasts()
+                drops = set(self.arena.sim.state["drops"])
                 advance()
                 self.capture_corner(forecasts)
+                dev.log_fighter_events(self.arena, drops)
                 dev.post_reflexes(self.arena)
 
         self.arena.advance = advance_with_corner
@@ -279,7 +313,7 @@ class Round:
         """Keep the last public life outcome per local fighter across segment rollover."""
         for event in self.arena.sim.state["events"]:
             name = event.get("fighter", "")
-            if not name.startswith("dev-") or event["kind"] not in ("ko", "leave"):
+            if not player_token(name) or event["kind"] not in ("ko", "leave"):
                 continue
             fighter = self.arena.sim.state["fighters"].get(name)
             if fighter is None:
@@ -310,14 +344,27 @@ class Round:
         return True if binding["account_id"] == HOUSE_ACCOUNT else self.host.life_guard(binding)
 
     def dev_members(self) -> list[str]:
-        return [n for n in self.arena.members if n.startswith("dev-")]
+        return [n for n in self.arena.members if player_token(n)]
 
 
 class DevRoom:
     def __init__(self, port: int, data_dir: str, house: str = "dev", budget_mode: str = "auto",
-                 house_client=None) -> None:
+                 house_client=None, *, public_origin: str | None = None, state_dir: str | None = None) -> None:
         self.port = port
         self.data_dir = data_dir
+        # Hosted (make play behind nginx): the public origin is the one more name the Host and Origin checks accept,
+        # the client address comes from nginx's X-Real-IP, and /dev/shutdown does not exist. None = loopback only.
+        if public_origin is not None and not PUBLIC_ORIGIN.fullmatch(public_origin):
+            raise ValueError("--public-origin is https://<name>[:port], lower case, with no path")
+        self.public_origin = public_origin
+        self.public_host = public_origin.split("://", 1)[1] if public_origin else None
+        self.bind = "127.0.0.1"
+        # The house's meter, predictions log and status live in <state>/house: a hosted arena passes a persistent
+        # state dir, so a restart never resets the day's spend. Default: the data dir, as before.
+        self.house_parent = Path(state_dir) if state_dir is not None else Path(data_dir)
+        # The public record (arena/predict.py): one for the host, beside the house's state, shared by every round's
+        # arena, so a round restart or a host start keeps the day's rows and the boards read the whole day.
+        self.record = predict.Record(self.house_parent / "record.jsonl")
         # house hook: with --house live, one meter and one predictions log shared by every round's LiveHouse. The
         # one public feed for every producer (house and player lines) is the host's `self.feed` below.
         self.house_kind = house
@@ -326,13 +373,13 @@ class DevRoom:
         self.house_model = "house (deterministic tick policy)"
         if house == "keyed":  # no model key: LiveHouse seating, the tick policy, labelled keyed lines, the autopilot chip
             self.house_client, self.house_budget = house_live.NoModel(), house_live.NoKeyBudget()
-            self.house_log = house_predictions.PredictionLog(Path(data_dir) / "house")
+            self.house_log = house_predictions.PredictionLog(self.house_parent / "house")
             self.house_model = house_live.KEYED_LABEL
         elif house == "live":
             if house_client is None and not os.environ.get(house_live.KEY_ENV):
                 raise house_live.KeyMissing(f"--house live needs {house_live.KEY_ENV} in the process environment "
                                             "(from the env file outside the repo); the default --house dev needs no key")
-            hdir = Path(data_dir) / "house"
+            hdir = self.house_parent / "house"
             self.house_budget = house_runtime.Budget(house_runtime.JsonMeter(hdir / "spend.json"), budget_mode, clock=time.time)
             self.house_log = house_predictions.PredictionLog(hdir)
             self.house_model = house_live.MODEL_LABEL
@@ -351,6 +398,12 @@ class DevRoom:
         self.feed.game_of = self.game_for
         self.speech_results: dict[str, dict] = {}
         self.reflex_speech_results: dict[str, dict] = {}
+        # board 1's panel: names for item ids, and per player fighter its own log (public events in /dev/corner; the
+        # owner's orders, replies and receipts only through its door code) and the plan use its session reported
+        kits = json.loads((ROOT / "near/lore/kits.json").read_bytes())
+        self.item_names = {row["id"]: row["name"] for row in kits["items"]}
+        self.fighter_logs: dict[str, list[dict]] = {}
+        self.plan_use: dict[str, dict] = {}
         self.feed_offset = 0
         self.round_index = 0
         self.round = self._new_round()
@@ -372,7 +425,7 @@ class DevRoom:
     # --- house hook ------------------------------------------------------------------------------------
     def make_house(self, context: dict):
         if self.house_kind in ("live", "keyed"):
-            return house_live.LiveHouse(context, self.data_dir, self.feed, account_id=HOUSE_ACCOUNT,
+            return house_live.LiveHouse(context, self.house_parent, self.feed, account_id=HOUSE_ACCOUNT,
                                         budget=self.house_budget, log=self.house_log, sheets=self.house_sheets,
                                         client=self.house_client, feed_tick=getattr(self, "feed_tick", None),
                                         model_label=self.house_model,
@@ -422,6 +475,103 @@ class DevRoom:
             source = 'house' if member['profile']['house'] else 'player'
             speech = self.feed.post(who, event['text'], source=source, tick=self.feed_tick(), emoji=None)
             self.reflex_speech_results[who] = dict(tick=arena.sim.state['tick'], index=event['index'], speech=speech)
+
+    # --- board 1: the fighter's own log --------------------------------------------------------------
+    LOG_MAX = 50
+
+    def display_name(self, who: str | None) -> str:
+        if who is None:
+            return "the ring"
+        if who in self.house_games:
+            return self.house_games[who].get("tag") or self.house_games[who].get("name") or who
+        return self.identities.get(who, {}).get("name") or who
+
+    def fighter_event(self, who: str, kind: str, text: str) -> None:
+        """A public fact about a player's fighter, for its panel's log; house fighters keep none."""
+        if not player_token(who):
+            return
+        log = self.fighter_logs.setdefault(who, [])
+        log.append(dict(at_ms=now_ms(), kind=kind, text=text))
+        del log[:-self.LOG_MAX]
+
+    def log_fighter_events(self, arena, drops_before: set) -> None:
+        tick_s = arena.sim.rules["respawn_ticks"] // arena.sim.rules["tick_hz"]
+        for event in arena.sim.state["events"]:
+            who, kind = event.get("fighter"), event["kind"]
+            f = arena.sim.state["fighters"].get(who) if who else None
+            if f is None:
+                continue
+            if kind == "respawn":
+                log = self.fighter_logs.get(who, [])
+                if any(row["kind"] == "joined" for row in log):
+                    self.fighter_event(who, "respawn", f"Back in the ring. Life {f['life_number']}.")
+                else:
+                    self.fighter_event(who, "joined", f"Snapped in. Life {f['life_number']}.")
+            elif kind == "ko":
+                dropped = [d["row"] for key, d in sorted(arena.sim.state["drops"].items())
+                           if key not in drops_before and d["owner"] == who]
+                lost = ("Dropped " + self.item_names.get(dropped[0], dropped[0]) + ".") if dropped else "Dropped nothing."
+                member = arena.members.get(who, {})
+                after = ("Stays on the bench." if member.get("bench_hold") else f"Life {f['life_number'] + 1} in {tick_s} s.")
+                self.fighter_event(who, "kod", f"KO'd by {self.display_name(event.get('source'))}. {lost} {after}")
+                source = event.get("source")
+                if source:
+                    self.fighter_event(source, "ko", f"KO'd {self.display_name(who)}. +1 KO.")
+            elif kind == "grab" and not event.get("destroyed"):
+                self.fighter_event(who, "pickup", "Picked up " + self.item_names.get(event["row"], event["row"]) + ".")
+
+    def _order_entry(self, who: str, seq: str) -> dict:
+        log = self.fighter_logs.setdefault(who, [])
+        for row in reversed(log):
+            if row["kind"] == "order" and row["seq"] == seq:
+                return row
+        row = dict(at_ms=now_ms(), kind="order", seq=seq, order=None, reply=None, why=None, receipt=None)
+        log.append(row)
+        del log[:-self.LOG_MAX]
+        return row
+
+    def receipt_seen(self, binding: dict, request: dict, ack: dict) -> None:
+        """Every behaviour ACK of a player fighter, kept beside the order it answers (the owner's panel)."""
+        who = binding["nft_token_id"]
+        if request.get("kind") != "behaviour" or not player_token(who):
+            return
+        row = self._order_entry(who, str(request["sequence"]))
+        row["receipt"] = dict(status=ack.get("status"), summary=ack.get("summary"), applies_in_ms=ack.get("applies_in_ms"))
+
+    def post_note(self, binding: dict, payload: dict) -> str:
+        """An agent session's note for its owner: never the feed, never the engine journal."""
+        who = binding["nft_token_id"]
+        if "plan" in payload:
+            self.plan_use[who] = dict(week_used_pct=payload["plan"]["week_used_pct"], reported_at_ms=now_ms())
+        texts = {k: payload[k] for k in ("order", "reply", "why") if k in payload}
+        if texts:
+            row = self._order_entry(who, payload.get("seq") or str(payload["sequence"]))
+            row.update(texts)
+        return "Kept for your owner's panel" + (" (plan use recorded)." if "plan" in payload else ".")
+
+    def code_log(self, code: str) -> dict:
+        """The owner's panel for an agent-driven trenchie, read with the door code the guide page holds."""
+        row = self.codes.get(code) if isinstance(code, str) else None
+        if row is None or (not row["joined"] and time.time() >= row["expires_at"]):
+            raise ValueError("code expired or unknown; ask the AI door for a new code")
+        if not row["joined"]:
+            return dict(joined=False, state="pending")
+        who = row["claimed_by"]
+        arena = self.round.arena
+        member, f = arena.members.get(who), arena.sim.state["fighters"].get(who)
+        bench = arena.bridge.bench_view(who) if member is not None else {}
+        state = ("home" if member is None else "ring" if f is not None and f["state"] == "alive"
+                 else "held" if bench.get("held") else "bench")
+        plan = self.plan_use.get(who, {})
+        return dict(joined=True, state=state, fighter_id=who, name=row["name"], agent=row["agent"],
+                    life=None if f is None else f["life_number"], hp=None if f is None else f["hp"],
+                    max_hp=None if f is None else f["max_hp"],
+                    plan=dict(stop_pct=row.get("plan_stop_pct"), week_used_pct=plan.get("week_used_pct"),
+                              reported_at_ms=plan.get("reported_at_ms"),
+                              # the session stops sending orders at its door limit (snap.py live does the stopping)
+                              stopped=(row.get("plan_stop_pct") is not None and plan.get("week_used_pct") is not None
+                                       and plan["week_used_pct"] >= row["plan_stop_pct"])),
+                    log=copy.deepcopy(self.fighter_logs.get(who, [])))
 
     def resolve(self, request: dict) -> dict:
         challenge = request["challenge"]
@@ -504,10 +654,55 @@ class DevRoom:
         self.feed.guard = updated_guard
         self.by_key[public_key] = rec
         print(f"snap_local: DEV identity registered: {token} ({preset}); no wallet, chain or NFT is involved", flush=True)
-        return {"label": "DEV", "name": rec["name"], "name_checked": name_check["nameChecked"], "name_notice": name_check["nameNotice"], "preset": preset, "nft_token_id": token, "account_id": rec["account_id"],
+        return self.identity_reply(rec)
+
+    def identity_reply(self, rec: dict) -> dict:
+        """What a joiner needs to sign in: its identity plus this round's public room material."""
+        name_check = rec["name_check"]
+        return {"label": "DEV", "name": rec["name"], "name_checked": name_check["nameChecked"], "name_notice": name_check["nameNotice"],
+                "preset": rec["preset"], "nft_token_id": rec["nft_token_id"], "account_id": rec["account_id"],
                 "persona_digest": rec["persona_digest"], "session_public_key": rec["session_public_key"],
                 "room_public_key": self.room_public, "proof_method": PROOF_METHOD, "key_id": "room_key_a",
                 "context": self.round.context, "result_context": self.round.result_context, "presets": sorted(PRESETS)}
+
+    def rejoin_identity(self, args: dict) -> dict:
+        """A live session whose round restarted signs in again as the same trenchie: the identity its session key
+        already holds, with the new round's contexts. It registers nothing and never restarts a round.
+
+        Only the session key itself may ask: the request carries that key's signature over this round's index and a
+        wall-clock time within REJOIN_WINDOW_MS (battle_protocol.rejoin_message). Anything else is refused before
+        any state changes, so a stranger who knows a public key can't refresh this round's claim or hold it."""
+        public_key = args.get("public_key")
+        rec = self.by_key.get(public_key) if isinstance(public_key, str) else None
+        if rec is None:
+            raise ValueError("no DEV identity holds that session key; join again")
+        round_index, at, proof = args.get("round"), args.get("at"), args.get("sig")
+        if type(round_index) is not int or type(at) is not int or not isinstance(proof, str):
+            raise ValueError("rejoin needs round, at and sig: the session key's signature (snap.py live sends it)")
+        if round_index != self.round_index:
+            raise ValueError(f"rejoin is signed for round {round_index}; this is round {self.round_index}")
+        if abs(time.time() * 1000 - at) > battle_protocol.REJOIN_WINDOW_MS:
+            raise ValueError("rejoin proof is stale; sign a fresh one")
+        if not verify_ed25519(public_key, battle_protocol.rejoin_message(round_index, public_key, at), proof):
+            raise ValueError("rejoin proof does not verify with that session key")
+        # Each proof is good once: an observer can't replay it inside its window. A proof is the signed message (this
+        # round, this key, this time), not the signature's spelling: the base64url decoder takes non-canonical
+        # spellings, so one signature has several. Proofs older than the window are dropped, because the time check
+        # above already refuses them.
+        now_ms = time.time() * 1000
+        used = self.__dict__.setdefault("rejoin_proofs_used", {})
+        for old_proof in [m for m, at_ms in used.items() if now_ms - at_ms > battle_protocol.REJOIN_WINDOW_MS]:
+            del used[old_proof]
+        signed = battle_protocol.rejoin_message(round_index, public_key, at)
+        if signed in used:
+            raise ValueError("rejoin proof already used; sign a fresh one")
+        used[signed] = at
+        if rec["nft_token_id"] in self.round.arena.members:
+            raise ValueError(f"{rec['nft_token_id']} is already in this round")
+        self.round.ever_dev = True
+        self.round.claimed_at = time.monotonic()
+        print(f"snap_local: DEV identity rejoined round {self.round_index}: {rec['nft_token_id']}", flush=True)
+        return self.identity_reply(rec)
 
     def issue_code(self, args: dict) -> dict:
         """A short-lived local door rendezvous, never a grant or wallet authority."""
@@ -516,8 +711,10 @@ class DevRoom:
         if args.get("agent") not in ("claude-code", "codex"):
             raise ValueError("agent must be claude-code or codex")
         now = time.time()
-        self.codes = {k: v for k, v in self.codes.items() if v["expires_at"] > now}
-        if len(self.codes) >= 64:
+        # a joined code stays: its page reads the owner's panel with it while that trenchie is in the arena
+        self.codes = {k: v for k, v in self.codes.items()
+                      if v["expires_at"] > now or (v["joined"] and v["claimed_by"] in self.round.arena.members)}
+        if sum(not v["joined"] for v in self.codes.values()) >= 64:
             raise ValueError("too many pending codes; wait ten minutes and retry")
         if args.get("sheet") is not None:
             check_sheet(args["sheet"])
@@ -528,13 +725,19 @@ class DevRoom:
         name = args.get("name") or "newcomer"
         if not isinstance(name, str) or len(name) > 64:
             raise ValueError("name must be text, at most 64 characters")
+        stop = args.get("plan_stop_pct")
+        if stop is not None and stop not in (5, 10, 20):
+            raise ValueError("plan_stop_pct is 5, 10 or 20 (the share of the plan's week), or left out")
         code = secrets.token_urlsafe(12)
         self.codes[code] = dict(expires_at=now + 600, name=name, sheet=args.get("sheet"), preset=preset,
-                                look=look, claimed_by=None, joined=False)
+                                look=look, claimed_by=None, joined=False, agent=args["agent"], plan_stop_pct=stop)
+        base = self.public_origin or f"http://127.0.0.1:{self.port}"
+        script = "near/arena/snap.py" if self.public_origin else shlex.quote(str(HERE / "snap.py"))  # hosted: the agent's own clone
         return dict(code=code, expires_at=int((now + 600) * 1000),
-                    snap_url=f"http://127.0.0.1:{self.port}/SNAP.md", stub=False, dev=True,
-                    command="python3 -I " + shlex.quote(str(HERE / "snap.py")) +
-                            f" --url http://127.0.0.1:{self.port} join --code {code} --preset {preset} --accept-terms 1",
+                    snap_url=f"{base}/SNAP.md", stub=False, dev=True,
+                    # Battle mode on the creator's trenchie: one live session, orders in through a private pipe.
+                    command=f"python3 -I {script} --url {base} live --code {code} --preset {preset} --accept-terms 1"
+                            ' --fifo "$PWD/orders.fifo"',
                     state="pending")
 
     def code_status(self, code: str, *, claim: bool = False) -> dict:
@@ -565,6 +768,8 @@ class DevRoom:
     def _new_round(self) -> Round:
         self.round_index += 1
         self.reflex_speech_results.clear()
+        self.fighter_logs.clear()
+        self.plan_use.clear()
         return Round(self, self.round_index)
 
     def maybe_restart(self, why: str) -> None:
@@ -621,7 +826,7 @@ class DevRoom:
         a = self.round.arena
         out = []
         for name in a.members:
-            if name.startswith("dev-"):
+            if player_token(name):
                 rec = self.identities.get(name, {})
                 f = a.sim.state["fighters"].get(name)
                 out.append({"label": "DEV", "fighter_id": name, "name": rec.get("name"), "preset": rec.get("preset"),
@@ -633,7 +838,7 @@ class DevRoom:
         """Public respawn data. Missing pickup provenance is explicitly untracked."""
         arena = self.round.arena
         member = arena.members.get(name)
-        if member is None or not name.startswith("dev-"):
+        if member is None or not player_token(name):
             raise ValueError("unknown DEV fighter; choose fighter_id from /dev/players")
         game = arena.sim
         fighter = game.state["fighters"].get(name)
@@ -645,7 +850,10 @@ class DevRoom:
         pending = []
         if member["awaiting_life"] and member["life_id"] in arena.locks:
             pending.append(dict(kind="respawn_pick", text="Your pick is locked for the coming life."))
+        public = [dict(row) for row in self.fighter_logs.get(name, []) if row["kind"] != "order"][-20:]
         return dict(fighter_id=name, state=state,
+                    hp=None if fighter is None else fighter["hp"], max_hp=None if fighter is None else fighter["max_hp"],
+                    bench=arena.bridge.bench_view(name), events=public,
                     respawn_at_ms=None if respawn_tick is None else self.round.base + respawn_tick * 1000 // game.rules["tick_hz"],
                     last_life=copy.deepcopy(self.round.corner_lives.get(name)), taken=[], floor=floor, pending=pending,
                     untracked={"taken": "not tracked: pickup events do not retain previous holder and serial provenance",
@@ -681,7 +889,47 @@ class DevRoom:
         feed = getattr(self, "feed", None)
         rows = feed.since(0) if feed is not None else []
         return dev_brawl.frame(json.dumps(dict(type="spectator_social", version=1,
-                                      players=players, feed=rows[-64:]), separators=(",", ":")).encode())
+                                      players=players, feed=rows[-64:], lives=self.public_lives(),
+                                      names=self.public_names()), separators=(",", ":")).encode())
+
+    def public_lives(self) -> dict:
+        """Each fighter's current life as the arena page draws its name tag: {fighter: {life, level, kos, points}}.
+
+        level is the life's predicted level (1-4, "L or more KOs") read from its locked pick exactly as the seal row
+        reads it (predict.read_level), or None when it predicted nothing or a pick that does not count; kos is its KOs
+        this life; points are the reward points a correct prediction earns (the seal row's own outcome at the base
+        rate of its lock). All public: the pick is in the public record and the KOs are in the snapshot. A life's
+        level and points are read once its lock exists and kept until the life changes."""
+        arena = self.round.arena
+        cache = getattr(self, "_life_reads", None)
+        if cache is None or cache[0] is not arena:
+            cache = self._life_reads = (arena, {})
+        reads, out = cache[1], {}
+        for name, f in arena.sim.state["fighters"].items():
+            if f["state"] == "left":
+                continue
+            life = f["life_id"]
+            got = reads.get(life)
+            if got is None:
+                lock = arena.locks.get(life)
+                pick = lock["public"].get("pick") if lock is not None else None
+                level = (predict.read_level(arena.sim.rules, pick["payload"]["spread_bps"], pick["payload"]["zero_bps"])[0]
+                         if pick is not None else None)
+                points = (predict.outcome(arena.sim.rules, level, level, arena._base_rate_at(lock.get("at_ms")))["reward_points"]
+                          if level is not None else 0)
+                got = (level, points)
+                if lock is not None:   # no lock yet: read it again next tick
+                    reads[life] = got
+            out[name] = dict(life=life, level=got[0], kos=f["life_kos"], points=got[1])
+        live = {f["life_id"] for f in arena.sim.state["fighters"].values()}
+        for life in [k for k in reads if k not in live]:
+            del reads[life]
+        return out
+
+    def public_names(self) -> dict:
+        """Display names for every trenchie this host registered, so a board row for one who has left still reads
+        as a name, never an id."""
+        return {token: rec.get("name", token) for token, rec in sorted(self.identities.items())}
 
     def refresh_frames(self) -> None:
         """The plain snapshot every tick; the compact tick frame (and its tables, when the roster changed) only if wanted."""
@@ -694,6 +942,21 @@ class DevRoom:
             self.latest_codec = None
 
     # --- HTTP ----------------------------------------------------------------------------------------
+    def own_hosts(self) -> set[str]:
+        """The Host headers this host answers (DNS rebinding guard): its loopback name and port, plus the public name."""
+        return {f"127.0.0.1:{self.port}", f"localhost:{self.port}", *((self.public_host,) if self.public_host else ())}
+
+    def client_ip(self, writer, headers: dict) -> str:
+        """The peer address; hosted, nginx's X-Real-IP (set by nginx on every request, never appended to), so the
+        room's per-address limits see each visitor rather than the proxy. Loopback-only hosts ignore the header."""
+        peer = (writer.get_extra_info("peername") or ("local",))[0]
+        if self.public_origin:
+            try:
+                return str(ipaddress.ip_address(headers.get("x-real-ip", "")))
+            except ValueError:
+                return peer
+        return peer
+
     def route(self, method: str, target: str, body: bytes, ip: str, admin: str = "") -> tuple[int, object]:
         url = urlsplit(target)
         path, query = url.path, {k: v[0] for k, v in parse_qs(url.query).items()}
@@ -702,16 +965,26 @@ class DevRoom:
                 args = json.loads(body or b"{}")
                 if not isinstance(args, dict):
                     raise ValueError("identity needs a JSON object with name, preset and public_key")
+                if args.get("op") == "rejoin":
+                    return 200, self.rejoin_identity(args)
                 return 200, self.create_identity(str(args.get("name", "")), str(args.get("preset", "")), str(args.get("public_key", "")), sheet=args.get("sheet"), code=args.get("code"), look=args.get("look"))
             if path == "/snap/code" and method == "POST":
                 return 200, self.issue_code(json.loads(body or b"{}"))
+            if path.startswith("/snap/code/") and path.endswith("/log") and method == "GET":
+                try:
+                    return 200, self.code_log(path[len("/snap/code/"):-len("/log")])
+                except ValueError as exc:
+                    return 404, {"expired": True, "joined": False, "state": "expired", "error": str(exc)}
             if path.startswith("/snap/code/") and method == "GET":
                 try:
                     row = self.code_status(path.rsplit("/", 1)[1])
                 except ValueError:
                     return 404, {"expired": True, "joined": False, "state": "expired", "error": "ask the AI door for a new code"}
                 return 200, {"joined": row["joined"], "expired": False, "state": "joined" if row["joined"] else "pending",
-                             "fighter_id": row["claimed_by"] if row["joined"] else None, "name": row["name"]}
+                             "fighter_id": row["claimed_by"] if row["joined"] else None, "name": row["name"],
+                             "plan_stop_pct": row.get("plan_stop_pct")}
+            if path == "/dev/shutdown" and self.public_origin:
+                return 404, {"error": "not found"}  # hosted: the admin route does not exist
             if path == "/dev/shutdown" and method == "POST":
                 if not hmac.compare_digest(admin, self.admin):
                     return 403, {"error": "needs the admin token printed at start"}
@@ -731,6 +1004,16 @@ class DevRoom:
                 return 200, self.feed.public(int(query.get("since", "0") or 0))
             if path == "/house/roster":
                 return 200, self.house_roster()
+            if path == "/house/record.jsonl":  # the public record (arena/predict.py), the JSONL file as written
+                rec = self.round.arena.record
+                return 200, (rec.path.read_bytes() if rec.path is not None and rec.path.exists() else b"", None)
+            if path == "/house/leaderboards.json":  # most KOs and most correct predictions, per UTC day, top 5
+                arena = self.round.arena
+                now_ns = arena.server_time_ms() * 1_000_000
+                day = query.get("day") or predict.utc_day(now_ns)
+                if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", day):
+                    return 400, {"error": "day is YYYY-MM-DD (UTC)"}
+                return 200, arena.record.leaderboards(day, now_ns=now_ns)
             if path == "/house/predictions.jsonl":
                 log = getattr(self, "house_log", None)
                 return 200, (self.house_predictions(), log.log_hash() if log is not None else None)
@@ -777,19 +1060,18 @@ class DevRoom:
         key = headers.get("sec-websocket-key")
         if headers.get("upgrade", "").lower() == "websocket" and key:
             if urlsplit(target).path == '/room/live':
-                allowed = {f'127.0.0.1:{self.port}', f'localhost:{self.port}'}
-                origins = {ORIGIN, *(f'http://{host}' for host in allowed)}
+                allowed = self.own_hosts()
+                origins = {ORIGIN, *(f'http://{host}' for host in allowed), *((self.public_origin,) if self.public_origin else ())}
                 if headers.get('host') not in allowed or headers.get('origin') not in (None, *origins):
                     writer.write(b'HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n')
                     await writer.drain()
                     writer.close()
                     return
-                peer = (writer.get_extra_info('peername') or ('local',))[0]
-                await serve_live(self, reader, writer, key, ip=peer)
+                await serve_live(self, reader, writer, key, ip=self.client_ip(writer, headers))
                 return
             await self.spectate(reader, writer, key, "codec=1" in target, parse_qs(urlsplit(target).query).get("styles") == ["1"])
             return
-        allowed_hosts = {f"127.0.0.1:{self.port}", f"localhost:{self.port}"}
+        allowed_hosts = self.own_hosts()
         path = urlsplit(target).path
         try:
             if headers.get("host", "") not in allowed_hosts:  # DNS rebinding: only our own name and port
@@ -803,9 +1085,11 @@ class DevRoom:
                 if not 0 <= size <= 65536:
                     raise ValueError("body too large")
                 body = await asyncio.wait_for(reader.readexactly(size), 5) if size else b""
-                peer = (writer.get_extra_info("peername") or ("local",))[0]
-                ip = peer
-                status, value = self.route(method, target, body, ip, headers.get("x-dev-admin", ""))
+                ip = self.client_ip(writer, headers)
+                routed = self.route(method, target, body, ip, headers.get("x-dev-admin", ""))
+                if inspect.isawaitable(routed):  # a host's slow route (near/chain/hosted_live.py) runs off this loop
+                    routed = await routed
+                status, value = routed
         except (ValueError, asyncio.TimeoutError, asyncio.IncompleteReadError) as exc:
             status, value = 400, {"error": str(exc)[:200]}
         ctype, extra = "application/json", ""
@@ -933,12 +1217,29 @@ class DevRoom:
 
 
 async def serve(dev: DevRoom, ready=None, ticks: int | None = None) -> None:
-    listener = await asyncio.start_server(dev.handle, "127.0.0.1", dev.port)
+    listener = await asyncio.start_server(dev.handle, dev.bind, dev.port)
     dev.port = listener.sockets[0].getsockname()[1]
     if ready is not None:
         ready(dev.port)
     async with listener:
         await dev.run_clock(ticks)
+
+
+def new_run_dir(state: Path, keep: int = 4) -> Path:
+    """A fresh <state>/runs/<UTC time> for this start's rounds; earlier runs beyond the newest `keep` are removed.
+    Only directories this host made (runs/<YYYYmmddTHHMMSSZ>) are ever removed."""
+    runs = state / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    stamp = re.compile(r"[0-9]{8}T[0-9]{6}Z(-[0-9]+)?")
+    old = sorted(p for p in runs.iterdir() if p.is_dir() and not p.is_symlink() and stamp.fullmatch(p.name))
+    for p in old[:max(0, len(old) - keep)]:
+        shutil.rmtree(p)
+    name = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    run, n = runs / name, 1
+    while run.exists():
+        run, n = runs / f"{name}-{n}", n + 1
+    run.mkdir()
+    return run
 
 
 def main() -> None:
@@ -952,19 +1253,42 @@ def main() -> None:
     ap.add_argument("--budget", choices=["auto"] + sorted(house_runtime.DAY_CAPS_USD), default="auto",
                     help="the live house's cap period: auto follows the hackathon calendar (building $2, soak and judging $8, "
                          "after $3); a period name overrides it, and the roster says override")
+    ap.add_argument("--bind", default="127.0.0.1",
+                    help="the listen address (default loopback). Hosted in a container, 0.0.0.0 inside the container's "
+                         "own network, published to the host's loopback only")
+    ap.add_argument("--public-origin", default=None,
+                    help="hosted behind nginx: https://<name>. Adds that name to the Host and Origin checks, takes the "
+                         "client address from X-Real-IP, removes /dev/shutdown and never prints the admin token")
+    ap.add_argument("--state-dir", default=None,
+                    help="a persistent directory: the house's meter and logs live in <state>/house, and each start's "
+                         "rounds in a fresh <state>/runs/<UTC time> (the 4 newest earlier runs are kept)")
     args = ap.parse_args()
-    data_dir = args.data_dir or tempfile.mkdtemp(prefix="snap-local-")
+    if args.state_dir is not None:
+        if args.data_dir is not None:
+            raise SystemExit("snap_local: --state-dir and --data-dir are exclusive")
+        data_dir = str(new_run_dir(Path(args.state_dir)))
+    else:
+        data_dir = args.data_dir or tempfile.mkdtemp(prefix="snap-local-")
     try:
-        dev = DevRoom(args.port, data_dir, house=args.house, budget_mode=args.budget)
+        dev = DevRoom(args.port, data_dir, house=args.house, budget_mode=args.budget,
+                      public_origin=args.public_origin, state_dir=args.state_dir)
     except house_live.KeyMissing as exc:
         raise SystemExit(f"snap_local: {exc}")
+    except ValueError as exc:
+        raise SystemExit(f"snap_local: {exc}")
+    dev.bind = args.bind
     if dev.feed.notice():
         print(f"snap_local: {dev.feed.notice()}: set TRENCHIE_BLOCKLIST to the block list kept outside the repo; "
               "until then every feed line is muted to an emote", flush=True)
     print(f"snap_local: house: {dev.house_kind} ({dev.house_model}"
           + (f", {dev.house_budget.mode} cap ${house_runtime.DAY_CAPS_USD[dev.house_budget.mode]}/day ({dev.house_budget.source}))" if args.house == "live" else ", no model calls)"), flush=True)
-    print(f"snap_local: DEV arena on http://127.0.0.1:{args.port} (spectator ws://127.0.0.1:{args.port}); "
-          f"data {data_dir}. No wallet, chain or NFT. Stop it with Ctrl-C, or POST /dev/shutdown with header X-Dev-Admin: {dev.admin}", flush=True)
+    if dev.public_origin:
+        print(f"snap_local: DEV arena listening on {args.bind}:{args.port}, hosted as {dev.public_origin}; data {data_dir}, "
+              f"house state {dev.house_parent / 'house'}. {MODE_NOTE} The admin route is off (hosted); "
+              "stop it with SIGTERM.", flush=True)
+    else:
+        print(f"snap_local: DEV arena on http://127.0.0.1:{args.port} (spectator ws://127.0.0.1:{args.port}); "
+              f"data {data_dir}. {MODE_NOTE} Stop it with Ctrl-C, or POST /dev/shutdown with header X-Dev-Admin: {dev.admin}", flush=True)
     try:
         asyncio.run(serve(dev))
     except KeyboardInterrupt:

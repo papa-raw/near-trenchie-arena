@@ -47,7 +47,7 @@ function provider(answer) {
   };
   f.calls = calls; return f;
 }
-const SPREAD = JSON.stringify({ spread_pct: [40, 30, 20, 10], zero_pct: 10 });
+const SPREAD = JSON.stringify({ level: 2 });   // the next-life prediction answer: one level
 function brain(sheet, f, clock, cap) {
   const r = room(), st = store(sheet, cap === undefined ? 1 : cap);
   const b = B.create({ room: r, store: st, fetch: f, now: () => clock.t, setTimer: () => 1, clearTimer: () => {} }).start();
@@ -171,5 +171,36 @@ function brain(sheet, f, clock, cap) {
     r.hp = 50; clock.t += 25000; await b.step();
     assert.ok(f.calls.some((c) => c.messages[1].content.includes('your hp is low (25%)')), '50 of 200 is 25%: low');
     console.log('ok 9 low hp is 30% of the fighter’s max'); }
-  console.log('test_brain_battle: 9/9');
+  // 10. While an order's model call is out the brain says it is thinking (with the order and when it went), and clears it
+  // when the receipt lands or the call fails; each order reports Send-to-receipt and the arena's own apply delay.
+  { const clock = { t: 1e6 }; let release;
+    const f = async (url, init) => {
+      const ask = JSON.parse(init.body).messages[1].content;
+      if (ask.includes('Your owner just told you')) await new Promise((r) => { release = r; });
+      const text = ask.includes('Your owner just told you') ? JSON.stringify({ behaviour: { stance: 'flee', gate: { never: true } }, reply: 'Legs first.' }) : SPREAD;
+      return { status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: text } }], usage: { prompt_tokens: 750, completion_tokens: 60 } }) };
+    };
+    const { b, r } = brain(FORWARD, f, clock);
+    r.behaviour = async (beh) => ({ type: 'battle_receipt', kind: 'behaviour', ack: { type: 'behaviour_ack', status: 'applied', behaviour: beh, applies_in_ms: 100, summary: 'New behaviour recorded: stance flee · applies at tick 9 (in 0.1 s)' } });
+    const pending = b.tell('run away from everyone');
+    for (let i = 0; i < 20 && !release; i++) await new Promise((r2) => setImmediate(r2));
+    assert.deepEqual(b.status().thinking, { order: 'run away from everyone', since: 1e6 }, 'thinking while the call is out');
+    clock.t += 2400; release();
+    const out = await pending;
+    assert.equal(out.reply, 'Legs first.');
+    assert.equal(b.status().thinking, null, 'cleared once the receipt lands');
+    assert.deepEqual(b.status().lastOrderTiming, { order: 'run away from everyone', receipt_ms: 2400, applies_in_ms: 100 });
+    const failing = brain(FORWARD, async () => ({ status: 500, text: async () => '{}' }), clock);
+    await failing.b.tell('hold the center');
+    assert.equal(failing.b.status().thinking, null, 'cleared when the call fails');
+    console.log('ok 10 thinking while the order is out, cleared after; Send-to-receipt 2400 ms + apply 100 ms'); }
+  // 11. "kill Leeth" on NEAR AI Cloud came back with gate target_hp_below_pct 99: Bertie walked up to a full-health Leeth and
+  // could not swing. Both battle prompts say what a gate condition forbids and to leave the gate out unless the owner asked.
+  { for (const ask of [B.tellAsk('kill Leeth', 'kill Leeth', null, null), B.planAsk('kill Leeth', 'your first plan', null, null)]) {
+      assert.match(ask, /every condition you add forbids attacking an enemy that does not meet it/);
+      assert.match(ask, /target_hp_below_pct 99 never attacks anyone at full health/);
+      assert.match(ask, /leave the gate out unless your owner asked you to pick only some targets/);
+    }
+    console.log('ok 11 the battle prompts say a gate condition forbids, with the 99% example, and to leave it out unless asked'); }
+  console.log('test_brain_battle: 11/11');
 })().catch((e) => { console.error(e); process.exit(1); });

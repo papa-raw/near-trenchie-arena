@@ -1,9 +1,8 @@
-// Name tags in a crowd: no two shown tags overlap; your fighter, its focus target and the speaker always
-// show; a shown tag keeps its place while the crowd shuffles (no flicker).
+// Name tags in a crowd: no two shown tags overlap; your fighter and its focus target always show (the speaker no
+// longer needs its tag: no emoji is drawn over a head, Q4; three or more within reach share a card, pips.mjs); a shown tag keeps its place while the crowd shuffles (no flicker).
 //   node --no-warnings --experimental-loader ./near/web/arena-view-remainder-loader.mjs near/web/arena-tags-crowd-case.mjs
 import assert from 'node:assert/strict';
 import { layoutTags, TIER } from './arena/tag-layout.mjs';
-import { Social, SAY_EMOJI_MS } from './arena/social.mjs';
 
 const overlap = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 let seed = 7;
@@ -18,7 +17,7 @@ for (const [W, H, tagH, ppt] of [[1440, 900, 16, 42], [390, 844, 15, 17]]) {
       const near = i < 10, a = rnd() * Math.PI * 2, r = near ? rnd() * 1.5 * ppt : (4 + rnd() * 3) * ppt;
       return { id: 'f' + i, x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r * 0.6, w: 40 + Math.round(rnd() * 70), depth: rnd() };
     });
-    const mustIds = ['f3', 'f7', 'f9'];   // your fighter, its focus target, the speaker: all inside the cluster
+    const mustIds = ['f3', 'f7', 'f9'];   // must-win tags (your fighter, focus targets): all inside the cluster
     let prev = new Map(), shownCounts = [], flips = 0;
     for (let frame = 0; frame < 120; frame++) {
       for (const b of bodies) { b.x += (rnd() - 0.5) * 1.2; b.y += (rnd() - 0.5) * 0.8; }   // a crowd shuffling at 60 Hz
@@ -58,7 +57,4 @@ const [sa, sb] = ['a', 'b'].map((id) => stacked.get(id));
 assert.ok(sa.shown && sb.shown && !overlap(sa, sb), 'two walled-off must-wins stack');
 assert.ok(!overlap(sa, wall[0]) && !overlap(sb, wall[0]), 'and keep clear of the bars when the column above is free');
 
-// the speaker set: who spoke within the emoji's 3 s
-const s = Object.create(Social.prototype); s.latest = new Map([['x', { at: 1000 }], ['y', { at: 1000 - SAY_EMOJI_MS - 1 }]]);
-assert.deepEqual([...s.speaking(1000)], ['x']);
 process.stdout.write(JSON.stringify({ ok: true, crowds: report }) + '\n');

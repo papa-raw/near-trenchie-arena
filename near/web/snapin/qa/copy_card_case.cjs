@@ -16,15 +16,9 @@ let pass = 0, fail = 0; const report = [];
 const ok = (c, m) => { report.push((c ? 'PASS ' : 'FAIL ') + m); if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const PLACEHOLDER = /After model test|Design only|not enforced|Count pending|Art pending|art pending|Preview state|would hold|Proposed key|Not available yet|\bTBD\b|lorem|coming soon/i;
-function start(args, ready) {
-  const child = spawn('python3', ['-B', ...args], { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'] });
-  return new Promise((resolve, reject) => {
-    let out = ''; const t = setTimeout(() => reject(new Error('no start line: ' + out.slice(0, 300))), 30000);
-    const on = (d) => { out += d; const m = ready(out); if (m) { clearTimeout(t); resolve({ child, m }); } };
-    child.stdout.on('data', on); child.stderr.on('data', (d) => { out += d; });
-    child.on('exit', (c) => reject(new Error('exited ' + c + ': ' + out.slice(0, 300))));
-  });
-}
+// hosts start through the shared harness: each ends with this case however it ends (qa/hosts.cjs)
+const HOSTS = require('./hosts.cjs');
+const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
 const row = (id, i, actual, score, base) => ({ actual, base_score: base, batch_tx: null, life: 'dev-local-r1/' + id + ':life:' + i, lock_hash: 'x', model: 'test', owner: id + '.local', persona: id, prediction: true, returned_yocto: '0', rules_hash: 'x', score, spread_pct: [40, 30, 20, 10], stake_yocto: '0', zero_pct: 10 });
 
 (async () => {
@@ -113,6 +107,7 @@ const row = (id, i, actual, score, base) => ({ actual, base_score: base, batch_t
   await fetch(arenaUrl + '/dev/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Dev-Admin': arena.m } }).catch(() => {});
   arena.child.kill(); web.child.kill();
   fs.writeFileSync(path.join(OUT, 'copy-card-case.json'), JSON.stringify({ pass, fail, at: new Date().toISOString(), screens: seen, report }, null, 1));
+  ok((await HOSTS.finish()).length === 0, 'no host this case started survives it');
   console.log(`${pass} passed, ${fail} failed; frames in ${OUT}`);
   process.exit(fail ? 1 : 0);
 })();

@@ -98,5 +98,34 @@ class Wired(unittest.TestCase):
             comp.tmp.cleanup()
 
 
+class Levels(unittest.TestCase):
+    """Under the level rules a prediction counts only as one level (all 10000 on one bin: 1+, 2+, 3+ or 4+). The house
+    model still answers a spread; the driver locks the highest level the spread itself gives at least an even chance."""
+
+    def lock(self, spread, zero):
+        import types
+        sent = []
+        arena = types.SimpleNamespace(
+            members={"satrenchi": {"life_id": "satrenchi:life:3", "profile": {"bag": {}}}}, locks={},
+            sim=types.SimpleNamespace(rules=sim.DEFAULT_RULES, rules_hash="r", state={"fighters": {}}),
+            bridge=types.SimpleNamespace(lock_prediction=lambda b, life, pick: sent.append(pick) or {"state": "prediction"}))
+        drv = driver.ArenaDriver(arena, {"satrenchi": {"account_id": "house"}})
+        drv.apply_pick("satrenchi", {"loadout": None, "spread_pct": spread, "zero_pct": zero, "prediction": True})
+        return sent[0]
+
+    def test_the_lock_is_the_highest_level_the_spread_gives_an_even_chance(self):
+        bins = lambda pick: pick["payload"]["spread_bps"]
+        # P(>=1) = 90%, P(>=2) = 90% x 60% = 54%, P(>=3) = 27%: level 2
+        self.assertEqual(bins(self.lock([40, 30, 20, 10], 10)), {"one": 0, "two": 10000, "three": 0, "four_plus": 0})
+        self.assertEqual(self.lock([40, 30, 20, 10], 10)["payload"]["zero_bps"], 0)
+        # P(>=1) = 65%, P(>=2) = 39%: level 1
+        self.assertEqual(bins(self.lock([40, 30, 20, 10], 35)), {"one": 10000, "two": 0, "three": 0, "four_plus": 0})
+        # P(>=4) = 100% x 50% = 50%: level 4 (an even chance is enough)
+        self.assertEqual(bins(self.lock([0, 0, 50, 50], 0)), {"one": 0, "two": 0, "three": 0, "four_plus": 10000})
+
+    def test_a_spread_under_an_even_chance_of_any_ko_locks_no_prediction(self):
+        self.assertIsNone(self.lock([40, 30, 20, 10], 51))   # P(>=1) = 49%
+
+
 if __name__ == "__main__":
     unittest.main()

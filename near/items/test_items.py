@@ -84,5 +84,70 @@ class Refusals(unittest.TestCase):
         self.assertTrue(any("budget" in e for e in errors), errors)
 
 
+
+class LimitsVersions(unittest.TestCase):
+    """trenchie-item-limits/2 (Pat's item 57): a wider weapon box for newly made items; released items keep /1."""
+
+    def tall(self):
+        """The kit-built rare club with a 3.0-tall shaft from y 0.9 to 3.9: 2.5x today's largest weapon."""
+        spec = fixture("kit-built-weapon.json")
+        spec["nodes"] = [{"type": "cylinder", "r": 0.05, "h": 3.0, "color": "p12", "translate": [0, 2.4, 0]}]
+        return spec
+
+    def test_a_weapon_three_point_nine_tall_passes_under_2_and_fails_under_1(self):
+        spec = self.tall()
+        version, errors = check_items.check(spec, sim.DEFAULT_RULES, KIT)
+        self.assertEqual(version, "trenchie-item-limits/1")
+        self.assertIn("a node leaves the weapon box", errors)
+        version, errors = check_items.check(dict(spec, limits="trenchie-item-limits/2"), sim.DEFAULT_RULES, KIT)
+        self.assertEqual((version, errors), ("trenchie-item-limits/2", []))
+        over = dict(spec, limits="trenchie-item-limits/2")
+        over["nodes"] = [dict(spec["nodes"][0], translate=[0, 2.62, 0])]          # reaches y 4.12
+        self.assertIn("a node leaves the weapon box", check_items.check(over, sim.DEFAULT_RULES, KIT)[1])
+        wide = dict(spec, limits="trenchie-item-limits/2")
+        wide["nodes"] = [{"type": "box", "w": 1.6, "h": 0.2, "d": 0.2, "color": "p12", "translate": [0, 1.0, 0]}]
+        self.assertEqual(check_items.check(wide, sim.DEFAULT_RULES, KIT)[1], [])  # x +-0.8, inside +-0.85
+        one, two = check_items.limits_named("trenchie-item-limits/1"), check_items.limits_named("trenchie-item-limits/2")
+        self.assertEqual({k: two[k] for k in two if two[k] != one.get(k)},
+                         {"spec": "trenchie-item-limits/2", "status": two["status"],
+                          "slot_boxes": dict(one["slot_boxes"], weapon={"min": [-0.85, -0.2, -1.2], "max": [0.85, 4.0, 1.2]}),
+                          "weapon_render_scale": 1})                               # budgets and other slots unchanged
+
+    def test_every_released_item_and_kit_row_validates_under_1_with_its_bytes_unchanged(self):
+        import hashlib
+        files = sorted(list((HERE / "specs").glob("*.json")) + list((HERE / "fixtures").rglob("*.json"))
+                       + [HERE / "kit.json", HERE / "limits.json"])
+        h = hashlib.sha256()
+        for path in files:
+            h.update(str(path.relative_to(HERE)).encode() + b"\0" + hashlib.sha256(path.read_bytes()).digest())
+        self.assertEqual(h.hexdigest(), "57c95a0acae0bfaef17ce05238b93bb29fce126fe0df384d33bc354d2a60b8f8")
+        kit = json.loads((HERE / "kit.json").read_text())
+        for path in sorted((HERE / "specs").glob("*.json")):
+            with self.subTest(item=path.name):
+                self.assertEqual(check_items.check(json.loads(path.read_text()), sim.DEFAULT_RULES, kit),
+                                 ("trenchie-item-limits/1", []))
+
+    def test_the_checker_names_the_version_it_used(self):
+        import contextlib, io, tempfile
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "old.json").write_text(json.dumps(fixture("kit-built-weapon.json")))
+            (Path(d) / "new.json").write_text(json.dumps(dict(self.tall(), limits="trenchie-item-limits/2")))
+            (Path(d) / "tall-old.json").write_text(json.dumps(self.tall()))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = check_items.main(["--specs", d, "--kit", str(HERE / "fixtures/kit/kit.json")])
+        lines = out.getvalue().splitlines()
+        self.assertEqual(code, 1)
+        self.assertTrue(lines[0].startswith("FAIL tall-old.json (trenchie-item-limits/1) "), lines)
+        self.assertIn("2/3 items valid", lines[1])
+        self.assertTrue(lines[1].endswith("under trenchie-item-limits/1 x2, trenchie-item-limits/2 x1"), lines[1])
+
+    def test_an_unknown_limits_version_is_refused(self):
+        version, errors = check_items.check(dict(self.tall(), limits="trenchie-item-limits/9"), sim.DEFAULT_RULES, KIT)
+        self.assertEqual(version, "trenchie-item-limits/9")
+        self.assertTrue(errors and errors[0].startswith("unknown limits version"), errors)
+        self.assertIn("item was made under trenchie-item-limits/2, checked here under trenchie-item-limits/1",
+                      check(dict(self.tall(), limits="trenchie-item-limits/2")))
+
 if __name__ == "__main__":
     unittest.main()

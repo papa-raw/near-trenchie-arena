@@ -5,9 +5,11 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+const HOSTS = createRequire(import.meta.url)('./snapin/qa/hosts.cjs');   // each host ends with this case however it ends
 const scratch = await mkdtemp(join(process.env.ARENA_EVIDENCE_DIR || tmpdir(), 'arena-view-'));
 const near = fileURLToPath(new URL('../', import.meta.url));
-const server = spawn('python3', ['-B', '-u', '-m', 'http.server', '0', '--bind', '127.0.0.1', '--directory', near], { stdio: ['ignore', 'pipe', 'pipe'] });
+const server = HOSTS.host(['-B', '-u', '-m', 'http.server', '0', '--bind', '127.0.0.1', '--directory', near], { stdio: ['ignore', 'pipe', 'pipe'] });
 let browser, ws, seq = 0; const pending = new Map(), errors = [];
 function match(stream, pattern) {
   return new Promise((res, rej) => {
@@ -51,4 +53,5 @@ try {
   ws?.close(); browser?.kill(); server.kill();
   if (browser && browser.exitCode === null && browser.signalCode === null) await Promise.race([new Promise((res) => browser.once('exit', res)), new Promise((res) => setTimeout(res, 2000))]);
   await rm(join(scratch, 'profile'), { recursive: true, force: true });
+  { const left = await HOSTS.finish(); if (left.length) { console.error('FAIL ' + left.length + ' host group(s) this case started survived it'); process.exitCode = 1; } }
 }

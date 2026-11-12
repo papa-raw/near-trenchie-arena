@@ -1,8 +1,9 @@
-// Big moments for the ticker (near/web/arena/moments.mjs) and the ticker's tag + emoji line (social.mjs tickerParts).
+// Big moments for the feed (near/web/arena/moments.mjs) and the feed's speaker + emoji line (social.mjs sayItem, feed.mjs slip).
 //   node near/web/arena-moments-case.mjs
 import assert from 'node:assert/strict';
 import { Moments, ESCAPE_TICKS } from './arena/moments.mjs';
-import { tickerParts, tickerWidth, tickerBottom } from './arena/social.mjs';
+import { sayItem } from './arena/social.mjs';
+import { slip } from './arena/feed.mjs';
 
 const ITEMS = { 'leg-laser-eyes': { name: 'LASER EYES', tier: 'legendary', origin: 'house:laser-sailor' },
                 'c-swing': { name: 'Swing', tier: 'common', origin: 'starter' } };
@@ -44,24 +45,14 @@ let n = 0;
   k.onEvent({ kind: 'ko', fighter: 'avichad', source: null }, snap(3, []));
   assert.deepEqual(k.onSnapshot(snap(2 + ESCAPE_TICKS + 1, [F('avichad', 100)])), []); n++;
 }
-{ // the ticker line: tag + emoji + text, the status after it; a moment: tag + glyph + text
-  const roster = [{ trenchieId: 'avichad', tag: 'Avichad', name: 'Avichad' }];
-  const say = tickerParts({ type: 'say', row: { who: 'avichad', text: 'Ship something.', emoji: '🚢' } }, roster);
-  assert.deepEqual(say.parts.map((p) => p[0]), ['Avichad', '🚢', 'Ship something.']); n++;
-  const old = tickerParts({ type: 'say', row: { who: 'avichad', text: 'gm', blocked: true } }, roster);
-  assert.deepEqual(old.parts.map((p) => p[0]), ['Avichad', 'gm · blocked line']); n++;
-  const mo = tickerParts({ type: 'moment', m: { kind: 'ambush', fighter: 'avichad', tag: 'Avichad', glyph: '▼', text: 'AMBUSHES Leeth' } }, roster);
-  assert.deepEqual(mo.parts.map((p) => p[0]), ['Avichad', '▼', 'AMBUSHES Leeth']); n++;
-}
-{ // N1: the ticker ends before the first HUD button on its right, at 390 and at 1440
-  assert.equal(tickerWidth(390, { btn0: { x: 300, y: 790, w: 40, h: 40 }, btn1: { x: 346, y: 790, w: 40, h: 40 } }), 300 - 8 - 12); n++;
-  assert.equal(tickerWidth(1440, { btn0: { x: 1340, y: 840, w: 40, h: 40 } }), 560); n++;
-  assert.equal(tickerWidth(390, {}), 390 - 24); n++;
-}
-{ // the ticker stands on the frozen feed's full reserved top: a KO line more does not move it (the button never hops)
-  const empty = { x: 16, y: 860, w: 120, h: 24 }, full = { x: 16, y: 784, w: 300, h: 100 };   // same bottom (884)
-  assert.equal(tickerBottom(900, empty, false), tickerBottom(900, full, false)); n++;
-  assert.equal(tickerBottom(900, full, false), 900 - 784 + 8); n++;
-  assert.equal(tickerBottom(844, { x: 10, y: 800, w: 200, h: 34 }, true), tickerBottom(844, { x: 10, y: 782, w: 260, h: 52 }, true)); n++;
+{ // the feed line (one merged feed, feed.mjs): the speaker, its emoji, the line in quotes, the status after it
+  const name = (id) => ({ avichad: 'Avichad', 'tommy-leeth': 'Leeth' }[id] || id), text = (sl) => sl.parts.map((p) => p.text).join('');
+  const say = slip(sayItem({ id: 1, who: 'avichad', text: 'Ship something.', emoji: '🚢' }), name);
+  assert.deepEqual([say.who, say.emoji, text(say)], ['Avichad', '🚢', '“Ship something.”']); n++;
+  const old = slip(sayItem({ id: 2, who: 'avichad', text: 'gm', blocked: true }), name);
+  assert.deepEqual([old.who, text(old)], ['Avichad', '“gm” · blocked line']); n++;
+  // an ambush is the KO's own line (one line per KO), with the KO glyph
+  const ko = slip({ kind: 'ko', who: 'avichad', victim: 'tommy-leeth', ambush: true }, name);
+  assert.deepEqual([ko.who, ko.glyph, text(ko)], ['Avichad', 'KO', 'ambushed Leeth']); n++;
 }
 console.log(n + ' PASS, 0 FAIL');

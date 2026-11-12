@@ -10,7 +10,9 @@ It does two things, and nothing else:
     The host keeps its own rules (loopback Host header, JSON-only POSTs); this server adds no CORS and forwards
     no admin header, so /dev/shutdown is never reachable through it.
 
-Hosted, nginx plays this part: one origin for the pages and the room. Loopback only; never expose this port.
+Loopback only; never expose this port directly. Hosted (`--public-origin https://<name>`, behind nginx in the
+arena's container): the public name joins the Host check and nginx's X-Real-IP is passed on to the arena host, so
+its per-address limits see each visitor. Still no admin header and no /dev/shutdown.
 """
 from __future__ import annotations
 
@@ -50,7 +52,7 @@ def static_file(path: str) -> Path | None:
     return f if f.is_file() else None
 
 
-def make_handler(arena: str, port_box: list):
+def make_handler(arena: str, port_box: list, public_host: str | None = None):
     a = urlsplit(arena)
     a_host, a_port = a.hostname or "127.0.0.1", a.port or 80
 
@@ -62,7 +64,8 @@ def make_handler(arena: str, port_box: list):
             pass
 
         def own_host(self) -> bool:
-            return self.headers.get("Host", "") in (f"127.0.0.1:{port_box[0]}", f"localhost:{port_box[0]}")
+            return self.headers.get("Host", "") in (f"127.0.0.1:{port_box[0]}", f"localhost:{port_box[0]}",
+                                                    *((public_host,) if public_host else ()))
 
         def reply(self, status: int, body: bytes, ctype: str = "application/json", extra: dict | None = None) -> None:
             self.send_response(status)
@@ -85,6 +88,8 @@ def make_handler(arena: str, port_box: list):
             headers = {"Host": f"{a_host}:{a_port}", "Connection": "close"}
             if method == "POST":
                 headers["Content-Type"] = self.headers.get("Content-Type", "")
+            if public_host and self.headers.get("X-Real-IP"):
+                headers["X-Real-IP"] = self.headers["X-Real-IP"]  # set by nginx; the arena host validates it
             try:
                 conn.request(method, self.path, body=body, headers=headers)
                 r = conn.getresponse()
@@ -130,13 +135,24 @@ def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--port", type=int, default=8181)
     ap.add_argument("--arena", default="http://127.0.0.1:8765", help="the DEV arena host (snap_local.py)")
+    ap.add_argument("--bind", default="127.0.0.1", help="the listen address (hosted in a container: 0.0.0.0)")
+    ap.add_argument("--public-origin", default=None, help="hosted behind nginx: https://<name>")
     args = ap.parse_args(argv)
+    public_host = None
+    if args.public_origin is not None:
+        if not args.public_origin.startswith("https://") or "/" in args.public_origin[len("https://"):]:
+            raise SystemExit("serve: --public-origin is https://<name>, with no path")
+        public_host = args.public_origin[len("https://"):]
     port_box = [args.port]
-    httpd = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(args.arena, port_box))
+    httpd = ThreadingHTTPServer((args.bind, args.port), make_handler(args.arena, port_box, public_host))
     port_box[0] = httpd.server_address[1]
     ws = "ws://" + urlsplit(args.arena).netloc
-    print(f"serve: http://127.0.0.1:{port_box[0]}/web/arena.html?ws={ws} (guide: /web/snapin/index.html); "
-          f"room routes pass to {args.arena}. Loopback only.", flush=True)
+    if public_host:
+        print(f"serve: listening on {args.bind}:{port_box[0]}, hosted as {args.public_origin}/web/arena.html; "
+              f"room routes pass to {args.arena}.", flush=True)
+    else:
+        print(f"serve: http://127.0.0.1:{port_box[0]}/web/arena.html?ws={ws} (guide: /web/snapin/index.html); "
+              f"room routes pass to {args.arena}. Loopback only.", flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

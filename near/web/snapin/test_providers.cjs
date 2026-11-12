@@ -188,6 +188,23 @@ const sameShape = (r) => r && typeof r.ok === 'boolean' && (r.ok || ('kind' in r
     ok("shell quoting: a ' in the name round-trips through sh", quote.ok && out === quote.prompt, JSON.stringify([out, quote.prompt]));
   }
 
+  // ---- the Codex door with an API key (OpenAI) ----
+  {
+    const f = fakeFetch(() => reply(200, { choices: [{ message: { content: ' hi from codex ' } }] }));
+    const r = await P.codex.test(KEY, { fetch: f });
+    ok('codex 200 -> {ok,say,status}', r.ok === true && r.say === 'hi from codex' && r.status === 200, JSON.stringify(r));
+    const c = f.calls[0], body = JSON.parse(c.init.body);
+    ok('codex url + Bearer + no special header', c.url === 'https://api.openai.com/v1/chat/completions' && c.init.headers.authorization === 'Bearer ' + KEY
+       && Object.keys(c.init.headers).sort().join() === 'authorization,content-type', JSON.stringify(c.init.headers));
+    ok('codex model gpt-6-luna, max_completion_tokens', body.model === 'gpt-6-luna' && body.max_completion_tokens === 24 && !('max_tokens' in body), c.init.body);
+    const bad = await P.codex.test(KEY, { fetch: fakeFetch(() => reply(401, { error: { message: 'Incorrect API key provided: ' + KEY } })) });
+    ok('codex 401 -> bad-key, key scrubbed', bad.ok === false && bad.kind === 'bad-key' && !bad.message.includes(KEY), JSON.stringify(bad));
+    const broke = await P.codex.test(KEY, { fetch: fakeFetch(() => reply(429, { error: { message: 'You exceeded your current quota, please check your plan and billing details.' } })) });
+    ok('codex 429 quota -> rate (the same rule as the other doors)', broke.ok === false && broke.kind === 'rate', JSON.stringify(broke));
+    ok('codex.corsChecked is false until a real browser call reads a chat answer (blocked 2026-11-12)', P.codex.corsChecked === false && /blocked/.test(P.codex.corsEvidence), String(P.codex.corsChecked));
+    ok('claude.corsChecked is true with its browser evidence', P.claude.corsChecked === true && /type cors/.test(P.claude.corsEvidence), String(P.claude.corsChecked));
+  }
+
   console.log(fails ? `\n${fails} FAIL` : '\nall PASS');
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.log('FAIL test crashed -> ' + (e && e.stack || e)); process.exit(1); });

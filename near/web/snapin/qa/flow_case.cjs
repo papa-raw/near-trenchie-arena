@@ -22,15 +22,9 @@ let pass = 0, fail = 0; const report = [];
 const ok = (c, m) => { report.push((c ? 'PASS ' : 'FAIL ') + m); if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function start(args, ready, cwd) {
-  const child = spawn('python3', ['-B', ...args], { cwd: cwd || path.dirname(NEAR), stdio: ['ignore', 'pipe', 'pipe'] });
-  return new Promise((resolve, reject) => {
-    let out = ''; const t = setTimeout(() => reject(new Error('no start line: ' + out.slice(0, 300))), 30000);
-    const on = (d) => { out += d; const m = ready(out); if (m) { clearTimeout(t); resolve({ child, m }); } };
-    child.stdout.on('data', on); child.stderr.on('data', (d) => { out += d; });
-    child.on('exit', (c) => reject(new Error('exited ' + c + ': ' + out.slice(0, 300))));
-  });
-}
+// hosts start through the shared harness: each ends with this case however it ends (qa/hosts.cjs)
+const HOSTS = require('./hosts.cjs');
+const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname(NEAR));
 
 (async () => {
   let arena = null, arenaUrl = arenaArg;
@@ -212,7 +206,9 @@ function start(args, ready, cwd) {
     await sleep(800); await shot('ring');
     const players = await p.evaluate(async () => (await fetch('/dev/players')).json());
     const me = players.find((x) => x.fighter_id === 'dev-' + opts.name.toLowerCase());
-    ok(me && me.state !== 'bench' && me.preset === opts.presetId, `${tag}: /dev/players lists ${me && me.fighter_id} (${me && me.state}, preset ${me && me.preset})`);
+    // a KO on the way leaves it on the bench for the 45 s respawn wait (a later life_id, :life:1 and up); the first life is never on the bench here
+    const laterLife = me && Number(String(me.life_id || '').split(':life:')[1]) > 0;
+    ok(me && (me.state !== 'bench' || laterLife) && me.preset === opts.presetId, `${tag}: /dev/players lists ${me && me.fighter_id} (${me && me.state}, ${me && me.life_id}, preset ${me && me.preset})`);
     // ---- reload in the ring: the same fighter carries on
     await p.reload(); await ready();
     await p.waitForFunction(() => SnapRoom.status().phase === 'in', null, { timeout: 30000 }).catch(() => {});
@@ -307,6 +303,7 @@ function start(args, ready, cwd) {
   await b.close().catch(() => {});
   if (arena) { await fetch(arenaUrl + '/dev/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Dev-Admin': arena.m } }).catch(() => {}); arena.child.kill(); }
   web.child.kill();
+  ok((await HOSTS.finish()).length === 0, 'no host this case started survives it');
   const summary = { pass, fail, at: new Date().toISOString(), wallet_to_ring_s: { A: A && A.shown, B: B && B.shown }, frames: { A: A && A.frames, B: B && B.frames }, provider_answers: 'test-supplied (401 then 200) for cloud-api.near.ai; everything else real', report };
   fs.writeFileSync(path.join(OUT, 'flow-case.json'), JSON.stringify(summary, null, 1));
   console.log(`${pass} passed, ${fail} failed; frames in ${OUT}`);

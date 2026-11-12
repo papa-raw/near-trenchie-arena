@@ -100,7 +100,7 @@
   }
   function keyPanel() {
     var near = s.door === 'NEAR AI Cloud', cons = s.door === 'Claude';
-    return consent(false) + (near ? '<div class="key-steps"><span>Google, GitHub or NEAR</span><span>Two Terms ticks; screening</span><span>Credits → API Keys</span><span>Create key; set Limit</span></div>' :
+    return consent(false) + (near ? '<div class="key-steps"><span>Google, GitHub or NEAR</span><span>Two sign-up ticks; screening</span><span>Credits → API Keys</span><span>Create key; set Limit</span></div>' :
       cons ? '<div class="key-steps"><span>Console → API Keys</span><span>Create key → copy</span></div>' + creditsHelper() :
       '<div class="key-steps"><span>Review access at OpenRouter.</span><span>Set expiry and credit limit.</span></div>') +
       (s.door === 'OpenRouter' ? btn('Review authorization', 'ai:authorize', 'main-action') : btn('Open key page', 'ai:key-page', 'main-action')) +

@@ -11,6 +11,11 @@ and what it refused, the tick it applies at, and one plain summary line.
 Validator and receipt code: `near/arena/behaviour.py` (`normalise`, `ack`, `summary`). The engine:
 `near/arena/sim.py`, input kind `behaviour`, from rules table `integer-13`.
 
+A behaviour never carries or changes a prediction. A life's prediction is one level (1+, 2+, 3+ or 4+
+KOs), locked before the life starts and kept until it ends. The behaviour only decides how the fighter
+goes after it. The prediction rule (correct or failure, the reward multiplier, reward points and the
+optional 0.01 testnet NEAR) is in [SNAP.md, "The prediction rule"](../SNAP.md#the-prediction-rule-arena-rules-integer-16-on).
+
 ## 1. The behaviour
 
 ```json
@@ -46,16 +51,18 @@ default AI.
 | Key | Range | Meaning |
 |---|---|---|
 | `loot` | 0–10 | Walk to the best grabbable drop in view (higher tier and nearer first). When loot is the strongest active drive the fighter stands on the drop until it is grabbed (6 undamaged ticks). |
-| `keep_away` | 0–10 | Walk away from every enemy inside `keep_away_radius`: one at the edge pushes at half strength, one touching at full. The enemy the fighter is attacking does not push. |
+| `keep_away` | 0–10 | Walk away from every enemy inside `keep_away_radius`: one at the edge pushes at half strength, one touching at full (from rules table integer-15, `steer_band`: zero at the edge, full touching). The enemy the fighter is attacking does not push. |
 | `keep_away_radius` | 1–12 tiles (default 4) | |
-| `chase` | 0–10 | Walk toward the attack target until it is in weapon reach. With no target in view, walk toward the nearest enemy anywhere on the ring that passes the gate (from rules table integer-14, `behaviour.chase_seek`; under integer-13 the fighter stands until an enemy comes into view). |
+| `chase` | 0–10 | Walk toward the attack target until it is in weapon reach (from integer-15: full speed outside reach, easing to a stop at three quarters of reach). With no target in view, walk toward the nearest enemy anywhere on the ring that passes the gate (from rules table integer-14, `behaviour.chase_seek`; under integer-13 the fighter stands until an enemy comes into view). |
 | `protect` | 0–10 | Stay within 3 tiles of `protect_ally`; enemies that hit the ally in the last 3 s score higher as targets. Needs `protect_ally`. |
 | `protect_ally` | fighter id | |
 | `hold` | 0–10 | Walk back into the hold area whenever outside it. |
 | `hold_at` | `"center"`, `"here"`, or `{"x_milli": int, "y_milli": int}` (default `"center"`) | `"here"` is where the fighter stands on the tick the behaviour (or the reflex) takes effect. Coordinates are the same milli-tiles the observe call shows. |
 | `hold_radius` | 1–6 tiles (default 2) | |
 
-Each active drive pulls with its weight and the pulls add up. The arena still pushes fighters off the
+Each active drive pulls with its weight and the pulls add up. From rules table integer-15 (`steer_band`)
+each pull eases in over one tile at its edge and the step is as long as the net pull, so drives that
+balance leave the fighter standing instead of stepping back and forth. The arena still pushes fighters off the
 edge, apart in a crowd, and sideways out of an incoming shot, beam or lob. With every drive at 0 the
 fighter stands its ground and fights only what the gate lets come into reach.
 

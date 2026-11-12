@@ -205,9 +205,36 @@ def check_names(root, files):
     return out
 
 
+# make demo's sealed segment records are one JSON line each, full of sha256 values; a deny pattern that is a bare number
+# can match inside one by chance. Only there, and only for such a pattern wholly inside a "<field>_hash":"<64 hex>"
+# value, is the match not a hit. The numbers are read from the deny file; none is written here.
+DENY_HASH_PATH = re.compile(r"near/replay/segments/[^/]+\.json")
+DENY_HASH_VALUE = re.compile(r'"[A-Za-z0-9_]*_hash":"([0-9a-f]{64})"')
+
+
+def deny_line_hits(text, pats, numbers, hash_path):
+    """Whether a line is a deny hit. In a segment record, a bare-number pattern's match wholly inside a 64-hex *_hash
+    value is not one; every other match of every pattern is."""
+    spans = [m.span(1) for m in DENY_HASH_VALUE.finditer(text)] if hash_path else []
+    for p in pats:
+        for m in re.finditer(p, text, re.I):
+            inside = p in numbers and any(a <= m.start() and m.end() <= b for a, b in spans)
+            if not inside:
+                return True
+    return False
+
+
 def check_deny(root, files):
     pats = pattern_lines("deny")
-    return scan_regex("deny", root, files, re.compile("|".join(f"(?:{p})" for p in pats), re.I))
+    rx = re.compile("|".join(f"(?:{p})" for p in pats), re.I)
+    numbers = {p for p in pats if p.isdigit()}
+    out = []
+    for path in files:
+        hash_path = bool(numbers) and DENY_HASH_PATH.fullmatch(path) is not None
+        for n, t in text_lines(root, path):
+            if rx.search(t) and (not hash_path or deny_line_hits(t, pats, numbers, True)):
+                out.append(hit("deny", path, n, t))
+    return out
 
 
 def check_leak(root, files):

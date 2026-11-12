@@ -4,10 +4,10 @@
  * build one with fakes). It is the browser twin of the house runtime (near/house/runtime.py):
  *   - every ~5 s while the fighter is in the ring it reads the ring (SnapRoom.observe), asks the model the player picked
  *     at the AI door for ONE order {focus, avoid, loot, sig, leave, say} (the SNAP.md intent schema) and sends it signed
- *     (SnapRoom.intent). The room spaces orders 2 s apart; a line ("say") goes at most once per 10 s and passes the
+ *     (SnapRoom.intent). The room takes one order per 0.5 s; a line ("say") goes at most once per 10 s and passes the
  *     host's guard like every feed line.
- *   - during each life it asks for the NEXT life's prediction (a spread over 1, 2, 3, 4+ KOs and the chance of 0),
- *     so it is locked before that life starts (SnapRoom.setOrder). An invalid spread is asked for once more; a second
+ *   - during each life it asks for the NEXT life's prediction (one level, 1+, 2+, 3+ or 4+ KOs, or none),
+ *     so it is locked before that life starts (SnapRoom.setOrder). An invalid answer is asked for once more; a second
  *     invalid answer files an explicit no-prediction for that life and says so.
  *   - the prompt: the player's persona sheet first, as the cacheable prefix; thinking off (NEAR AI Cloud).
  *   - the player's hourly cap (the AI door's cap field) is enforced here: the spend of the last 60 minutes is shown, the
@@ -31,6 +31,8 @@
   var NEARAI_URL = 'https://cloud-api.near.ai/v1/chat/completions', NEARAI_MODEL = 'deepseek-ai/DeepSeek-V4.1-Flash-1017';
   var ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages', ANTHROPIC_MODEL = 'claude-haiku-5-5';
   var OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions', OPENROUTER_MODEL = 'openai/gpt-6-luna';
+  // The Codex door with an API key: OpenAI's own chat completions, the same model OpenRouter serves as openai/gpt-6-luna.
+  var OPENAI_URL = 'https://api.openai.com/v1/chat/completions', OPENAI_MODEL = 'gpt-6-luna';
   // USD per million tokens {in, out, cached in}, list prices applied to each call's metered token counts.
   // NEAR AI Cloud: the catalogue price the house meter uses (runtime.py). claude-haiku-5-5: its list price (NEAR AI Cloud's
   // catalogue and OpenRouter's model list agree). OpenRouter reports each call's own cost
@@ -40,6 +42,8 @@
     nearai: { in: 0.30, out: 1.20, cached: 0.006, model: NEARAI_MODEL },
     claude: { in: 0.10, out: 0.50, cached: 0.01, model: ANTHROPIC_MODEL },
     openrouter: { in: 0.10, out: 0.50, cached: 0.01, model: OPENROUTER_MODEL },
+    // OpenAI's list price for gpt-6-luna, the same row OpenRouter lists for openai/gpt-6-luna (read 2026-11-11)
+    codex: { in: 0.10, out: 0.50, cached: 0.01, model: OPENAI_MODEL },
     // a reservation for OpenRouter cannot know the provider's own price in advance: a generous ceiling
     openrouter_fallback: { in: 1.00, out: 4.00, cached: 1.00, model: 'any OpenRouter model, worst case' }
   };
@@ -69,6 +73,8 @@
     if (name === 'NEAR AI Cloud') return { provider: 'nearai', keyName: 'NEAR AI Cloud' };
     if (name === 'OpenRouter') return { provider: 'openrouter', keyName: 'OpenRouter' };
     if (name === 'Claude' && /Console/.test(id)) return { provider: 'claude', keyName: 'Claude' };
+    // the Codex KEY row; the Codex PLAN row has the same name and identity, so the route tells them apart
+    if (name === 'Codex' && d.route === 'key') return { provider: 'codex', keyName: 'Codex' };
     return null;
   }
 
@@ -104,6 +110,10 @@
   }
 
   /* The prediction: whole percents over 1, 2, 3, 4+ KOs summing to 100, and a chance of 0 KOs (quote.check_spread's rules). */
+  /* A prediction counts as one level (KOs-or-more): 1, 2, 3 or 4 means at least that many KOs this life; 0 means none. */
+  function checkLevel(p) {
+    return p && Number.isInteger(p.level) && p.level >= 0 && p.level <= 4 ? null : 'level is 0, 1, 2, 3 or 4';
+  }
   function checkSpread(p) {
     if (!p || !Array.isArray(p.spread_pct) || p.spread_pct.length !== 4) return 'spread_pct needs four numbers over 1, 2, 3 and 4+ KOs';
     if (p.spread_pct.some(function (x) { return !Number.isInteger(x) || x < 0; })) return 'spread numbers are whole percents of at least 0';
@@ -145,7 +155,9 @@
   // ------------------------------------------------------------------ battle mode (BEHAVIOUR.md, schema v1)
   var SCHEMA = 'A behaviour is one JSON object, schema v1: {"v":1, "stance"?, "drives"?, "gate"?, "target"?, "reflexes"?}. ' +
     'stance: flee|berserk|defend|loot|hold|follow-ally|hunt-weakest. drives (0-10 each): loot, keep_away (+ keep_away_radius 1-12 tiles), chase, ' +
-    'protect (+ protect_ally id), hold (+ hold_at "center"|"here", hold_radius 1-6). gate (who you may attack; {} = anyone): target_hp_below_pct 1-99, ' +
+    'protect (+ protect_ally id), hold (+ hold_at "center"|"here", hold_radius 1-6). gate (who you may attack; {} = anyone; every condition you add ' +
+    'forbids attacking an enemy that does not meet it, e.g. target_hp_below_pct 99 never attacks anyone at full health, so leave the gate out unless ' +
+    'your owner asked you to pick only some targets): target_hp_below_pct 1-99, ' +
     'target_busy true, distance_under 1-12, rival true, wears_legendary true, match "all"|"any". target: auto|nearest|weakest|attacker|<an id from the ring>. ' +
     'reflexes (at most 8, first wins): {"if": {ONE of self_hp_below_pct, self_hp_above_pct, enemy_within (tiles), hit_recently true, loot_within (tiles), ' +
     'legendary_on_floor true, target_hp_below_pct, no_target true}, "then": {stance?, drives?, gate?, target?, say? (<=80 chars)}}. ' +
@@ -175,7 +187,8 @@
   }
 
   var ORDER_ASK = 'Give your fighter one order. Answer one JSON object: {"focus": id or null, "avoid": id or null, "loot": "nearest"|"ignore", "sig": "auto"|"hold"|"use", "say": a short line or null}. Use only ids from "near".';
-  var SPREAD_ASK = 'Predict your NEXT life before it starts. Answer one JSON object: {"spread_pct": [p1, p2, p3, p4] (whole percents for exactly 1, 2, 3 and 4+ KOs, summing to 100), "zero_pct": your chance of 0 KOs, 0-100}.';
+  var LEVEL_ASK = 'Predict your NEXT life before it starts: how many KOs you will reach at least. A higher level earns more if you reach it ' +
+    'and nothing if you fall short. Answer one JSON object: {"level": 1, 2, 3 or 4 (at least 1, 2, 3 or 4 KOs), or 0 to predict nothing}.';
 
   // ------------------------------------------------------------------ the provider call
   async function chat(provider, key, system, user, opts) {
@@ -189,6 +202,11 @@
       url = OPENROUTER_URL;
       init = { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
                body: JSON.stringify({ model: model || OPENROUTER_MODEL, max_tokens: maxTokens, usage: { include: true },
+                                      messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }) };
+    } else if (provider === 'codex') {
+      url = OPENAI_URL;   // OpenAI's newer models take max_completion_tokens, not max_tokens
+      init = { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
+               body: JSON.stringify({ model: model || OPENAI_MODEL, max_completion_tokens: maxTokens,
                                       messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }) };
     } else {
       url = ANTHROPIC_URL;
@@ -467,16 +485,23 @@
     if (!this.battleOn()) return { reply: null, receipt: null, chip: 'This arena has no battle mode yet: your trenchie takes single orders only.' };
     this.setGoal(said);
     this.say('owner', said);
+    // While the model call is out the page can say the trenchie is thinking; each order then reports how long the
+    // Send took to reach a receipt, and the arena's own delay before it applies (the ACK's applies_in_ms).
+    var sentAt = this.now();
+    this.emit({ thinking: { order: said, since: sentAt } });
     try {
       var me = this.fighter && this.fighter.id, ring = me ? view(await this.room.observe(), me) : null;
       var p = parseJson(await this.ask(c, tellAsk(said, said, ring, this.behaviour), 500));
       if (!p || typeof p.behaviour !== 'object' || Array.isArray(p.behaviour)) throw new Error('the answer had no behaviour object');
       var reply = typeof p.reply === 'string' ? p.reply.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
       var ack = await this.sendBehaviour(p.behaviour);
+      this.emit({ thinking: null, lastOrderTiming: { order: said, receipt_ms: this.now() - sentAt,
+        applies_in_ms: ack && typeof ack.applies_in_ms === 'number' ? ack.applies_in_ms : null } });
       if (reply) this.say('trenchie', reply);
       if (ack && ack.summary) this.say('host', ack.summary);
       return { reply: reply || null, receipt: ack || null };
     } catch (e) {
+      this.emit({ thinking: null });
       var chip = e && e.kind === 'capped' ? 'Hourly cap reached: your AI is paused and your trenchie keeps its last plan, on the arena’s own tactics.'
         : this.failure ? this.failure.chip : 'Your AI could not answer (' + scrub(e.message, c.key) + '): your trenchie keeps its last plan.';
       this.say('host', chip);
@@ -495,18 +520,20 @@
     return 'Your AI is driving · $' + this.hourSpend().toFixed(3) + ' of $' + c.cap.toFixed(2) + ' this hour' + (extra ? ' · ' + extra : '');
   };
 
-  /* The next life's spread, locked ahead of it. Two invalid answers file an explicit no-prediction. */
+  /* The next life's prediction, one level (all on one bin, zero 0), locked ahead of it. 0 and two invalid answers file the
+     explicit no-prediction marker. */
   Brain.prototype.predictNext = async function (c) {
-    var forLife = this.life, ask = SPREAD_ASK, last = null;
+    var forLife = this.life, ask = LEVEL_ASK, last = null;
     for (var attempt = 0; attempt < 2; attempt++) {
       var p = null; try { p = parseJson(await this.ask(c, 'Your last life: ' + JSON.stringify({ lives: this.fighter && this.fighter.lives }) + '\n' + ask, 80)); } catch (e) { if (e.kind) throw e; p = null; }
-      var bad = p ? checkSpread(p) : 'no JSON object in the answer';
-      if (!bad) {
-        this.room.setOrder({ spread: p.spread_pct.slice(), zero: p.zero_pct, prediction: true });
-        this.predictedFor = forLife; this.emit({ lastPrediction: { spread_pct: p.spread_pct.slice(), zero_pct: p.zero_pct, forNextOf: forLife } });
+      var bad = p ? checkLevel(p) : 'no JSON object in the answer';
+      if (!bad && p.level > 0) {
+        this.room.setOrder({ spread: [1, 2, 3, 4].map(function (l) { return l === p.level ? 100 : 0; }), zero: 0, prediction: true });
+        this.predictedFor = forLife; this.emit({ lastPrediction: { level: p.level, forNextOf: forLife } });
         return;
       }
-      last = bad; ask = 'That was invalid (' + bad + '). ' + SPREAD_ASK;
+      if (!bad) { last = 'the AI chose not to predict'; break; }
+      last = bad; ask = 'That was invalid (' + bad + '). ' + LEVEL_ASK;
     }
     this.room.setOrder({ prediction: false });
     this.predictedFor = forLife;
@@ -549,7 +576,7 @@
   var api = {
     create: function (deps) { return new Brain(deps); },
     PRICES: PRICES,
-    checkOrder: checkOrder, checkSpread: checkSpread, view: view, prefix: prefix, costUsd: costUsd, providerOf: providerOf,
+    checkOrder: checkOrder, checkSpread: checkSpread, checkLevel: checkLevel, view: view, prefix: prefix, costUsd: costUsd, providerOf: providerOf,
     classify: classify, scrub: scrub, chat: chat,
     dataName: dataName, planAsk: planAsk, tellAsk: tellAsk, lineAsk: lineAsk,
     constants: { SPEND_STORE: SPEND_STORE, SPEND_LOCK: SPEND_LOCK, BASE_MS: BASE_MS, SLOW_MS: SLOW_MS, SAY_MS: SAY_MS, GOAL_STORE: GOAL_STORE, GOAL_MAX: GOAL_MAX, SLOW_AT: SLOW_AT, SAVE: SAVE, KEY_STORE: KEY_STORE, CAP_STORE: CAP_STORE, PRICES: PRICES }

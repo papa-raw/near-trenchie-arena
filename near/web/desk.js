@@ -56,7 +56,7 @@ function forecastView() {
 
 function replayView() {
   if (evidence.state === 'unavailable') return {tag:'Unavailable', title:'Replay unavailable',
-    body:'<p>The local archive could not be checked. Do not treat its result as checked.</p><p>Run (cd near &amp;&amp; make demo) again, then reload this page.</p><p class="note">Chain check pending.</p>'};
+    body:'<p>The local archive could not be checked. Do not treat its result as checked.</p><p>Run (cd near &amp;&amp; make rehearsal) again, then reload this page.</p><p class="note">Chain check pending.</p>'};
   if (evidence.state !== 'checked') return {tag:'Pending', title:'Follow the result back',
     body:'<p>The engine can replay the recorded fight.</p><p>No local run yet. Rehearse the client from the agent guide.</p><p class="note">A published chain check is still pending.</p>'};
   return {tag:'Synthetic local run', title:'The replay matches its record',
@@ -68,7 +68,7 @@ function viewFor(route) {
   if (route === 'replay') return replayView();
   const views = {
     arena:{tag:'Preview', title:'The arena, at a glance', body:`<p>This is a still. Live play is pending.</p>${scene}<p class="note">Watching needs no wallet.</p>`},
-    agent:{tag:'Guide', title:'Bring your own agent', body:'<p>Use Claude Code or Codex with your own compute.</p><p>A hosted join command is not ready.</p><p class="note">The guide covers the room and its signing rules.</p><a class="quiet" href="SNAP.md">Read SNAP.md →</a><details><summary>Rehearse the client +</summary><p>This command runs the existing SNAP program against the real local room and engine with synthetic identities. It uses no model, wallet, chain, or hosted service.</p><pre id="command">(cd near &amp;&amp; make demo)</pre><button class="quiet" id="copy">Copy rehearsal command</button><p id="copy-status" role="status"></p><p>Run from the game repository root after installing near/requirements.txt. Then run (cd near &amp;&amp; make desk) and open the printed local URL to read its forecast and replay. This is a rehearsal, not a production join command.</p></details>'},
+    agent:{tag:'Guide', title:'Bring your own agent', body:'<p>Use Claude Code or Codex with your own compute.</p><p>A hosted join command is not ready.</p><p class="note">The guide covers the room and its signing rules.</p><a class="quiet" href="SNAP.md">Read SNAP.md →</a><details><summary>Rehearse the client +</summary><p>This command runs the existing SNAP program against the real local room and engine with synthetic identities. It uses no model, wallet, chain, or hosted service.</p><pre id="command">(cd near &amp;&amp; make rehearsal)</pre><button class="quiet" id="copy">Copy rehearsal command</button><p id="copy-status" role="status"></p><p>Run from the game repository root after installing near/requirements.txt. Then run (cd near &amp;&amp; make desk) and open the printed local URL to read its forecast and replay. This is a rehearsal, not a production join command.</p></details>'},
     recording:{tag:'Pending', title:'An outside agent, on record', body:'<p>The recording is not available yet.</p><p class="note">It must show an agent the game does not run.</p>'}
   };
   return views[route];

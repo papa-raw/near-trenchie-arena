@@ -112,7 +112,15 @@ fn setup() -> (TrenchieNft, Env) {
             reference_hash: None,
         },
         None,
+        None,
     );
+    (nft, e)
+}
+
+/// An inventory deployment whose unknown tokens get a record filed under the mirror (nft-apply-rows).
+fn setup_mirror() -> (TrenchieNft, Env) {
+    let (mut nft, e) = setup();
+    nft.mirror = Some(acc("custody.testnet"));
     (nft, e)
 }
 
@@ -1219,4 +1227,185 @@ fn a_premint_copy_needs_run_out_and_a_permit() {
     e.call("player.testnet", MINT_COST);
     let t = nft.paid_mint(p.clone(), sign(&p, &permit_key()));
     assert_eq!((t.token_id.as_str(), t.persona_digest.clone()), ("paid-c1", digest(0xf1)));
+}
+
+
+// ------------------------------------------------------------------- nft-apply-rows
+
+/// An inventory with a mirror files a token it meets for the first time: the record is made under the mirror, empty
+/// before the row, not sale-ready, and the row's bag and record land in the same batch. Known tokens are unaffected.
+#[test]
+fn apply_rows_creates_the_record_of_a_token_it_has_none_of() {
+    let (mut nft, mut e) = setup_mirror();
+    mint(&mut nft, &mut e, "known", "a.testnet", 1);
+    let out = apply(&mut nft, &mut e, "b1", vec![row("known", vec![entry(3, 7)], None), row("paid-h1", vec![entry(4, 9)], None)]);
+    assert_eq!((out.rows, out.created.clone(), out.skipped.clone(), out.unfunded.clone()),
+               (2, vec!["paid-h1".to_string()], vec![], vec![]));
+    let t = nft.trenchie("paid-h1".into()).unwrap();
+    assert_eq!((t.owner_id.clone(), t.sale_ready, t.bag.clone(), t.record.lives), (acc("custody.testnet"), false, vec![entry(4, 9)], 3));
+    assert_eq!(t.preset_id, "identity-nft");
+    assert_eq!(t.persona_digest.len(), 64);
+    assert_eq!(nft.serial_holder(4, 9), Some("paid-h1".to_string()));
+    assert!(get_logs().iter().any(|l| l.contains("\"created\":[\"paid-h1\"]")));
+    assert_eq!(nft.contract_state().mirror, Some(acc("custody.testnet")));
+    // the next batch finds the record and moves its bag as for any token
+    let out = apply(&mut nft, &mut e, "b2", vec![row("paid-h1", vec![entry(5, 1)], None)]);
+    assert!(out.created.is_empty());
+    assert_eq!(nft.trenchie("paid-h1".into()).unwrap().bag, vec![entry(5, 1)]);
+}
+
+/// The contract's balance pays for the record AND everything its row and the batch write after it: across a sweep of
+/// balances, a new token is created only when, after the whole batch, storage (plus the closing reserve) is still
+/// covered, which is what the runtime itself enforces; otherwise it is skipped and named in `unfunded`, nothing of it
+/// is left behind, and the known token's row applies either way. Each trial runs on a scratch copy of the storage.
+#[test]
+fn a_record_the_balance_cannot_cover_is_refused_and_the_batch_applies() {
+    let (mut nft, mut e) = setup_mirror();
+    mint(&mut nft, &mut e, "known", "a.testnet", 1);
+    nft.flush();
+    let byte = near_sdk::env::storage_byte_cost().as_yoctonear();
+    let rows = || vec![row("known", vec![entry(3, 7), entry(9, 2)], None), row("paid-h2", vec![entry(4, 9), entry(5, 3)], None)];
+    // one trial at a given balance: the outcome, the storage cost after the batch, and the balance
+    let mut trial = |budget: u128| -> (ApplyOutcome, u128, u128, bool, Option<String>) {
+        nft.flush();
+        e.call("arena.testnet", 0);
+        let base = near_sdk::env::storage_usage() as u128;
+        e.balance = (base + budget) * byte;
+        e.call("arena.testnet", 0);
+        let snap = near_sdk::mock::with_mocked_blockchain(|b| b.take_storage());
+        let install = |storage| {
+            near_sdk::env::set_blockchain_interface(near_sdk::MockedBlockchain::new(
+                e.ctx.clone().unwrap(), test_vm_config(), RuntimeFeesConfig::test(), vec![], storage, Default::default(), None));
+        };
+        install(snap.clone());
+        let mut copy: TrenchieNft = near_sdk::borsh::from_slice(&near_sdk::borsh::to_vec(&nft).unwrap()).unwrap();
+        let out = copy.apply_rows(format!("b{budget}"), U64(copy.last_seq + 1), rows());
+        copy.flush();
+        let cost = near_sdk::env::storage_usage() as u128 * byte;
+        let known_bag = copy.trenchie("known".into()).unwrap().bag == vec![entry(3, 7), entry(9, 2)];
+        let holder = copy.serial_holder(4, 9);
+        std::mem::forget(copy);
+        install(snap);
+        (out, cost, e.balance, known_bag, holder)
+    };
+    assert_eq!(trial(1 << 40).0.created, vec!["paid-h2".to_string()], "with room, the record is made");
+    let mut seen_created = false;
+    let mut seen_unfunded = false;
+    for budget in (0..4000u128).step_by(25) {
+        let (out, cost, balance, known_bag, holder) = trial(budget);
+        assert!(known_bag, "the known token's row applies at budget {budget}");
+        if out.created.is_empty() {
+            assert_eq!((out.unfunded.clone(), out.skipped.clone()), (vec!["paid-h2".to_string()], vec!["paid-h2".to_string()]));
+            assert_eq!(holder, None, "an undone record leaves no serial behind");
+            seen_unfunded = true;
+        } else {
+            assert_eq!(out.created, vec!["paid-h2".to_string()]);
+            assert_eq!(holder, Some("paid-h2".to_string()));
+            // the runtime's own rule: storage after the whole batch (record, bag, serials, the batch's closing
+            // writes) stays covered by the balance
+            assert!(cost <= balance, "budget {budget}: storage {cost} exceeds balance {balance}");
+            seen_created = true;
+        }
+    }
+    assert!(seen_created && seen_unfunded, "the sweep crosses the line between unfunded and created");
+}
+
+/// A burned token is never re-created by a row still in flight; without a mirror, unknown tokens are skipped as
+/// before; an identity-only deployment still refuses apply_rows and takes no mirror.
+#[test]
+fn burned_tokens_stay_burned_and_mirrorless_deployments_are_unchanged() {
+    let (mut nft, mut e) = setup_mirror();
+    mint(&mut nft, &mut e, "gone", "a.testnet", 2);
+    apply(&mut nft, &mut e, "b0", vec![row("gone", vec![], Some(true))]);
+    e.call("a.testnet", 1);
+    nft.nft_burn("gone".into());
+    let out = apply(&mut nft, &mut e, "b1", vec![row("gone", vec![], None)]);
+    assert_eq!((out.skipped.clone(), out.created.clone()), (vec!["gone".to_string()], vec![]));
+    assert!(nft.trenchie("gone".into()).is_none());
+
+    let (mut plain, mut e2) = setup();
+    let out = apply(&mut plain, &mut e2, "p1", vec![row("paid-h3", vec![], None)]);
+    assert_eq!((out.skipped.clone(), out.created.clone()), (vec!["paid-h3".to_string()], vec![]));
+
+    let (mut ident, mut e3) = setup();
+    ident.arena = None;
+    e3.call("arena.testnet", 0);
+    let err = refused(&e3, &mut ident, |n| n.apply_rows("i1".into(), U64(1), vec![row("paid-h4", vec![], None)]));
+    assert!(err.contains("identity-only deployment"), "{err}");
+    e3.call("owner.testnet", 0);
+    let err = std::panic::catch_unwind(|| {
+        TrenchieNft::new(acc("o.testnet"), acc("m.testnet"), None, acc("c.testnet"), presets(), "testnet".into(),
+                         b64(permit_key().verifying_key().as_bytes()), "1".into(), U64(60_000), U128(MINT_COST), 64, 214, 48,
+                         ident.metadata.clone(), None, Some(acc("c.testnet")))
+    });
+    assert!(err.is_err(), "an identity-only deployment takes no mirror");
+}
+
+/// The upgrade: state written in the layout before `mirror` and `burned` converts once with the mirror set; the
+/// tokens and every counter survive; a second migrate keeps it and refuses another mirror.
+#[test]
+fn migrate_converts_the_old_layout_once_and_sets_the_mirror() {
+    let (mut nft, mut e) = setup();
+    mint(&mut nft, &mut e, "kept", "a.testnet", 3);
+    nft.flush();
+    let old = TrenchieNftV1 {
+        owner: nft.owner.clone(), minter: nft.minter.clone(), arena: nft.arena.clone(), custodian: nft.custodian.clone(),
+        presets: nft.presets.clone(), network_id: nft.network_id.clone(), permit_public_key: nft.permit_public_key,
+        permit_epoch: nft.permit_epoch.clone(), permit_ttl_ms: nft.permit_ttl_ms, mint_cost: nft.mint_cost,
+        mint_cap: nft.mint_cap, minted_by_minter: nft.minted_by_minter, max_rows_per_batch: nft.max_rows_per_batch,
+        row_count: nft.row_count, paused: nft.paused, ended: nft.ended, last_apply_ns: nft.last_apply_ns,
+        last_seq: nft.last_seq, metadata: nft.metadata.clone(),
+        tokens: LookupMap::new(Key::Tokens), token_ids: IterableSet::new(Key::TokenIds), owners: LookupMap::new(Key::Owners),
+        digests: LookupSet::new(Key::Digests), serials: LookupMap::new(Key::Serials), retired: LookupSet::new(Key::Retired),
+        batches: LookupSet::new(Key::Batches), nonces: LookupSet::new(Key::Nonces),
+        premint_cap: nft.premint_cap, premint_claimed: nft.premint_claimed, premints: nft.premints.clone(),
+    };
+    let minted = nft.minted_by_minter;
+    std::mem::forget(nft);   // its collections are already flushed; the old layout is what sits in STATE now
+    near_sdk::env::storage_write(b"STATE", &near_sdk::borsh::to_vec(&old).unwrap());
+    std::mem::forget(old);
+    e.call("nft.testnet", 0);
+    let mut up = TrenchieNft::migrate(Some(acc("custody.testnet")));
+    assert_eq!((up.mirror.clone(), up.minted_by_minter), (Some(acc("custody.testnet")), minted));
+    assert_eq!(up.trenchie("kept".into()).unwrap().owner_id, acc("a.testnet"));
+    up.flush();
+    near_sdk::env::storage_write(b"STATE", &near_sdk::borsh::to_vec(&up).unwrap());
+    let again = TrenchieNft::migrate(None);
+    assert_eq!(again.mirror, Some(acc("custody.testnet")));
+    std::mem::forget(again);
+    let err = std::panic::catch_unwind(|| TrenchieNft::migrate(Some(acc("other.testnet"))));
+    assert!(err.is_err(), "the mirror is set once");
+    std::mem::forget(up);
+}
+
+
+/// The first inventory deployments stored `arena` as a plain account (nft.trenchie-r4b runs that build): migrate reads
+/// that layout too, and the result is an inventory deployment with its mirror.
+#[test]
+fn migrate_reads_the_first_inventory_layout_too() {
+    let (mut nft, mut e) = setup();
+    mint(&mut nft, &mut e, "kept", "a.testnet", 4);
+    nft.flush();
+    let old = TrenchieNftV0 {
+        owner: nft.owner.clone(), minter: nft.minter.clone(), arena: nft.arena.clone().unwrap(), custodian: nft.custodian.clone(),
+        presets: nft.presets.clone(), network_id: nft.network_id.clone(), permit_public_key: nft.permit_public_key,
+        permit_epoch: nft.permit_epoch.clone(), permit_ttl_ms: nft.permit_ttl_ms, mint_cost: nft.mint_cost,
+        mint_cap: nft.mint_cap, minted_by_minter: nft.minted_by_minter, max_rows_per_batch: nft.max_rows_per_batch,
+        row_count: nft.row_count, paused: nft.paused, ended: nft.ended, last_apply_ns: nft.last_apply_ns,
+        last_seq: nft.last_seq, metadata: nft.metadata.clone(),
+        tokens: LookupMap::new(Key::Tokens), token_ids: IterableSet::new(Key::TokenIds), owners: LookupMap::new(Key::Owners),
+        digests: LookupSet::new(Key::Digests), serials: LookupMap::new(Key::Serials), retired: LookupSet::new(Key::Retired),
+        batches: LookupSet::new(Key::Batches), nonces: LookupSet::new(Key::Nonces),
+        premint_cap: nft.premint_cap, premint_claimed: nft.premint_claimed, premints: nft.premints.clone(),
+    };
+    std::mem::forget(nft);
+    near_sdk::env::storage_write(b"STATE", &near_sdk::borsh::to_vec(&old).unwrap());
+    std::mem::forget(old);
+    e.call("nft.testnet", 0);
+    let mut up = TrenchieNft::migrate(Some(acc("custody.testnet")));
+    assert_eq!((up.arena.clone(), up.mirror.clone()), (Some(acc("arena.testnet")), Some(acc("custody.testnet"))));
+    assert_eq!(up.trenchie("kept".into()).unwrap().owner_id, acc("a.testnet"));
+    let out = apply(&mut up, &mut e, "v0-1", vec![row("paid-v0", vec![], None)]);
+    assert_eq!(out.created, vec!["paid-v0".to_string()]);
+    std::mem::forget(up);
 }

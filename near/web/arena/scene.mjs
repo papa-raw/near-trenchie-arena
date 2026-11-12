@@ -146,7 +146,7 @@ export function createStage(canvas, LOOK3, opts = {}) {
   const island = buildIsland(); scene.add(island);
 
   const camera = new THREE.OrthographicCamera(-20, 20, 12, -12, 0.1, 400);
-  const view = { w: 0, h: 0, ppt: 30, narrow: false, elev: ELEV_DEG };
+  const view = { w: 0, h: 0, ppt: 30, narrow: false, elev: ELEV_DEG, panPx: 0 };
 
   function placeCamera(shakeX = 0, shakeY = 0) {
     const e = view.elev * Math.PI / 180, dir = new THREE.Vector3(Math.sin(AZ) * Math.cos(e), Math.sin(e), Math.cos(AZ) * Math.cos(e));
@@ -163,11 +163,17 @@ export function createStage(canvas, LOOK3, opts = {}) {
     const spanY = 2 * (15.4 * Math.sin(e) + 3.2 * Math.cos(e));
     const topPad = view.narrow ? 110 : 20, botPad = view.narrow ? 150 : 20;
     view.ppt = view.narrow ? w / spanX : Math.min(w / spanX, (h - topPad - botPad) / spanY);
-    camera.left = -w / 2 / view.ppt; camera.right = w / 2 / view.ppt; camera.top = h / 2 / view.ppt; camera.bottom = -h / 2 / view.ppt;
+    camera.left = (-w / 2 + view.panPx) / view.ppt; camera.right = (w / 2 + view.panPx) / view.ppt; camera.top = h / 2 / view.ppt; camera.bottom = -h / 2 / view.ppt;
     placeCamera();
     // shift the view so the island's centre sits between the top and bottom pads
     const dy = (topPad - botPad) / 2 / view.ppt; camera.top -= dy; camera.bottom -= dy;
     camera.updateProjectionMatrix();
   }
-  return { THREE, renderer, scene, camera, lights, view, island, resize, placeCamera };
+  // shift the picture left by px screen pixels (board 1's panel is open on the right: the ring stays in the free part)
+  function setPan(px) {
+    if (Math.abs(px - view.panPx) < 0.25) return;
+    const d = (px - view.panPx) / view.ppt; view.panPx = px;
+    camera.left += d; camera.right += d; camera.updateProjectionMatrix();
+  }
+  return { THREE, renderer, scene, camera, lights, view, island, resize, placeCamera, setPan };
 }

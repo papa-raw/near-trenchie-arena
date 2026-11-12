@@ -68,7 +68,7 @@
     request_conflict: 'Two tabs tried to drive the same fighter. Close the other tab, then reload this one.',
     rate_limited: 'The arena is busy at a segment boundary. Trying again…',
     prediction_closed: 'The pick for this life closed before it arrived; it applies to your next life.',
-    version_mismatch: 'The arena’s terms changed while you were reading them. Read them again and agree.',
+    version_mismatch: 'The arena rules changed while you were reading them. Read them again and agree.',
     bad_message: 'The arena sent something this page could not read. Reload the page.',
     bad_receipt: 'The arena’s answer did not check out, so it was not used. Try again.',
     not_found: 'The arena does not know this fighter any more. Snap in again; your choices are kept.',
@@ -106,6 +106,7 @@
     try { await idbDo('readwrite', function (s) { return s.put(memKey, KEY_ID); }); keyPersisted = true; } catch (e) { keyPersisted = false; }
     return memKey;
   }
+  var premade = null;   // a session key made ahead of a chain-mode join, so the page can sign a ticket naming it
   async function forgetKey() { memKey = null; try { await idbDo('readwrite', function (s) { return s.delete(KEY_ID); }); } catch (e) { /* none */ } }
   async function sign(bytes) { var k = await loadKey(); return b64url(await root.crypto.subtle.sign({ name: 'Ed25519' }, k.privateKey, bytes)); }
   var roomKeys = {};
@@ -304,6 +305,9 @@
     on: function (f) { listeners.push(f); f(api.status()); return function () { listeners = listeners.filter(function (x) { return x !== f; }); }; },
     terms: async function () { var t = await send('GET', '/dev/terms'); if (!t || t.error || !t.version) throw Refusal('bad_message'); return t; },
     /* join: {name, preset, sheet?, look?, termsVersion, order:{preset, spread:[4 percents], zero}}; resolves to the status when the fighter is in */
+    /* sessionKey: make this browser's session key now and answer its public half (chain mode: the page's register ticket
+       names it, so a seen ticket can't seat another key); the next join uses it */
+    sessionKey: async function () { await forgetKey(); var k = await newKey(); premade = k.publicRaw; return k.publicRaw; },
     join: async function (o) {
       stopped = false;
       try { return await joinOnce(o); }
@@ -359,7 +363,7 @@
         await sleep(2100);
       }
       try { if (S.connection) await control('leave', { reason: 'leave' }, S.life); } catch (e) { /* lease */ }
-      lastLeft = { name: String(who || '').toLowerCase(), at: Date.now() };
+      lastLeft = { name: String(who || '').toLowerCase(), id: id, at: Date.now() };
       await end(null);
       // then read the round's result once, in the background: the DEV host holds the next join while a left player's result is unread
       (async function () { for (var i = 0; i < 4; i++) { try { var r = await call('GET', '/room/result?segment_id=segment%3A0'); if (r && r.type !== 'error') return; } catch (e) { return; } await sleep(1500); } })();
@@ -368,18 +372,56 @@
     _now: now
   };
   var lastLeft = null;
+  // the round's signed result, read from the public endpoint and kept in this browser (IndexedDB 'last-result', else memory)
+  var lastResult = null;
+  async function keepResult() {
+    try {
+      var r = await call('GET', '/room/result?segment_id=segment%3A0');
+      if (!r || r.type === 'error' || r.error) return null;
+      lastResult = { at: Date.now(), result: r };
+      try { await idbDo('readwrite', function (st) { return st.put(JSON.stringify(lastResult), 'last-result'); }); } catch (e) { /* memory only */ }
+      note('Read and kept the last round’s result.');
+      return r;
+    } catch (e) { return null; }
+  }
   async function joinOnce(o) {
     var ran = await withLock(async function () {
         set('joining', 'key', 'Making this browser’s key…');
         if (!api.supported()) throw Object.assign(new Error('This browser cannot make the key the arena needs (WebCrypto Ed25519). Use a current Chrome, Edge, Firefox or Safari.'), { code: 'unsupported' });
-        await forgetKey(); var k = await newKey();
-        set('joining', 'identity', 'Registering your trenchie with the DEV arena…');
+        var k;   // chain mode: the key the page's ticket already names (sessionKey below); else a fresh one
+        if (o.chain && premade && memKey && memKey.publicRaw === premade && o.chain.session_public_key === premade) k = memKey;
+        else { await forgetKey(); k = await newKey(); }
+        premade = null;
+        // a new trenchie right after this browser's last one left: the host frees the seat at once but keeps the old fighter
+        // until it has swum home, and refuses that seat meanwhile (stale_slot). Wait for it on the public view, which costs
+        // no join attempt (the host allows only a few a minute per address), then join.
+        // The page names it (o.waitFor, kept in its draft across a reload); this worker also remembers its own last leave.
+        var swimmer = o.waitFor || (lastLeft && Date.now() - lastLeft.at < 60000 ? lastLeft.id : null);
+        for (var sw = 0; sw < 30 && swimmer; sw++) {
+          var ob = null; try { ob = await call('GET', '/room/observe'); } catch (e) { break; }
+          if (!(ob && ob.fighters || []).some(function (f) { return f.fighter_id === swimmer; })) break;
+          set('joining', 'identity', 'Your last trenchie is still swimming home…'); await sleep(1000);
+        }
+        set('joining', 'identity', o.chain ? 'Registering ' + o.chain.nft_token_id + ' with the arena (owner read on ' + o.chain.network + ')…' : 'Registering your trenchie with the DEV arena…');
         await call('GET', '/dev/clock');
         var body = { name: o.name, preset: o.preset, public_key: k.publicRaw }; if (o.sheet) body.sheet = o.sheet; if (o.look) body.look = o.look;
+        if (o.chain) { body.ticket = o.chain.ticket; body.nft_token_id = o.chain.nft_token_id; }   // chain mode: a one-use ticket signed by the page that signed in
         var ident = await call('POST', '/dev/identity', enc.encode(JSON.stringify(body)));
         // this browser's own fighter, still swimming home from a leave a moment ago: wait for it rather than call it a clash
         for (var w = 0; w < 15 && ident && /seated right now/.test(ident.error || '') && lastLeft && lastLeft.name === String(o.name).toLowerCase() && Date.now() - lastLeft.at < 45000; w++) {
           set('joining', 'identity', 'Your trenchie is still swimming home from the last round…'); await sleep(2000);
+          ident = await call('POST', '/dev/identity', enc.encode(JSON.stringify(body)));
+        }
+        // the last round's result is still unread (a seat that lapsed with no page open): the DEV host holds new joins until
+        // its player reads it, or until its grace ends. Only that player's own browser reads it (o.ownHeldResult: the draft's
+        // ended trenchie is the one snapping back in) and keeps it here, which lifts the hold; anyone else waits out the
+        // host's own countdown and never reads another fighter's result. A browser player never gets a command to run.
+        var mineHeld = !!o.ownHeldResult;
+        for (var u = 0; u < 200 && ident && /result its player has not read/.test(ident.error || ''); u++) {
+          var secs = Number(((ident.error || '').match(/retry in (\d+) s/) || [])[1]) || 0;
+          set('joining', 'identity', mineHeld && u === 0 ? 'Reading the last round’s result…' : 'Back in the ring in ' + Math.max(1, secs) + ' s…');
+          if (mineHeld && u % 5 === 0) await keepResult();
+          await sleep(1000);
           ident = await call('POST', '/dev/identity', enc.encode(JSON.stringify(body)));
         }
         if (!ident || !ident.nft_token_id) throw Object.assign(new Error(friendlyHost(ident && ident.error)), { code: 'host', detail: ident && ident.error });
@@ -388,16 +430,25 @@
         var manifest = checked(await send('GET', '/room'), ident.context);
         if (manifest.admission !== 'open') throw Refusal('admission_closed');
         if ((manifest.proof_methods || []).indexOf(ident.proof_method) < 0) throw Refusal('proof_required');
-        var spk = clone(ident.session_public_key), rid = 'web-join-' + now();
-        var creq = { domain: 'room.join.v1', context: clone(ident.context), grant_id: null, session_key_id: null, account_id: ident.account_id, nft_token_id: ident.nft_token_id,
-                     persona_digest: ident.persona_digest, session_public_key: spk, request_id: rid, purpose: 'join' };
-        var ch = await verified(await send('POST', '/room/challenge', canonicalBytes(creq)), ident.context, ident);
-        if (Object.keys(creq).some(function (k2) { return !same(ch[k2], creq[k2]); })) throw Refusal('context_mismatch');
-        unexpired(ch);
-        var jreq = { domain: 'room.join.v1', context: clone(ident.context), grant_id: null, session_key_id: null, challenge: ch, persona_digest: ident.persona_digest,
-                     session_public_key: spk, request_id: rid, declared_compute: o.compute || { harness: 'browser', model: 'player-choice', source: 'owner', effort: 'standard' }, resume: null };
-        jreq.proof = { method_id: ident.proof_method, key_id: 'dev_local', proof_bytes: await sign(concat(enc.encode('dev-wallet|'), canonicalBytes(jreq))) };
-        var grant = await send('POST', '/room/join', canonicalBytes(jreq));
+        // a token's first life waits for the chain's owner and inventory reads: the room answers ownership_unavailable
+        // until they land (server.py reserve_life), so the join is asked again, a few times, before it is an error
+        var spk = clone(ident.session_public_key), rid, creq, ch, jreq, grant;
+        for (var attempt = 0; ; attempt++) {
+          rid = 'web-join-' + now();
+          creq = { domain: 'room.join.v1', context: clone(ident.context), grant_id: null, session_key_id: null, account_id: ident.account_id, nft_token_id: ident.nft_token_id,
+                       persona_digest: ident.persona_digest, session_public_key: spk, request_id: rid, purpose: 'join' };
+          ch = await verified(await send('POST', '/room/challenge', canonicalBytes(creq)), ident.context, ident);
+          if (Object.keys(creq).some(function (k2) { return !same(ch[k2], creq[k2]); })) throw Refusal('context_mismatch');
+          unexpired(ch);
+          jreq = { domain: 'room.join.v1', context: clone(ident.context), grant_id: null, session_key_id: null, challenge: ch, persona_digest: ident.persona_digest,
+                       session_public_key: spk, request_id: rid, declared_compute: o.compute || { harness: 'browser', model: 'player-choice', source: 'owner', effort: 'standard' }, resume: null };
+          jreq.proof = { method_id: ident.proof_method, key_id: 'dev_local', proof_bytes: await sign(concat(enc.encode('dev-wallet|'), canonicalBytes(jreq))) };
+          grant = await send('POST', '/room/join', canonicalBytes(jreq));
+          if (grant && grant.type === 'error' && grant.code === 'ownership_unavailable' && attempt < 15) {
+            set('joining', 'join', 'Waiting for the chain to read your trenchie’s owner…'); await sleep(2000); continue;
+          }
+          break;
+        }
         if (grant && grant.status === 'spectating') throw Object.assign(new Error('The ring is full: you are queued as a spectator. Keep watching; try again when a seat frees up.'), { code: 'queued' });
         grant = await verified(grant, ident.context, ident);
         var jd = await digest(jreq, ['proof']);
@@ -405,11 +456,11 @@
         if (grant.control_url !== controlUrl(ident.context) || grant.persona_digest !== ident.persona_digest || !same(grant.session_public_key, spk)) throw Refusal('context_mismatch');
         unexpired(grant);
         S.grant = grant; persist();
-        set('joining', 'terms', 'Agreeing to the arena’s terms…');
+        set('joining', 'terms', 'Agreeing to the arena rules…');
         var snap = await member('snapshot', 'snapshot', '0', 'web-read-terms-' + now(), { expires_at: String(now() + MEMBER_READ_TTL_MS) });
-        if (!snap.terms || snap.terms.version !== o.termsVersion) throw Object.assign(new Error('The arena’s terms are now version ' + (snap.terms && snap.terms.version) + '; you agreed to version ' + o.termsVersion + '. Read them again and agree.'), { code: 'version_mismatch' });
+        if (!snap.terms || snap.terms.version !== o.termsVersion) throw Object.assign(new Error('The arena rules are now version ' + (snap.terms && snap.terms.version) + '; you agreed to version ' + o.termsVersion + '. Read them again and agree.'), { code: 'version_mismatch' });
         await member('terms/accept', 'accept_terms', snap.terms.version, 'web-accept-terms-' + now());
-        S.limits = (checked(await send('GET', '/room'), ident.context).limits) || { heartbeat_ms: '10000', intent_interval_ms: '2000' };
+        S.limits = (checked(await send('GET', '/room'), ident.context).limits) || { heartbeat_ms: '10000' };
         set('joining', 'control', 'Taking the controls…');
         await authenticate();
         set('in', 'ring', ''); runLoop();
@@ -421,7 +472,7 @@
     if (/seated right now/.test(e)) return 'A fighter with that name is in the ring right now.';
     if (/name needs letters/.test(e)) return 'The name needs at least one letter or digit.';
     if (/preset must be one of|unknown preset/.test(e)) return 'The DEV arena does not know this battle option yet (' + e + ').';
-    if (/result its player has not read/.test(e)) return 'The DEV arena is holding the last round’s result for its player for a few minutes. ' + e.replace(/^.*?retry in/, 'Retry in');
+    if (/result its player has not read/.test(e)) return 'The DEV arena is still finishing the last round. Snap in again in a minute.';   // never the agent's command
     return 'The DEV arena refused the fighter: ' + e;
   }
 
@@ -468,6 +519,7 @@
     status: function () { return last; },
     on: function (f) { subs.push(f); f(last); boot(); return function () { subs = subs.filter(function (x) { return x !== f; }); }; },
     terms: function () { return ask('terms'); },
+    sessionKey: function () { return ask('sessionKey'); },
     join: function (o) { return ask('join', o); },
     resume: function () { return ask('resume'); },
     setOrder: function (o) { return ask('setOrder', o); },

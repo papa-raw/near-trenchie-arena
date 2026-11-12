@@ -13,6 +13,7 @@ import http from 'node:http';
 import { decode } from './arena/codec.mjs';
 import { chooseFocus, retargetResult } from './arena-agent-door-timing.mjs';
 const exec = promisify(execFile), require = createRequire(import.meta.url);
+const HOSTS = require('./snapin/qa/hosts.cjs');   // each host ends with this case however it ends
 const root = process.env.SNAP_CASE_ROOT || fileURLToPath(new URL('../../', import.meta.url));
 const evidence = resolve(process.env.SNAP_CASE_EVIDENCE || await mkdtemp(join(tmpdir(), 'agent-door-evidence-')));
 await mkdir(evidence, { recursive: true });
@@ -22,7 +23,7 @@ const procs = [], errors = [], transcript = [], sessions = [], snapshots = [];
 let chrome, seq = 0, carry = ''; const pending = new Map();
 const pause = (ms) => new Promise((res) => setTimeout(res, ms));
 const port = () => new Promise((res, rej) => { const s = net.createServer(); s.on('error', rej); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
-function processChild(args, more = {}) { const p = spawn('python3', args, { cwd: root, env, stdio: ['ignore', 'ignore', 'pipe'], ...more }); p.stderr.on('data', () => {}); procs.push(p); return p; }
+function processChild(args, more = {}) { const p = HOSTS.host(args, { cwd: root, env, stdio: ['ignore', 'ignore', 'pipe'], ...more }); p.stderr.on('data', () => {}); procs.push(p); return p; }
 function get(url) {
   return new Promise((res, rej) => {
     const proxy = env.HTTP_PROXY || env.http_proxy;
@@ -173,6 +174,7 @@ try {
   await writeFile(join(evidence, 'commands.txt'), transcript.join('\n'));
   for (const { dir } of sessions) { try { await writeFile(join(evidence, 'keeper-' + dir.split('/').pop() + '.txt'), await readFile(join(dir, '.snap-dev.log'))); } catch (error) { if (error.code !== 'ENOENT') throw error; } }
   for (const p of procs) p.kill(); chrome?.kill();
+  { const left = await HOSTS.finish(); if (left.length) { console.error('FAIL ' + left.length + ' host group(s) this case started survived it'); process.exitCode = 1; } }
   for (const { timer } of pending.values()) clearTimeout(timer);
   await pause(500); await rm(scratch, { recursive: true, force: true });
 }

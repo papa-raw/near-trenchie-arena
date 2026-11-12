@@ -182,7 +182,21 @@ class LocalSnap(unittest.TestCase):
     def test_join_needs_the_terms_version_the_owner_read(self) -> None:
         with self.assertRaises(SystemExit) as caught:
             self.keeper().start("999")
-        self.assertIn("terms are version 1", str(caught.exception))
+        self.assertIn("arena rules are now version 1", str(caught.exception))
+
+    def test_the_order_rate_the_host_advertises_is_the_rules_tables(self) -> None:
+        """Item 23: one order rate. The rules table fixes it; /dev/terms and /room carry it; snap.py prints it as is."""
+        import battle_room
+        import sim
+        rules = sim.DEFAULT_RULES
+        want = rules["intent_interval"] * rules["milliseconds_per_second"] // rules["tick_hz"]
+        self.assertEqual((want, battle_room.ORDER_INTERVAL_MS), (500, 500))
+        self.assertEqual(snap.call(self.url + "/dev/terms")["input_interval_ms"], str(want))
+        self.assertEqual(snap.call(self.url + "/room")["limits"]["intent_interval_ms"], str(want))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            snap.main(["--url", self.url, "terms"])
+        self.assertIn("arena rules, version 1: segments are 60 s, one order every 0.5 s,", out.getvalue())
 
     def raw(self, method: str, path: str, body: bytes | None = None, headers: dict | None = None) -> tuple[int, dict, dict]:
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)

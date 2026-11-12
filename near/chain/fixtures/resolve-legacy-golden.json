@@ -1,0 +1,203 @@
+{
+ "about": "An old-rules (spread) stake batch and resolver.compute's output for it at fbd4c28, before r5-predict. test_predict_chain.py checks today's compute gives these bytes.",
+ "open_stakes": {
+  "alice.t.testnet": "20000000000000000000000",
+  "bob.t.testnet": "10000000000000000000000",
+  "carol.t.testnet": "30000000000000000000000",
+  "dave.t.testnet": "10000000000000000000000"
+ },
+ "lives": [
+  {
+   "account": "alice.t.testnet",
+   "life_id": "a:1",
+   "kos": 3,
+   "bins": [
+    0,
+    1000,
+    2000,
+    3000,
+    4000
+   ],
+   "locked_after_ns": 100000000000
+  },
+  {
+   "account": "alice.t.testnet",
+   "life_id": "a:2",
+   "kos": 0,
+   "bins": [
+    0,
+    4000,
+    3000,
+    2000,
+    1000
+   ],
+   "locked_after_ns": 200000000000
+  },
+  {
+   "account": "bob.t.testnet",
+   "life_id": "b:1",
+   "kos": 1,
+   "bins": [
+    0,
+    7000,
+    2000,
+    1000,
+    0
+   ],
+   "locked_after_ns": 100000000000
+  },
+  {
+   "account": "carol.t.testnet",
+   "life_id": "c:1",
+   "kos": 2,
+   "bins": [
+    0,
+    2500,
+    2500,
+    2500,
+    2500
+   ],
+   "locked_after_ns": 100000000000
+  },
+  {
+   "account": "carol.t.testnet",
+   "life_id": "c:2",
+   "kos": 4,
+   "bins": [
+    0,
+    0,
+    0,
+    0,
+    10000
+   ],
+   "locked_after_ns": 300000000000
+  },
+  {
+   "account": "dave.t.testnet",
+   "life_id": "d:1",
+   "kos": 0,
+   "bins": null,
+   "locked_after_ns": 100000000000
+  }
+ ],
+ "pot_before": "2000000000000000000000",
+ "base_bps": [
+  4010,
+  3470,
+  1570,
+  640,
+  310
+ ],
+ "parts": {
+  "alice.t.testnet": [
+   {
+    "amount": "20000000000000000000000",
+    "at": "1000"
+   }
+  ],
+  "bob.t.testnet": [
+   {
+    "amount": "10000000000000000000000",
+    "at": "1000"
+   }
+  ],
+  "carol.t.testnet": [
+   {
+    "amount": "10000000000000000000000",
+    "at": "1000"
+   },
+   {
+    "amount": "20000000000000000000000",
+    "at": "1000000000000000000"
+   }
+  ],
+  "dave.t.testnet": [
+   {
+    "amount": "10000000000000000000000",
+    "at": "1000"
+   }
+  ]
+ },
+ "golden": {
+  "results": [
+   {
+    "account_id": "alice.t.testnet",
+    "net": "-3894387337449374953885"
+   },
+   {
+    "account_id": "bob.t.testnet",
+    "net": "2610153302893913839671"
+   },
+   {
+    "account_id": "carol.t.testnet",
+    "net": "3284234034555461114212"
+   },
+   {
+    "account_id": "dave.t.testnet",
+    "net": "0"
+   }
+  ],
+  "pot_delta": "-1999999999999999999998",
+  "pot_after": "2",
+  "detail": [
+   {
+    "account_id": "alice.t.testnet",
+    "life_id": "a:1",
+    "draw": "10000000000000000000000",
+    "kos": 3,
+    "paid": "13200720000000000000000"
+   },
+   {
+    "account_id": "alice.t.testnet",
+    "life_id": "a:2",
+    "draw": "10000000000000000000000",
+    "kos": 0,
+    "paid": "0"
+   },
+   {
+    "account_id": "alice.t.testnet",
+    "stake": "20000000000000000000000",
+    "drawn": "20000000000000000000000",
+    "returned": "13200720000000000000000"
+   },
+   {
+    "account_id": "bob.t.testnet",
+    "life_id": "b:1",
+    "draw": "10000000000000000000000",
+    "kos": 1,
+    "paid": "10335720000000000000000"
+   },
+   {
+    "account_id": "bob.t.testnet",
+    "stake": "10000000000000000000000",
+    "drawn": "10000000000000000000000",
+    "returned": "10335720000000000000000"
+   },
+   {
+    "account_id": "carol.t.testnet",
+    "life_id": "c:1",
+    "draw": "10000000000000000000000",
+    "kos": 2,
+    "paid": "10888220000000000000000"
+   },
+   {
+    "account_id": "carol.t.testnet",
+    "life_id": "c:2",
+    "draw": "0",
+    "why": "no stake known before this life began"
+   },
+   {
+    "account_id": "carol.t.testnet",
+    "stake": "30000000000000000000000",
+    "drawn": "10000000000000000000000",
+    "returned": "10888220000000000000000"
+   },
+   {
+    "account_id": "dave.t.testnet",
+    "stake": "10000000000000000000000",
+    "drawn": "0",
+    "returned": "0"
+   }
+  ]
+ }
+}

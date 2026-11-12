@@ -10,7 +10,7 @@ window.ITEMS3 = ITEMS;   // every item's record by id (name, slot, tier): the gu
 
 const SCRIPTS = ['art/parts-s3.js', 'art/portrait.js', 'ui.js', 'marks.js', 'providers.js',
   'vendor/near-api-js/near-api-js-7.3.1.min.js', 'vendor/near-api-js/near-connect-0.12.0.min.js',
-  'chain.js', 'wallet.js', 'emoji-set.js', 'sheet.js', 'doors.js', 'card.js', 'room.js', 'brain.js', 'chat.js', 'app.js'];
+  'chain.js', 'wallet.js', 'identity.js', 'emoji-set.js', 'sheet.js', 'doors.js', 'card.js', 'room.js', 'brain.js', 'chat.js', 'app.js'];
 // brain.js (the player's AI) and emoji-set.js (the emoji rules) are other lanes' files and optional: without it the guide still works and says the fighter is on
 // the arena's own tactics; every other script is required.
 const OPTIONAL = new Set(['brain.js', 'emoji-set.js']);   // emoji-set.js: the persona emoji rules (battle mode); without it no sheet carries a set

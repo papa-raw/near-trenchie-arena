@@ -42,7 +42,8 @@ class LivePeer:
 
     def receive(self, message):
         if self.closed or self.round is not self.dev.round:
-            self.close()
+            if not self.closed:
+                self.restarted()
             raise ValueError('arena restarted: restart live to rejoin')
         if not isinstance(message, dict) or not isinstance(message.get('id'), str) or len(message['id']) > 64:
             raise ValueError('live request needs a short id')
@@ -73,11 +74,17 @@ class LivePeer:
         for notice in self.control.drain_private(self.connection_id):
             self._send(dict(private=notice))
 
+    def restarted(self):
+        """The round this session joined is gone: say so before closing, so the client can rejoin the new one."""
+        self._send(dict(event=dict(kind='round_restart', round=self.dev.round_index, emitted_at_ms=time.time_ns() // 1000000,
+                                   summary='The arena started a new round; rejoin with the same session key.')))
+        self.close()
+
     def publish(self):
         if self.closed:
             return
         if self.round is not self.dev.round:
-            self.close()
+            self.restarted()
             return
         self._private()
         if self.who is None:

@@ -92,4 +92,40 @@ class PublicAllowances(unittest.TestCase):
             errors = check_items.check_item(item, sim.DEFAULT_RULES, kit, limits)
             self.assertTrue(any('banned' in error for error in errors), word)
 
+    def test_a_bare_deny_number_passes_only_inside_a_hash_value_of_a_segment_record(self) -> None:
+        number, hexword = '4' + '242', 'cafe' + '99'          # fixture deny patterns: a bare number, a hex-only word
+        fx = Fixture(self)
+        with open(os.path.join(fx.cfg, 'deny.txt'), 'a') as f:
+            f.write(number + '\n' + hexword + '\n')
+        h = ('0' * 30 + number + '0' * 64)[:64]              # a 64-hex value holding the number
+        seg = 'near/replay/segments/t1.dev-local-r1.0.json'
+        # (a) inside a *_hash value of a segment record, twice on one line, under two field names: not a hit
+        fx.put(seg, '{"record_hash":"' + h + '","sealed":{"inventory_hash":"' + h + '"}}\n')
+        fx.commit()
+        code, output = fx.run('deny')
+        self.assertEqual((code, fx.counts(output)), (0, {'client deny scan': 0}), output)
+        # (b) the same number anywhere else in a segment record is a hit, even on a line that also has an allowed one
+        bad = {
+            'near/replay/segments/t1.dev-local-r1.1.json': '{"tick":"' + number + '","record_hash":"' + h + '"}\n',
+            'near/replay/segments/t1.dev-local-r1.2.json': '{"record_hash":"' + h + '5"}\n',          # 65 hex
+            'near/replay/segments/t1.dev-local-r1.3.json': '{"record":"' + h + '"}\n',               # not *_hash
+            'near/replay/segments/t1.dev-local-r1.4.json':                                          # not a number
+                '{"record_hash":"' + (hexword + '0' * 64)[:64] + '"}\n',
+            # (c) the same allowed line in any other path is a hit
+            'near/replay/MANIFEST': '{"record_hash":"' + h + '"}\n',
+            'near/chain/settled.json': '{"record_hash":"' + h + '"}\n',
+            'near/replay/segments/sub/t1.json': '{"record_hash":"' + h + '"}\n',
+            'replay/segments/t1.json': '{"record_hash":"' + h + '"}\n',
+        }
+        for rel, text in bad.items():
+            fx.put(rel, text)
+        fx.commit()
+        code, output = fx.run('deny')
+        self.assertEqual(code, 1, output)
+        for rel in bad:
+            self.assertIn('deny: ' + rel + ':1:', output)
+        self.assertNotIn(seg + ':', output)
+        self.assertEqual(fx.counts(output), {'client deny scan': len(bad)}, output)
+        self.assertNotIn(number, (NEAR / 'tools/gate.py').read_text())
+
 if __name__ == '__main__': unittest.main()

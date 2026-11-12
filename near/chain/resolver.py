@@ -45,16 +45,27 @@ def cover(parts, t):
     return sum(int(p["amount"]) for p in parts if int(p["at"]) <= t - SKEW_NS)
 
 
+def counted(life) -> bool:
+    """A life the stake draws for: an old-rules spread (bins), or an integer-16 level."""
+    return life["bins"] is not None or life.get("level") is not None
+
+
 def compute(open_stakes: dict, lives: list, pot_before: int, base_bps, parts=None) -> dict:
-    """open_stakes: {account: yocto}; lives: [{account, life_id, kos, bins or None, locked_after_ns}].
+    """open_stakes: {account: yocto}; lives: [{account, life_id, kos, bins or None, locked_after_ns}], and from
+    integer-16 on, level lives: {..., bins None, level 1-4 or None, multiplier_bps, result} (arena/predict.py).
 
     parts: {account: [{amount, at}]}, each lock and top-up with the block time it landed (`batch_stakes`).
+
+    A level life pays draw * multiplier on a correct prediction and nothing on a failure: its draw stays in the
+    fund. A batch holding any level life has no recycle step (r5-predict); an all-spread batch is scored exactly
+    as before.
     """
     parts = parts or {}
+    levels = any("level" in l for l in lives)
     base_net, weight, detail = {}, {}, []
     for account in sorted(open_stakes):
         amount = int(open_stakes[account])
-        mine = sorted((l for l in lives if l["account"] == account and l["bins"] is not None),
+        mine = sorted((l for l in lives if l["account"] == account and counted(l)),
                       key=lambda l: (l.get("locked_after_ns") or 0, l["life_id"]))
         drawn = returned = 0
         any_ko = False
@@ -65,10 +76,13 @@ def compute(open_stakes: dict, lives: list, pot_before: int, base_bps, parts=Non
                 detail.append({"account_id": account, "life_id": life["life_id"], "draw": "0",
                                "why": "no stake known before this life began"})
                 continue
-            p = life_payout(draw, life["bins"], life["kos"], base_bps)
+            if life["bins"] is not None:
+                p = life_payout(draw, life["bins"], life["kos"], base_bps)
+                any_ko |= life["kos"] >= 1
+            else:
+                p = draw * int(life["multiplier_bps"]) // 10_000 if life["result"] == "correct" else 0
             drawn += draw
             returned += p
-            any_ko |= life["kos"] >= 1
             detail.append({"account_id": account, "life_id": life["life_id"], "draw": str(draw), "kos": life["kos"],
                            "paid": str(p)})
         base_net[account] = returned - drawn          # undrawn stake comes back whole
@@ -84,7 +98,7 @@ def compute(open_stakes: dict, lives: list, pot_before: int, base_bps, parts=Non
                 net[a] = net[a] * available // gains
     left = available - sum(n for n in net.values() if n > 0)
     total_w = sum(weight.values())
-    if total_w > 0 and left > 0:
+    if total_w > 0 and left > 0 and not levels:
         for a in sorted(net):
             net[a] += left * weight[a] // total_w
     pot_delta = -sum(net.values())
@@ -108,7 +122,8 @@ def check(open_stakes: dict, out: dict, pot_before: int) -> None:
         raise ValueError("the pot cannot go below zero")
 
 
-def next_base_rate(actuals: list) -> list:
-    """The next published spread: the trailing base rate over every life so far, else the lab number."""
-    bins = quote.base_rate_bps(actuals) if actuals else None
+def next_base_rate(actuals: list, min_lives: int = 1) -> list:
+    """The next published base rate: the trailing rate over the lives counted so far (the house's own, from
+    r5-predict), else the lab number while fewer than `min_lives` are on record (integer-16's predict block: 200)."""
+    bins = quote.base_rate_bps(actuals) if len(actuals) >= max(1, min_lives) else None
     return list(bins or quote.PUBLISHED_BASE_BPS)

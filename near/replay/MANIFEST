@@ -1,0 +1,194 @@
+{
+ "about": "The recorded set make demo re-simulates (B96, B101): settled arena.post_batch transactions on testnet and the commit_seeds transactions their seeds come from, with each segment's sealed record (seed, start state, signed input log, commands, predictions, rules hash; no snapshot stream) under segments/. Batches are appended with near/replay/pin.py as they land.",
+ "network": "testnet",
+ "arena": "arena.trenchie-r4b-20261111.testnet",
+ "signer": "operator.trenchie-r4b-20261111.testnet",
+ "archival": [
+  "https://archival-rpc.testnet.near.org",
+  "https://archival-rpc.testnet.fastnear.com"
+ ],
+ "commits": [
+  {
+   "commit_id": 1,
+   "tx": "BVrP3PgCdyJaRnEKEDsBT1TqDR74BNrr8u3Dm8ECQxGm",
+   "signer": "operator.trenchie-r4b-20261111.testnet"
+  }
+ ],
+ "batches": [
+  {
+   "batch_id": "t20261111T0950556902-0.1",
+   "tx": "2uoYCJVWBKpZXmwYgx14SAZcE5G6QrC6FsMfYgEGrHKQ",
+   "signer": "operator.trenchie-r4b-20261111.testnet",
+   "segments": [
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.0",
+     "record": "segments/t20261111T0950556902.dev-local-r1.0.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.1",
+     "record": "segments/t20261111T0950556902.dev-local-r1.1.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.2",
+     "record": "segments/t20261111T0950556902.dev-local-r1.2.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.3",
+     "record": "segments/t20261111T0950556902.dev-local-r1.3.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.4",
+     "record": "segments/t20261111T0950556902.dev-local-r1.4.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.5",
+     "record": "segments/t20261111T0950556902.dev-local-r1.5.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.6",
+     "record": "segments/t20261111T0950556902.dev-local-r1.6.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.7",
+     "record": "segments/t20261111T0950556902.dev-local-r1.7.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.8",
+     "record": "segments/t20261111T0950556902.dev-local-r1.8.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.9",
+     "record": "segments/t20261111T0950556902.dev-local-r1.9.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.10",
+     "record": "segments/t20261111T0950556902.dev-local-r1.10.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.11",
+     "record": "segments/t20261111T0950556902.dev-local-r1.11.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.12",
+     "record": "segments/t20261111T0950556902.dev-local-r1.12.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.13",
+     "record": "segments/t20261111T0950556902.dev-local-r1.13.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.14",
+     "record": "segments/t20261111T0950556902.dev-local-r1.14.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.15",
+     "record": "segments/t20261111T0950556902.dev-local-r1.15.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.16",
+     "record": "segments/t20261111T0950556902.dev-local-r1.16.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.17",
+     "record": "segments/t20261111T0950556902.dev-local-r1.17.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.18",
+     "record": "segments/t20261111T0950556902.dev-local-r1.18.json"
+    },
+    {
+     "segment_id": "t20261111T0950556902.dev-local-r1.19",
+     "record": "segments/t20261111T0950556902.dev-local-r1.19.json"
+    }
+   ]
+  },
+  {
+   "batch_id": "t20261112T095239099d-0",
+   "tx": "9sr3WaFncPQtBRJqJMuEMpZxNXsx1L5Uw11gNZ5w58bx",
+   "signer": "operator.trenchie-r4b-20261111.testnet",
+   "segments": [
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.0",
+     "record": "segments/t20261112T095239099d.dev-local-r1.0.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.1",
+     "record": "segments/t20261112T095239099d.dev-local-r1.1.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.2",
+     "record": "segments/t20261112T095239099d.dev-local-r1.2.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.3",
+     "record": "segments/t20261112T095239099d.dev-local-r1.3.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.4",
+     "record": "segments/t20261112T095239099d.dev-local-r1.4.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.5",
+     "record": "segments/t20261112T095239099d.dev-local-r1.5.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.6",
+     "record": "segments/t20261112T095239099d.dev-local-r1.6.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.7",
+     "record": "segments/t20261112T095239099d.dev-local-r1.7.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.8",
+     "record": "segments/t20261112T095239099d.dev-local-r1.8.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.9",
+     "record": "segments/t20261112T095239099d.dev-local-r1.9.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.10",
+     "record": "segments/t20261112T095239099d.dev-local-r1.10.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.11",
+     "record": "segments/t20261112T095239099d.dev-local-r1.11.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.12",
+     "record": "segments/t20261112T095239099d.dev-local-r1.12.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.13",
+     "record": "segments/t20261112T095239099d.dev-local-r1.13.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.14",
+     "record": "segments/t20261112T095239099d.dev-local-r1.14.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.15",
+     "record": "segments/t20261112T095239099d.dev-local-r1.15.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.16",
+     "record": "segments/t20261112T095239099d.dev-local-r1.16.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.17",
+     "record": "segments/t20261112T095239099d.dev-local-r1.17.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.18",
+     "record": "segments/t20261112T095239099d.dev-local-r1.18.json"
+    },
+    {
+     "segment_id": "t20261112T095239099d.dev-local-r1.19",
+     "record": "segments/t20261112T095239099d.dev-local-r1.19.json"
+    }
+   ]
+  }
+ ],
+ "jobs": []
+}

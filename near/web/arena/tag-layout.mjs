@@ -1,6 +1,6 @@
 // Name tags in a crowd (tight crowds overlapped into unreadable text). B2 a v3.1's tag
 // vocabulary only: the same small tag, moved a row up or half a tag aside, or faded out. No leader lines, no new chrome.
-// Order: the must-win tags (your fighter, its focus target, the current speaker) first, then the KO leader and bounty
+// Order: the must-win tags (your fighter and its focus target) first, then the KO leader and bounty
 // holders, then everyone else nearest the camera first. Within a tier the tag shown longest goes first and tries its
 // previous slot first, so a tag that just appeared never pushes out one that was already there: tags do not swap or
 // flicker as a crowd shuffles. A hidden tag comes back only after its place has been free for SHOW_AFTER frames.

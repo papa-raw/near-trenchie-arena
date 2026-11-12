@@ -158,7 +158,7 @@ class SnapCold(unittest.TestCase):
         wire, _ = _project(archive)
         self.assertEqual(archive, before, "projection must not edit native archives")
         self.assertNotEqual(wire["sealed_result_hash"], archive["sealed"]["sealed_result_hash"])
-        with self.assertRaisesRegex(Refusal, "recovery_pending"):
+        with self.assertRaisesRegex(Refusal, "result_pending"):  # every sealed segment reads; this one is not sealed yet
             records.result("segment:1")
         changed = copy.deepcopy(wire)
         changed["lives"][0]["ko_count"] = "999"

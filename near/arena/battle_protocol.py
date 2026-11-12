@@ -3,14 +3,28 @@ from room.policy import BoundaryError, canonical_bytes, validate
 from room.protocol import parse_message
 
 BINDING = ('context', 'grant_id', 'session_key_id', 'member_id', 'nft_token_id', 'persona_digest', 'slot_id', 'generation')
-KINDS = frozenset(('behaviour', 'speech'))
+KINDS = frozenset(('behaviour', 'speech', 'bench', 'note'))
 REQUEST_DOMAIN = 'arena.battle.v1'
+REJOIN_WINDOW_MS = 30_000   # a signed rejoin must be this fresh (wall clock) on the host that checks it
+
+
+def rejoin_message(round_index, public_key, at_ms):
+    """The bytes a live session signs with its own session key to rejoin round `round_index` as the identity that key
+    already holds. Bound to that round and a wall-clock time, so it can't be replayed into another round or kept."""
+    return f"arena.rejoin.v1|{int(round_index)}|{public_key}|{int(at_ms)}".encode()
 RECEIPT_DOMAIN = 'arena.battle.receipt.v1'
 REQUEST_FIELDS = frozenset((*BINDING, 'domain', 'kind', 'sequence', 'life_id', 'payload', 'signature'))
 RECEIPT_FIELDS = frozenset((*BINDING, 'domain', 'type', 'kind', 'sequence', 'life_id', 'request_digest', 'ack', 'key_id', 'signature'))
 BEHAVIOUR_ACK_FIELDS = frozenset(('type', 'v', 'fighter', 'seq', 'status', 'receive_tick', 'apply_tick', 'applies_in_ms',
                                  'behaviour', 'clipped', 'refused', 'notes', 'summary', 'rules_hash'))
 SPEECH_ACK_FIELDS = frozenset(('type', 'status', 'receive_tick', 'speech', 'summary'))
+# The bench (Q5): hold the trenchie on the bench, send it back in, or swap a bag item on for the next life.
+BENCH_ACK_FIELDS = frozenset(('type', 'status', 'receive_tick', 'bench', 'summary'))
+BENCH_SLOTS = ('body', 'head', 'trinket', 'weapon')
+# An agent session's note to its owner's panel (never the public feed): the order in the owner's words, the reply in
+# the trenchie's voice, why it set what it set, and the plan's weekly use when the session can report it.
+NOTE_ACK_FIELDS = frozenset(('type', 'status', 'receive_tick', 'summary'))
+NOTE_TEXT_MAX = 300
 
 
 def _require(condition):
@@ -41,7 +55,41 @@ def check_request(value):
         _require(type(payload['text']) is str and 1 <= len(payload['text']) <= 140 and payload['text'].isprintable())
         emoji = payload.get('emoji')
         _require(emoji is None or type(emoji) is str and len(emoji) <= 64)
+    elif value['kind'] == 'bench':
+        _check_bench(value['payload'])
+    elif value['kind'] == 'note':
+        _check_note(value['payload'])
     return value
+
+
+def _check_bench(payload):
+    _require(type(payload) is dict and len(payload) == 1)
+    if 'hold' in payload:
+        _require(type(payload['hold']) is bool)
+        return
+    _require(set(payload) == {'equip'} and type(payload['equip']) is dict and set(payload['equip']) == {'slot', 'item_id'})
+    _require(payload['equip']['slot'] in BENCH_SLOTS)
+    item = payload['equip']['item_id']
+    _require(type(item) is str and 1 <= len(item) <= 64 and item.isprintable())
+
+
+def _note_text(value, limit=NOTE_TEXT_MAX):
+    _require(type(value) is str and 1 <= len(value) <= limit and value.isprintable())
+
+
+def _check_note(payload):
+    _require(type(payload) is dict and payload and set(payload) <= {'seq', 'order', 'reply', 'why', 'plan'})
+    if 'seq' in payload:
+        _require(type(payload['seq']) is str and payload['seq'].isdigit() and len(payload['seq']) <= 20)
+    for field in ('order', 'reply', 'why'):
+        if field in payload:
+            _note_text(payload[field])
+    _require(any(field in payload for field in ('order', 'reply', 'why', 'plan')))
+    if 'plan' in payload:
+        plan = payload['plan']
+        _require(type(plan) is dict and set(plan) == {'week_used_pct'})
+        used = plan['week_used_pct']
+        _require(used is None or type(used) is int and 0 <= used <= 100)
 
 
 def _whole(value):
@@ -76,6 +124,11 @@ def check_receipt(value):
     _require(type(ack.get('summary')) is str and 1 <= len(ack['summary']) <= 32768)
     if value['kind'] == 'behaviour':
         _behaviour_ack(ack, value)
+    elif value['kind'] == 'bench':
+        _require(set(ack) == BENCH_ACK_FIELDS and ack['type'] == 'bench_ack' and ack['status'] in ('applied', 'refused'))
+        _require(type(ack['bench']) is dict)
+    elif value['kind'] == 'note':
+        _require(set(ack) == NOTE_ACK_FIELDS and ack['type'] == 'note_ack' and ack['status'] in ('kept', 'refused'))
     else:
         _require(set(ack) == SPEECH_ACK_FIELDS and ack['type'] == 'speech_ack' and type(ack['speech']) is dict)
         _require(ack['status'] in ('posted', 'blocked', 'muted', 'refused'))

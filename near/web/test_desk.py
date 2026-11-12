@@ -76,7 +76,7 @@ class ReviewerDesk(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='reviewer-desk-') as temporary:
             scratch = Path(temporary)
             output = scratch / 'demo'
-            result = subprocess.run(['make', '-C', str(ROOT / 'near'), 'demo', f'DEMO_DIR={output}'],
+            result = subprocess.run(['make', '-C', str(ROOT / 'near'), 'rehearsal', f'DEMO_DIR={output}'],
                                     capture_output=True, text=True, timeout=240)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             print(result.stdout, end='')

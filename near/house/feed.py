@@ -14,6 +14,11 @@ so the feed, the persona checker and the creator cannot drift. A missing or inva
 flagged `emoji_fallback`, never silent. A line may carry one reply, never an open conversation: a second reply to
 the same line is refused, and a reply to a reply is refused.
 
+Repeats: a house line whose words repeat one of that trenchie's last 20 house lines (the novelty check's
+Jaccard >= 0.5) is refused as "repeat", whichever path produced it: a reflex line from its plan, its plan's own
+say, or banter. A labelled line ("repeat", "autopilot") is posted, because its label already says it is not
+fresh. A player's lines are not checked: its AI may repeat on purpose (a reflex with repeat: true).
+
 The feed keeps the last 200 lines in memory; nothing is written to disk. Standard library only.
 """
 
@@ -21,8 +26,10 @@ from collections import deque
 
 try:
     from . import guard as guard_mod
+    from . import novelty
 except ImportError:
     import guard as guard_mod
+    import novelty
 
 RATE_TICKS = 200                 # 10 s at 20 Hz (Pat, battle mode: one line per 10 s per fighter, superseding B55's 30 s)
 KEEP = 200
@@ -61,6 +68,7 @@ class PublicFeed:
         self.rows = deque(maxlen=keep)
         self.next_id = 1
         self.last_tick = {}
+        self.house_words = {}            # who -> word sets of its last novelty.WINDOW house lines
         self.high_tick = -1              # the latest tick any line carried: a new arena's clock starts after it
         self.replied = set()
         self.reply_of = {}
@@ -90,6 +98,10 @@ class PublicFeed:
         last = self.last_tick.get(who)
         if last is not None and tick - last < self.rate:
             return self._refuse("rate_limited", retry_after_s=-(-(self.rate - (tick - last)) // 20))
+        said = novelty.words(line)
+        recent = self.house_words.get(who, ()) if source == "house" and label is None else ()
+        if any(novelty.is_repeat_of(said, old) for old in recent):
+            return self._refuse("repeat")
         if reply_to is not None:
             if reply_to not in self.reply_of:
                 return self._refuse("no_such_line")
@@ -114,6 +126,8 @@ class PublicFeed:
             else:
                 self.voice_emoji[who] = row["emoji"]
         self.next_id += 1
+        if source == "house":
+            self.house_words.setdefault(who, deque(maxlen=novelty.WINDOW)).append(said)
         self.last_tick[who] = tick
         self.high_tick = max(self.high_tick, tick)
         self.reply_of[row["id"]] = reply_to

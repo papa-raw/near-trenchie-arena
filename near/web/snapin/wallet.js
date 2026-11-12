@@ -185,6 +185,48 @@
   }
   function forgetGuestKey() { guest = null; }
 
+  // NEP-413 sign-in: the connected wallet signs {message, recipient, nonce (32 bytes)} with a key of the account. No transaction,
+  // no cost. The host checks the signature and reads that key on the network as a full-access key (near/chain/identity.py).
+  async function signMessage(args) {
+    var network = (args && args.network) || 'testnet';
+    var s = sessions[network];
+    if (!s) return fail('no-session', 'connect a wallet on ' + network + ' first');
+    try {
+      var nonce = args.nonce instanceof Uint8Array ? args.nonce : b64urlBytes(args.nonce);
+      if (!nonce || nonce.length !== 32) return fail('other', 'the sign-in code is not 32 bytes');
+      var r = await s.wallet.signMessage({ message: args.message, recipient: args.recipient, nonce: nonce, network: network });
+      if (!r || !r.signature || !r.publicKey) return fail('rejected', 'the wallet returned no signature');
+      return { ok: true, accountId: r.accountId || s.accountId, publicKey: r.publicKey, signature: r.signature };
+    } catch (e) { return fail(errKind(e), e && e.message || e); }
+  }
+  function b64urlBytes(text) {
+    try {
+      var v = String(text).replace(/-/g, '+').replace(/_/g, '/'); while (v.length % 4) v += '=';
+      var bin = (typeof atob === 'function' ? atob(v) : Buffer.from(v, 'base64').toString('binary')), out = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    } catch (e) { return null; }
+  }
+
+  // One function call the wallet signs and sends itself (a full-access signature: it may attach a deposit, as paid_mint needs).
+  // args: {network, receiverId, methodName, args, gas (string), deposit (yoctoNEAR string)}. Answers the transaction hash.
+  async function callContract(args) {
+    var network = (args && args.network) || 'testnet';
+    var s = sessions[network];
+    if (!s) return fail('no-session', 'connect a wallet on ' + network + ' first');
+    if (!/^[a-z0-9._-]{2,64}$/.test(String(args.receiverId || ''))) return fail('receiver', 'not a valid account id: ' + args.receiverId);
+    if (!/^[0-9]+$/.test(String(args.deposit || '0')) || !/^[0-9]+$/.test(String(args.gas || ''))) return fail('other', 'gas and deposit are whole-number strings');
+    var action = { type: 'FunctionCall', params: { methodName: args.methodName, args: args.args, gas: String(args.gas), deposit: String(args.deposit || '0') } };
+    try {
+      var outcome = await s.wallet.signAndSendTransaction({ network: network, signerId: s.accountId, receiverId: args.receiverId, actions: [action] });
+      var tx = outcome && outcome.transaction && outcome.transaction.hash;
+      var st = outcome && outcome.status;
+      if (st && typeof st === 'object' && 'Failure' in st) return fail('other', 'the call failed onchain: ' + JSON.stringify(st.Failure).slice(0, 200));
+      return { ok: true, txHash: tx || null, accountId: s.accountId };
+    } catch (e) { return fail(errKind(e), e && e.message || e); }
+  }
+  function account(network) { var s = sessions[network || 'testnet']; return s ? s.accountId : null; }
+
   // The 7.3.1 import check, in the page: loads, makes a key, builds an AddKey action object.
   function importCheck(opts) {
     var L = libs(opts), r = { nearApi: { ok: false }, nearConnect: { ok: false } };
@@ -204,7 +246,10 @@
   var api = {
     list: list, connect: connect, guestKey: guestKey, guestSign: guestSign, guestPublicKey: guestPublicKey,
     forgetGuestKey: forgetGuestKey, importCheck: importCheck, config: config, testKey: testKey,
+    signMessage: signMessage, callContract: callContract, account: account,
     _reset: function () { sessions = {}; guest = null; },
+    // node checks only: a connected wallet stand-in (signMessage, signAndSendTransaction), as connect() would hold it
+    _adoptSession: function (network, wallet, accountId) { sessions[network] = { wallet: wallet, accountId: accountId, shortId: 'test' }; },
     // node checks only: hold a guest key that was added outside a page (the live test-key run), the same way guestKey does
     _adoptGuest: function (accountId, keyPair, receiver) { guest = { accountId: accountId, publicKey: keyPair.getPublicKey().toString(), keyPair: keyPair, receiver: receiver }; }
   };

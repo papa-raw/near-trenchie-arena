@@ -18,17 +18,19 @@ import { BudgetReplay, budgetEffects } from './budget-replay.mjs';
 import { loadItems } from '../items3d.js';
 import { hasBounty } from './style.mjs';
 import { Sound, soundForEvent } from './sound.mjs';
-import { Leaderboard } from './leaderboard.mjs';
+import { SignFeed, signUrl } from './sign.mjs';
 import { Inset, pickFighter } from './inset.mjs';
+import { arenaView } from './follow.mjs';
 import { Slowmo } from './slowmo.mjs';
-import { RosterFeed, rosterUrl } from './roster.mjs';
 import { LOOK3, ROSTER, ITEMS } from '../art/index.js';
 
 const $ = (id) => document.getElementById(id);
 const statusEl = $('status'), diagEl = $('diag');
 const qs = new URLSearchParams(location.search);
 if (qs.has('diag')) document.body.classList.add('diag');
-const WS_URL = qs.get('ws') || ('ws://' + (location.hostname || '127.0.0.1') + ':8765');
+// Hosted over https (behind nginx): the spectator socket is wss://<this host>/arena-ws. Local: the DEV host's own port.
+const WS_URL = qs.get('ws') || (location.protocol === 'https:' ? 'wss://' + location.host + '/arena-ws'
+                                                               : 'ws://' + (location.hostname || '127.0.0.1') + ':8765');
 
 function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = cls || ''; }
 
@@ -41,6 +43,9 @@ async function main() {
   await loadScript('./hud-art/hud-art.js');
   window.THREE = THREE; window.LOOK3 = LOOK3;
   await loadScript('./snapin/art/parts-s3.js');
+  // the wall sign's plank (the shared art kit) and a player's face on it (the snap-in portrait still); both optional
+  loadScript('./snapin/art/ska.js').then(() => window.SKA.init()).then(() => { if (window.ARENA) window.ARENA.hud.sign.paint(); }).catch((e) => console.warn('sign plank unavailable', String(e)));
+  loadScript('./snapin/art/portrait.js').catch((e) => console.warn('player faces unavailable', String(e)));
   const stage = createStage($('stage'), LOOK3, { dprCap: qs.has('dpr') ? +qs.get('dpr') : 2, shadowMap: qs.has('shadow') ? +qs.get('shadow') : 1024, dprForce: qs.has('dprforce') ? +qs.get('dprforce') : 0 });
   const { renderer, scene, camera, view } = stage;
   const itemRenderer = await loadItems(ITEMS);
@@ -60,36 +65,40 @@ async function main() {
   }
   const budgetWarmUntil = performance.now() + 4000;
   let teleMin = Infinity, teleMax = 0;   // live telegraphs over the measured frames (the budget log states both)
-  const hud = new Hud({ stage, actors, KITS, ITEMS, root: $('world'), status: statusEl }); hud.details = details;
-  const social = new Social(KITS, $('world'));
-  const moments = new Moments(ITEMS, (id) => hud.tagOf(id)); // big moments for the ticker (Battle mode)
+  const hud = new Hud({ stage, actors, KITS, ITEMS, root: $('world'), status: statusEl, itemRenderer, LOOK3 }); hud.details = details;
+  // the social frame: speech into the one merged feed, each fighter's life (its prediction and KOs) into the tags
+  const social = new Social(KITS, { onSay: (item) => hud.feed.push(item), onLives: (map) => hud.lives.receive(map, performance.now()) }); hud.names = social.names;
+  const moments = new Moments(ITEMS, (id) => hud.tagOf(id)); // big moments for the feed (Battle mode)
   const chainHold = new ChainHold($('chain-hold'));
   if (!replay) chainHold.startHealth('/dev/health');
   addEventListener('pagehide', () => chainHold.stopHealth());
   addEventListener('pageshow', () => { if (!replay) chainHold.startHealth('/dev/health'); });
   if (replay) hud.styles = new Map(Object.entries(replay.record.styles));
   if (qs.has('nohud')) hud.remount = function () {}; // diagnostics only: the budget test with the panel art's 4 Hz redraw switched off
-  if (!replay) window.ROSTER_FEED = new RosterFeed(rosterUrl(WS_URL), (r) => { hud.roster = r; }).start(); // the host's public roster
+  if (!replay) { const feed = new SignFeed(signUrl(WS_URL), (json) => hud.setBoards(json)); feed.onOffline = () => hud.sign.setOffline(); window.SIGN_FEED = feed.start(); } // the wall sign's two boards, from the public record
   const inset = new Inset({ stage, tagOf: (id) => hud.tagOf(id) }), slowmo = new Slowmo(buffer);
   let lastPos = new Map(), lastLead = null;
   $('stage').addEventListener('click', (ev) => {
     const ids = [...lastPos.keys()].filter((id) => lastPos.get(id).state === 'alive');
     const id = pickFighter(ids, (q) => { const p = lastPos.get(q); return p ? hud.toScreen(p.x, 0.8, p.z) : null; }, ev.clientX, ev.clientY);
     if (id) inset.follow(id); else inset.clear();
-    hud.followed = inset.followId;
+    followView.clicked();
   });
   // ?follow=<fighter id> (the snap-in guide's "Watch your trenchie"): open the follow view on it once it is in the ring
   const followWant = qs.get('follow');
-  if (followWant) { const t = setInterval(() => { const p = lastPos.get(followWant); if (p && p.state === 'alive') { inset.follow(followWant); hud.followed = inset.followId; clearInterval(t); } }, 400); setTimeout(() => clearInterval(t), 60000); }
+  // window.ArenaView (board 1's Follow button): follow(id) now or once it is back in the ring, unfollow(), followed()
+  const followView = window.ArenaView = arenaView({ inset, hud, positions: () => lastPos,
+    announce: (id) => dispatchEvent(new CustomEvent('arenaview:follow', { detail: { id } })) });
+  const closeInset = inset.close.onclick; inset.close.onclick = () => { closeInset(); followView.clicked(); };
+  if (followWant) window.ArenaView.follow(followWant);
   // the ring's outline on screen, its edge projected at 64 points: the page's own panels (the order box) keep off it
   window.__arenaRingOutline = () => { const r = ARENA_RADIUS_MILLI / MILLI + 0.3, out = []; for (let i = 0; i < 64; i++) { const a = i * Math.PI / 32, p = hud.toScreen(Math.cos(a) * r, 0, Math.sin(a) * r); out.push([p.x, p.y]); } return out; };
-  const board = new Leaderboard({ isHouse: (id) => ROSTER.some((r) => r.trenchieId === id) }); hud.board = board;
   const sound = new Sound(); hud.soundState = sound.state; sound.onChange = (st) => { hud.soundState = st; }; hud.onMute = () => sound.toggle();
   const pan = (p) => (p ? Math.max(-0.8, Math.min(0.8, (hud.toScreen(p.x, 0.5, p.z).x - innerWidth / 2) / (innerWidth / 2))) : 0);
-  const kos = new Map(), seenDrops = new Set();
+  const kos = new Map();
   let netState = { state: 'connecting' }, firedTick = -1, lookTick = -1, lastNow = performance.now(), frames = 0, dropped = 0;
   const net = replay ? { frames: 0, bad: 0 } : new Net(WS_URL, {
-    onSocial: (message) => social.apply(message),
+    onSocial: (message) => { social.apply(message); hud.sign.render(); },   // a name that arrives redraws its sign row
     onMetadata: (message) => { if (message) details.apply(message); else { details.records.clear(); details.rules = null; details.revision = -1; details.tick = -1; } },
     onStyles: (styles) => { hud.styles = styles; },
     onSnapshot: (s) => { buffer.push(s, performance.now()); },
@@ -112,7 +121,7 @@ async function main() {
     const dt = Math.min(100, nowMs - lastNow); lastNow = nowMs; frames++;
     if (!replay) slowmo.update(nowMs);
     const s = buffer.sample(nowMs);
-    if (!s) { renderer.render(scene, camera); chainHold.layout(); return; }
+    if (!s) { renderer.render(scene, camera); hud.idle(nowMs); chainHold.layout(); return; }
     const rt = s.tick, a = s.a, b = s.b, k = s.k;
 
     // events: anything the viewer has not yet seen. Attacks are read ahead (up to 3 ticks) so the wind-up leads the strike.
@@ -127,8 +136,8 @@ async function main() {
       }
       if (snap.tick > firedTick && snap.tick <= rt) {
         firedTick = snap.tick;
-        for (const ev of snap.events) for (const m of moments.onEvent(ev, snap)) social.moment(m);
-        for (const m of moments.onSnapshot(snap)) social.moment(m);
+        const ambushed = new Set();   // a KO that was an ambush is one KO line that says so
+        for (const ev of snap.events) for (const m of moments.onEvent(ev, snap)) { if (m.kind === 'ambush') ambushed.add(m.other); else hud.onMoment(m); }
         for (const ev of snap.events) {
           if (ev.kind === 'hit') {
             actors.onHit(ev, snap.tick, nowMs, posOf(snap, ev.source), posOf(snap, ev.target));
@@ -137,19 +146,22 @@ async function main() {
             if (ev.fighter === lastLead && (kos.get(ev.fighter) || 0) >= 2) slowmo.trigger('leader_ko', nowMs); // the hour's leader goes down
             actors.onKo(ev, snap.tick, nowMs); const p = posOf(snap, ev.fighter); sound.play(soundForEvent(ev), nowMs, pan(p));
             if (p) { fx.burst('ko', p.x, p.z, nowMs); for (let i = 0; i < 4; i++) fx.burst('dust', p.x, p.z, nowMs, { vx: Math.cos(i * 1.6) * 1.2, vz: Math.sin(i * 1.6) * 1.2 }); }
-            if (ev.source) { kos.set(ev.source, (kos.get(ev.source) || 0) + 1); board.onKo(ev.source, nowMs, ev.fighter); }
-            hud.onEvent(ev, snap);
-          } else if (ev.kind === 'respawn') { actors.onRespawn(ev, snap.tick, nowMs); sound.play(soundForEvent(ev), nowMs, pan(posOf(snap, ev.fighter))); }
+            if (ev.source) kos.set(ev.source, (kos.get(ev.source) || 0) + 1);
+            hud.onKo(ev, ambushed.has(ev.fighter));
+          } else if (ev.kind === 'respawn') {
+            // a life that predicts: its card stamps first and the body drops after it (prejump.mjs)
+            actors.onRespawn(ev, snap.tick, nowMs, hud.onRespawn(ev, nowMs)); sound.play(soundForEvent(ev), nowMs, pan(posOf(snap, ev.fighter)));
+          }
           else if (ev.kind === 'attack') {
             const f = snap.fighters.find((q) => q.id === ev.fighter), p = f && milliToWorld(f.x, f.y);
             sound.play(soundForEvent(ev), nowMs, pan(p));
             if (p && ev.weapon === 'swing') fx.burst('arc', p.x + Math.cos(f.dir * Math.PI / 180) * 0.5, p.z + Math.sin(f.dir * Math.PI / 180) * 0.5, nowMs, { angle: f.dir, reach: 1.3 + 0.4 });
           } else if (ev.kind === 'grab' || ev.kind === 'floor_loss' || ev.kind === 'signature') {
-            hud.onEvent(ev, snap);
             { const it = ITEMS[ev.row]; if (ev.kind === 'grab' && it && it.tier === 'legendary' && it.origin !== 'house:' + ev.fighter && !ev.destroyed) slowmo.trigger('steal', nowMs); } // a legendary lands in a stranger's hands
             if (ev.kind !== 'floor_loss') sound.play(soundForEvent(ev, { tier: (ITEMS[ev.row] || {}).tier }), nowMs, pan(posOf(snap, ev.fighter)));
           }
         }
+        for (const m of moments.onSnapshot(snap)) hud.onMoment(m);   // after the KO lines: a legendary knocked loose joins its KO's line
       }
     }
 
@@ -162,13 +174,12 @@ async function main() {
     });
     const benchIds = fighters.filter((f) => f.status !== 0).map((f) => f.id);
     const pos = actors.update(fighters, rt, nowMs, dt, benchSeats(benchIds));
-    board.presence(fighters.filter((f) => f.status !== 2).map((f) => f.id), nowMs);
     lastPos = pos;
     fx.sync(a, b, k, rt, nowMs, pos);
     const hunted = fighters.filter((f) => hasBounty(f, ITEMS));
     fx.setBounty(hunted.map((f) => pos.get(f.id)), nowMs);
     hud.bounties = new Set(hunted.map((f) => f.id));
-    for (const d of b.drops) if (!seenDrops.has(d.key)) { seenDrops.add(d.key); hud.onLegendDrop(d, nowMs); }
+    hud.syncDrops(b.drops, nowMs);
     fx.tick(nowMs);
     if (stress) {
       const count = Math.max(0, 150 - fx.liveShapes);
@@ -176,7 +187,7 @@ async function main() {
     }
 
     // the crown over the KO leader
-    const top1 = board.rows(nowMs)[0], lead = top1 && top1.kos > 0 && pos.get(top1.id) && pos.get(top1.id).state === 'alive' ? top1.id : null; // the board's leader: KOs per hour played
+    const top1 = hud.leader(), lead = top1 && pos.get(top1) && pos.get(top1).state === 'alive' ? top1 : null; // the sign's KO leader of the hour
     fx.setCrown(lead ? pos.get(lead) : null, 1.55, nowMs);
 
     stage.placeCamera(0, 0);
@@ -189,9 +200,7 @@ async function main() {
     lastLead = lead;
     if (inset.followId !== null && !pos.get(inset.followId)) { inset.clear(); hud.followed = null; }
     inset.render(inset.followId !== null ? pos.get(inset.followId) : null); // the follow view, drawn after the main pass
-    hud.speakers = social.speaking(nowMs);
-    hud.frame({ pos, kos, lead, rt, nowMs, snap: b });
-    social.frame(lastPos, hud, nowMs);
+    hud.frame({ pos, lead, nowMs, delayMs: buffer.delayMs });
     chainHold.layout();
 
     if (diagEl && document.body.classList.contains('diag')) {
@@ -200,7 +209,7 @@ async function main() {
     }
   }, requestAnimationFrame, console.error, () => setStatus('Render error', 'warn'));
   requestAnimationFrame(frame);
-  window.ARENA = { social, chainHold, details, instances, itemRenderer, replay, budget, stress, stage, actors, fx, buffer, net, hud, kos, sound, board, inset, slowmo, THREE, LOOK3, KITS, ITEMS, pick: (nx, ny) => pickMilli(nx, ny, camera) };
+  window.ARENA = { social, chainHold, details, instances, itemRenderer, replay, budget, stress, stage, actors, fx, buffer, net, hud, kos, sound, inset, slowmo, THREE, LOOK3, KITS, ITEMS, pick: (nx, ny) => pickMilli(nx, ny, camera) };
 }
 
 main().catch((e) => { console.error(e); setStatus('Could not start: ' + (e && e.message || e), 'warn'); });

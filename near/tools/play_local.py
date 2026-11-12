@@ -17,6 +17,9 @@ It starts, from the repo root:
 then prints the URLs (the arena page, the snap-in guide) and the SNAP.md commands an agent session runs.
 Ctrl-C (or SIGTERM) stops both and waits for them; if either one exits on its own, the other is stopped and the
 reason printed. Loopback only. Nothing is left running.
+
+Hosted (the arena's container on the server, behind nginx): --bind 0.0.0.0 --public-origin https://<name>
+--state-dir <volume> --live. Both processes take the public name; the house's spend survives restarts in the state dir.
 """
 from __future__ import annotations
 
@@ -33,6 +36,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = Path.home() / ".config" / "trenchie"
 KEY_ENV = "NEARAI_API_KEY"
+CHAIN_ENV, CHAIN_KEYS = "TRENCHIE_CHAIN_ENV", "TRENCHIE_CHAIN_KEYS"   # --chain: settings (ids, URLs) and keys files
 
 
 def read_key(path: Path) -> str | None:
@@ -71,14 +75,27 @@ def answers(port: int, path: str) -> bool:
         return False
 
 
-def day_cap(mode: str):
-    """The live house's daily cap in USD for a budget mode, read from near/house/runtime.py (not imported)."""
+def day_caps() -> dict:
+    """The live house's daily caps in USD by cap period, read from near/house/runtime.py (not imported)."""
     import ast
     src = (ROOT / "near/house/runtime.py").read_text()
     for node in ast.parse(src).body:
         if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "DAY_CAPS_USD" for t in node.targets):
-            return ast.literal_eval(node.value).get(mode)
-    return None
+            return ast.literal_eval(node.value)
+    return {}
+
+
+def day_cap(mode: str):
+    """The live house's daily cap in USD for a budget mode; None for auto, which follows the calendar."""
+    return day_caps().get(mode)
+
+
+def cap_note(mode: str) -> str:
+    cap = day_cap(mode)
+    if cap is not None:
+        return f"daily cap ${cap} ({mode})"
+    periods = ", ".join(f"{k} ${v}" for k, v in day_caps().items())
+    return f"daily cap by the calendar ({mode}: {periods}; the arena host prints today's)"
 
 
 def plan(args, environ: dict) -> tuple[list, dict, list]:
@@ -97,10 +114,9 @@ def plan(args, environ: dict) -> tuple[list, dict, list]:
         key = environ.get(KEY_ENV) or read_key(keyfile)
         if not key:
             raise SystemExit(f"play: --live needs {KEY_ENV} set, or a {KEY_ENV}= line in {CONFIG / 'nearai.env'}")
-        cap = day_cap(args.budget)
         env[KEY_ENV] = key
         notes.append(f"house: LIVE, the 14 personas on NEAR AI Cloud; key from {source} (not printed); "
-                     f"daily cap ${cap} ({args.budget}), then the house goes on autopilot")
+                     f"{cap_note(args.budget)}, then the house goes on autopilot")
     else:
         house = args.house
         notes.append(f"house: keyless, {'its keyed lines' if house == 'keyed' else 'the plain DEV house'}, no model "
@@ -115,7 +131,51 @@ def plan(args, environ: dict) -> tuple[list, dict, list]:
         notes.append("guard list missing: every feed line is muted to an emote (put the list at " + str(blocklist) + ")")
     argv = [sys.executable, "-B", str(ROOT / "near/arena/snap_local.py"), "--port", str(args.arena_port),
             "--house", house, "--budget", args.budget]
+    argv += hosted_args(args)
+    if getattr(args, "state_dir", None):
+        argv += ["--state-dir", args.state_dir]
+    chain = getattr(args, "chain", None)
+    if chain:
+        # Chain mode: near/chain/hosted_live.py runs the same arena with the chain writer and the identity desk; it
+        # takes every snap_local flag unchanged. Both files must exist; there is no DEV fallback.
+        missing = [k for k in (CHAIN_ENV, CHAIN_KEYS) if not environ.get(k)]
+        if missing:
+            raise SystemExit(f"play: --chain {chain} needs {' and '.join(missing)} set (files outside the repo)")
+        for k in (CHAIN_ENV, CHAIN_KEYS):
+            if not Path(environ[k]).is_file():
+                raise SystemExit(f"play: --chain {chain}: {k} names {environ[k]}, which is not a file")
+        argv = [sys.executable, "-I", "-B", str(ROOT / "near/chain/hosted_live.py"), "--chain", chain] + argv[3:]
+        notes.append(f"chain: {chain} (near/chain/hosted_live.py); settings {environ[CHAIN_ENV]}, "
+                     f"keys {environ[CHAIN_KEYS]} (not printed)")
+    else:
+        env.pop(CHAIN_KEYS, None)   # DEV: chain keys in the shell never reach the arena host
     return argv, env, notes
+
+
+def web_env(environ: dict) -> dict:
+    """The web server's environment: never the model key, never the chain keys."""
+    return {k: v for k, v in environ.items() if k not in (KEY_ENV, CHAIN_KEYS)}
+
+
+def hosted_args(args) -> list[str]:
+    """--bind and --public-origin, passed to both the arena host and the web server; empty when not hosted."""
+    out = []
+    if getattr(args, "bind", "127.0.0.1") != "127.0.0.1":
+        out += ["--bind", args.bind]
+    if getattr(args, "public_origin", None):
+        out += ["--public-origin", args.public_origin]
+    return out
+
+
+def hosted_lines(origin: str) -> list[str]:
+    snap = f'python3 -I near/arena/snap.py --url {origin}'
+    return [
+        "Agent door (a Claude Code or Codex session with its own clone of the repo):",
+        f'  "Read near/SNAP.md and snap into the hosted DEV arena at {origin}."',
+        "Or by hand, from the clone (make your sheet as SNAP.md shows):",
+        f"  {snap} terms",
+        f"  {snap} join --sheet <your-sheet>.json --preset hunter --accept-terms 1 --spread 40,30,20,10 --zero 10",
+    ]
 
 
 def agent_lines(arena_port: int, web_port: int) -> list[str]:
@@ -127,11 +187,11 @@ def agent_lines(arena_port: int, web_port: int) -> list[str]:
         "Or by hand, in an empty scratch folder (make your sheet as SNAP.md shows):",
         f"  export R={ROOT}",
         f"  {snap} terms",
-        f"  {snap} join --sheet <your-sheet>.json --preset hunter --accept-terms 1 --spread 40,30,20,10 --zero 10",
+        f"  {snap} join --sheet <your-sheet>.json --preset hunter --accept-terms 1 --level 2",
         f'  {snap} intent --focus nearest --sig auto --say "One ripple at a time."',
         f"  {snap} result --wait 90",
         f"  {snap} stop",
-        f"Pair a browser AI door instead: open the guide, pick the Claude Code door, then  {snap} join --code <CODE> --preset hunter --accept-terms 1",
+        f'Pair a browser AI door instead: open the guide, pick the Claude Code door, then  {snap} live --code <CODE> --preset hunter --accept-terms 1 --fifo "$PWD/orders.fifo"',
     ]
 
 
@@ -158,6 +218,15 @@ def main(argv=None) -> int:
     ap.add_argument("--live", action="store_true", help="the live house on the NEAR AI Cloud key (spends, under the day's cap)")
     ap.add_argument("--house", choices=("keyed", "dev"), default="keyed", help="the keyless house (default keyed)")
     ap.add_argument("--budget", default="building")
+    ap.add_argument("--bind", default="127.0.0.1",
+                    help="hosted in a container: 0.0.0.0 inside its own network (published to the host's loopback only)")
+    ap.add_argument("--public-origin", default=None,
+                    help="hosted behind nginx: https://<name> (the Host and Origin checks, X-Real-IP, no admin route)")
+    ap.add_argument("--state-dir", default=None,
+                    help="a persistent directory for the house's meter and logs, and each start's rounds")
+    ap.add_argument("--chain", choices=("testnet",), default=None,
+                    help="chain mode: wallets, the identity NFT and testnet results (near/chain/hosted_live.py); needs "
+                         f"{CHAIN_ENV} and {CHAIN_KEYS}. Without it: DEV, no wallet, chain or NFT")
     args = ap.parse_args(argv)
     for port in (args.arena_port, args.web_port):
         if not port_free(port):
@@ -183,22 +252,23 @@ def main(argv=None) -> int:
             if time.monotonic() > deadline or stopping["why"]:
                 raise SystemExit("play: the arena host did not answer /dev/health within 90 s" if not stopping["why"] else "play: stopped")
             time.sleep(0.3)
-        web_env = {k: v for k, v in os.environ.items() if k != KEY_ENV}      # the web server never sees the key
         procs.append(subprocess.Popen([sys.executable, "-I", str(ROOT / "near/web/snapin/serve.py"), "--port",
-                                       str(args.web_port), "--arena", f"http://127.0.0.1:{args.arena_port}"],
-                                      cwd=ROOT, env=web_env, start_new_session=True))
+                                       str(args.web_port), "--arena", f"http://127.0.0.1:{args.arena_port}"]
+                                      + hosted_args(args),
+                                      cwd=ROOT, env=web_env(os.environ), start_new_session=True))
         while not answers(args.web_port, "/web/arena.html"):
             if procs[1].poll() is not None:
                 raise SystemExit(f"play: the web server exited ({procs[1].returncode}) before it answered")
             if stopping["why"]:
                 raise SystemExit("play: stopped")
             time.sleep(0.3)
-        web = f"http://127.0.0.1:{args.web_port}"
+        web = args.public_origin or f"http://127.0.0.1:{args.web_port}"
+        doors = hosted_lines(args.public_origin) if args.public_origin else agent_lines(args.arena_port, args.web_port)
         print("\n".join(["", "play: READY",
                          f"  Watch the arena:       {web}/web/arena.html",
                          f"  Snap in (the guide):   {web}/web/snapin/index.html",
-                         f"  Host health:           {web}/dev/health", ""] + agent_lines(args.arena_port, args.web_port)
-                        + ["", "Ctrl-C stops everything this started.", ""]), flush=True)
+                         f"  Host health:           {web}/dev/health", ""] + doors
+                        + ["", "Ctrl-C (SIGTERM, hosted) stops everything this started.", ""]), flush=True)
         while not stopping["why"]:
             for name, p in zip(("the arena host", "the web server"), procs):
                 if p.poll() is not None:

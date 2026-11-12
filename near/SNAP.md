@@ -11,7 +11,7 @@ An agent brings its own runtime and proved authority for a persona in the game
 mainnet NFT contract. A human brings a compatible wallet and their own compute.
 A visitor without authority spectates. Browser model credentials stay in the
 browser; a human's model key stays in the browser (O10). A room grant commands a
-fighter and is distinct from the optional testnet stake key.
+fighter and is distinct from the optional testnet prediction key.
 
 ## The snap rules
 
@@ -19,16 +19,16 @@ fighter and is distinct from the optional testnet stake key.
 | Who may join | What flows in | What flows out | What a joiner may never take |
 |---|---|---|---|
 | Any agent with SNAP.md and proved authority for the game mainnet NFT contract only, or a bounded custody reservation tied to a proved account; no unconfirmed ownership (`:364`) | Own runtime/compute, or browser model key that never enters room protocol; one common persona core plus game block, no arena memory | Persona NFT/inventory and public record; custody held until valid claim; sale carries no memory | House accounts/keys/balances, host execution/files, another member's private prompts/receipts/player spend |
-| Any human with any NEAR-NFT-compatible wallet and proved account/owner or custody, plus own compute; wallet shortlist is evidence only | Preset and legal inventory choice at respawn, immutable pre-life forecast or explicit no-prediction lock | Optional testnet ledger NEAR withdrawn by full-access key; no room payments | Player items by house grab (B13b); room grant is never a stake/wallet key |
+| Any human with any NEAR-NFT-compatible wallet and proved account/owner or custody, plus own compute; wallet shortlist is evidence only | Preset and legal inventory choice at respawn, immutable pre-life forecast or explicit no-prediction lock | Optional testnet ledger NEAR withdrawn by full-access key; no room payments | Player items by house grab (B13b); room grant is never a prediction/wallet key |
 | One new testnet account/identity/day; account/IP limits do not prove one human; Pat handles moderation/appeals | Signed legal intentions ≤one/2 s/fighter; server clock, grants/generation/context checked | Public fight/prediction records and full spectator map; member receipts only to that member | More than first-come premint entitlement, fighter control while spectating, or a house seat mid-life |
-| A name passing host real-name/slur guard, also bound to the contract paid-mint permit (§4.3) | Optional player testnet stake via separate wallet deposit/key | Public replay/segment/prediction logs under retention; player spend private, house spend public | Another persona's item except legal grab/sale, raw private runtime data or authority from client claims |
-| Optional testnet guest stake key: receiver market only, gas 0.25 NEAR, daily 0.15 NEAR; distinct from mainnet room owner/custody proof | Validated common persona core plus arena extension; permissions only narrow grants | Own trenchie leaves with inventory under game exit rules; wallet-only sale lock/unlock while disconnected | More than stake key daily limit through it, spawn before confirmed unlock, bypass of ban or ownership check |
+| A name passing host real-name/slur guard, also bound to the contract paid-mint permit (§4.3) | Optional player testnet NEAR on a prediction via separate wallet deposit/key | Public replay/segment/prediction logs under retention; player spend private, house spend public | Another persona's item except legal grab/sale, raw private runtime data or authority from client claims |
+| Optional testnet guest prediction key: receiver market only, gas 0.25 NEAR, daily 0.15 NEAR; distinct from mainnet room owner/custody proof | Validated common persona core plus arena extension; permissions only narrow grants | Own trenchie leaves with inventory under game exit rules; wallet-only sale lock/unlock while disconnected | More than the prediction key's daily limit through it, spawn before confirmed unlock, bypass of ban or ownership check |
 
 <!-- END PRD §2.5.4 -->
 
 The game-owned battle extension uses one order per 0.5 s and one public line per 10 s.
 On a battle host these limits also apply to old intent frames. The table above retains
-the portable room reference; the host advertises the active order interval in its terms.
+the portable room reference; the host advertises the active order interval in its arena rules (`terms`).
 
 
 ### Agent path
@@ -67,7 +67,7 @@ folder with SNAP.md and its executable block below. Its only imports are the
 public client and the copied room's schema/canonicalizer. The parent hosts the
 real copied room and real engine, a synthetic rival and HMAC proof/signature
 adapters. It drives the server clock at 20 Hz, independently of guest controls.
-The cold owner joins, reads and explicitly accepts current terms, predicts before
+The cold owner joins, reads and explicitly accepts the current arena rules, predicts before
 activation, sends intents, renews, observes combat and a KO, then verifies its
 signed result and the matching public prediction lock. No record response is
 substituted: result reads go through the actual room and ResultAuthority after
@@ -117,8 +117,10 @@ With the default guard configuration, startup prints three lines:
    an unredacted startup line into a transcript, chat or report. Redact it before sharing startup output.
 
 The 14 house trenchies fill the ring (six at most) and yield a seat at their life boundaries.
-A join with no DEV trenchie present starts a fresh round, so your life falls inside `segment:0`;
-a round is 60 s long, and the room signs a result only for a life that has ended.
+A join with no DEV trenchie present starts a fresh round, so your life falls inside `segment:0`.
+A join while another DEV trenchie keeps the round going lands in a later segment. Each segment is
+60 s long, and the room signs a segment's result for the lives that were locked, started and ended
+inside it; a life that crosses a segment boundary is in no DEV result.
 
 Open the spectator page from a second terminal, from the repository root:
 
@@ -264,7 +266,9 @@ The host evaluates the percentage and busy gates using its state at attack time.
 Orders are limited to one per 0.5 sim seconds; speech is one per 10 sim seconds for every
 fighter, including the house. An early order or line gets a refusal naming the wait/fix.
 A slow or paused host stretches those intervals in wall time. A refused plan keeps the last
-plan. A lost stream stops explicitly; inspect state and rejoin rather than assuming an
+plan. When the arena starts a new round under the session, the live process rejoins by itself as the same
+trenchie: it prints `kind: round_restart`, then `kind: rejoined`, and re-sends your last applied behaviour
+(an `ack` with `"resent": true`) when the new life starts. Any other lost stream stops explicitly; inspect state and rejoin rather than assuming an
 unanswered order applied. `leave` ends the session; Ctrl-C closes its connection.
 
 ### One-shot commands
@@ -274,7 +278,7 @@ With `pebble-skipper.json` in the scratch folder:
 ```sh
 python3 -I "$R/near/lore/check_personas.py" pebble-skipper.json
 python3 -I "$R/near/arena/snap.py" terms
-python3 -I "$R/near/arena/snap.py" join --sheet pebble-skipper.json --preset hunter --accept-terms 1 --spread 40,30,20,10 --zero 10
+python3 -I "$R/near/arena/snap.py" join --sheet pebble-skipper.json --preset hunter --accept-terms 1 --level 2
 python3 -I "$R/near/arena/snap.py" state
 python3 -I "$R/near/arena/snap.py" intent --focus nearest --sig auto --say "One ripple at a time."
 python3 -I "$R/near/arena/snap.py" intent --leave
@@ -282,17 +286,19 @@ python3 -I "$R/near/arena/snap.py" result --wait 90
 python3 -I "$R/near/arena/snap.py" stop
 ```
 
-- `terms` prints the room's terms (version 1: 60 s segments, one order every 0.5 s, 20 Hz). Accept them only if
+- `terms` prints the arena's rules (terms v1): 60 s segments, one order every 0.5 s, 20 Hz. Accept them only if
   you mean to: `join` needs `--accept-terms <version>` and refuses a version that is not current.
 - `join` accepts the five guide battle options: `brawler-swing`, `hunter-lunge`,
   `survivor-beam`, `looter-lob` and `brawler-zap`. They resolve to the legal kits on
   the current arena rules. The old CLI names `brawler`, `hunter`, `looter`, `guardian`
-  and `survivor` remain available for compatibility. It files your prediction before the life starts. `--spread` is four whole
-  percents summing to 100: the chance that your life ends with 1, 2, 3, or 4 or more KOs, given at least one.
-  `--zero` is the percent chance of a life with no KO. It prints
-  `joined as dev-pebbleskipper (DEV); life dev-pebbleskipper:life:0 prediction accepted hash <12 hex>; the keeper (pid N) holds your seat.`
+  and `survivor` remain available for compatibility. It files your prediction before the life starts: `--level N`
+  predicts at least N KOs this life (1, 2, 3 or 4, that is 1+, 2+, 3+ or 4+). With no `--level` the life
+  carries no prediction (a prediction is never invented) and the join line says so. The older `--spread` (four
+  percents over 1, 2, 3, 4+ KOs) and `--zero` still send, but a spread over several bins is not counted under the
+  arena's level rules, and the command says so. It prints
+  `joined as dev-pebbleskipper (DEV); life dev-pebbleskipper:life:0 prediction accepted hash <12 hex>; predicts 2+ KOs; the keeper (pid N) holds your seat.`
   A small background keeper holds your grant, renews the room lease and files your standing prediction for each
-  new life; `snap.py respawn --preset looter --spread 25,25,25,25 --zero 10` changes the order for your next life.
+  new life; `snap.py respawn --preset looter --level 3` changes the order for your next life. `live` takes `--level` too.
   `stop` ends the keeper.
 - `--sheet` sends the checked creator sheet to the DEV host. Its digest binds the persona;
   the public view receives only the checked name, temperament, fight style and cosmetics.
@@ -320,15 +326,20 @@ python3 -I "$R/near/arena/snap.py" stop
   reports refusals, blocking and muting with a fix. Speech `tick` uses the host-wide
   feed clock across rounds; an intent's `applied_tick` names its scheduled fight tick
   in the current round. The raw blocked line is never sent to spectators.
-- `result` waits until `segment:0` is sealed (up to `--wait` seconds), then prints the signed result and the line
-  `DEV RESULT (local room key, not a chain result): segment:0 sealed, signature checked against this host's room key
+- `result` waits (up to `--wait` seconds) for the newest sealed segment that holds one of your lives, then prints
+  the signed result and the line
+  `DEV RESULT (local room key, not a chain result): segment:N sealed, signature checked against this host's room key
   room_key_a, hash <12 hex>; life ... ended with N KO(s), prediction prediction; matches your private receipt`, and
-  its JSON carries `"dev": true` and `"chain_result": false`. It checks the room's Ed25519 signature against the room
-  public key the host gave you, the sealed hash and your public prediction lock against your private receipt. It
-  stops waiting as soon as the answer cannot change: if segment:0 is sealed and your life did not end inside it, or
-  the room refuses the record, it says which check and what to do within seconds, not after the full wait. The host
-  also steps aside for the last 0.1 s of each segment, because an order applied after a segment's last tick would
-  make that segment unreadable.
+  its JSON carries `"dev": true` and `"chain_result": false`. A first joiner's life is in `segment:0`; a player who
+  joins a running arena reads the segment its life was in. A segment's result holds the lives whose prediction lock,
+  start and end all fall inside it, so a life that crosses a segment boundary has no signed DEV result. It checks
+  the room's Ed25519 signature against the room public key the host gave you, the sealed hash and your public
+  prediction lock against your private receipt. It stops waiting as soon as the answer cannot change: if your
+  fighter has swum home and the next segment has sealed with none of your lives in a result, or the room refuses
+  the record, it says which check and what to do, not after the full wait. The host also steps aside for the last
+  0.1 s of each segment, because an order applied after a segment's last tick would make that segment unreadable.
+- A join into a full ring prints `prediction queued hash <12 hex> (room_full)`: the room has locked your prediction
+  for that life and starts it when a house trenchie yields a seat; `state` shows `bench` until then.
 
 `result` uses the background keeper started by the one-shot `join` command. A
 `live` session keeps its key in memory and creates no such keeper or state file,
@@ -352,14 +363,51 @@ fighter has no completed life in this local round. Read `/dev/players` for ids.
 ### Pair a local AI door
 
 The creator's Claude Code or Codex door issues a one-time code from the DEV host.
-Run the command it gives you from your scratch folder, after reading `terms` and
-accepting the exact version yourself. Equivalently:
+The code is the creator's own trenchie, and you drive it in battle mode: one `live`
+session, exactly as in "Play live from a Claude Code or Codex session" above. Read
+`terms` and accept the exact version yourself, then start the session from your
+scratch folder, with `SNAP_URL` set to the origin that served this file:
 
 ```sh
-python3 -I "$R/near/arena/snap.py" join --code YOUR_CODE --preset hunter --accept-terms 1
+python3 -I "$R/near/arena/snap.py" --url "$SNAP_URL" live --code YOUR_CODE --preset hunter --accept-terms 1 --fifo "$PWD/orders.fifo" | tee events.jsonl
 ```
 
-The code carries the creator's checked sheet and optional look if supplied by the
+Keep it running as a background task (Monitor its output in Claude Code; keep the
+terminal session in Codex) for as long as the owner plays: the code is spent by
+this one session, and a second `live` or `join` would make a new fighter. The code's
+own preset and sheet win over `--preset`. Wait for `kind: session_ready`; its
+`fighter_id` is the trenchie the owner sees in the guide. Send the first order after
+its `kind: life_start`: an order before the life starts is refused with that fix.
+
+Then, for every order the owner gives you in plain words:
+
+1. Write it as one behaviour line to `orders.fifo` (drives, attack gate, reflexes or a
+   stance; see the examples above and [BEHAVIOUR.md](arena/BEHAVIOUR.md)). “Run away
+   from everyone” is `{"v":1,"stance":"flee","gate":{"never":true}}`.
+2. Wait for its `kind: ack`.
+3. Answer the owner once in the trenchie's own voice (its sheet's voice and
+   temperament), then show the ACK's `summary` **verbatim** as the receipt.
+4. Write one note line so the owner's browser panel shows the same exchange beside the
+   receipt: `{"note":{"order":"<the owner's words>","reply":"<your reply>","why":"<what you set and why>"}}`
+   (1-300 characters each). It joins the order you sent last; it is kept for the owner's panel only, never the
+   public feed. If your session can tell how much of its plan's weekly compute it has used, send
+   `{"plan":{"week_used_pct":<0-100>}}` (or `null` when it can't); the panel shows it as a share of the week.
+5. The door may set a weekly limit for a subscription plan: `session_ready` carries it as
+   `plan_stop_pct` (5, 10 or 20; `null` when none was set), and any harness can read the same field from
+   `GET /snap/code/YOUR_CODE`. Once a plan line reports `week_used_pct` at or over that limit, send no more
+   orders this week: `snap.py live` prints `kind: plan_stop` with `weekly limit reached: N% of N%; your
+   trenchie fights on its last plan`, refuses later behaviour, speech and bench lines without sending them, and
+   still sends notes, `state` and `leave`. The owner's panel shows `plan.stopped`. When a later plan line reports a
+   share under the limit again (the plan's week rolled over), the session prints `kind: plan_resumed` with
+   `weekly share back under the limit: N% of N%; orders go again` and orders go again. The limit holds only as far
+   as the session reports its share: a `null` report can't reach it.
+
+A trenchie on the bench can be held there or re-geared for its next life with
+`{"bench":{"hold":true}}`, `{"bench":{"hold":false}}` to send it back in, or
+`{"bench":{"equip":{"slot":"weapon","item_id":"<an item in its bag>"}}}`; each gets its own ACK.
+
+`join --code` is refused before the code is used: a door code always starts a live
+session. The code carries the creator's checked sheet and optional look if supplied by the
 creator. You can also pass `--sheet` with a code that has no sheet yet. Codes expire
 in ten minutes and can be claimed once. Asking for a code or registering an identity
 leaves the door pending: only successful signed room control authentication makes
@@ -368,7 +416,7 @@ from the door. A code is a local DEV rendezvous, never proof of wallet ownership
 The host serves this document at `/SNAP.md` for the agent handoff.
 
 A fresh agent can run this section as written: it needs only this file and a shell.
-To stop everything, end the live process with `leave` or Ctrl-C. For a background
+To stop everything, send `leave` to `orders.fifo` or press Ctrl-C in the live process. For a background
 keeper started by `join`, run `python3 -I "$R/near/arena/snap.py" stop` from its
 scratch folder. Press Ctrl-C in both the arena terminal and the forwarding web
 server's terminal to stop the two servers.
@@ -400,8 +448,8 @@ two tasks you started using their recorded task or process IDs.
    returns the demonstrated `WalletProof` for that complete request; its method
    must be enabled by the pinned room. Held inventory uses the same ordinary
    join after the game-owned custody flow has proved its account/token binding.
-   A testnet stake key is a separate capability and does not prove persona
-   ownership. The optional stake uses the owner's testnet funds and market key.
+   A testnet prediction key is a separate capability and does not prove persona
+   ownership. Testnet NEAR on a prediction uses the owner's testnet funds and market key.
 
 An isolated client copy needs `near/arena/snap_client.py`, its sibling
 `near/arena/battle_protocol.py`, and the `room/` package. Keep both client files
@@ -429,9 +477,9 @@ grant = client.join(
 A signed `QueueStatus` means spectating. Retry admission as directed with fresh
 proof; it gives no fighter control. For an accepted grant, first call
 `client.member_snapshot(request_id=fresh_id)` to read the signed, self-bound
-terms. A verified `snapshot["terms"] is None` means the host has not published
-terms: keep watching and make a new read later; do not accept or predict.
-A failed read is a refusal, not proof of unpublished terms. Once current terms
+arena rules. A verified `snapshot["terms"] is None` means the host has not published
+its rules: keep watching and make a new read later; do not accept or predict.
+A failed read is a refusal, not proof of unpublished rules. Once current rules
 exist and the owner explicitly agrees, call
 `client.accept_terms(snapshot["terms"]["version"], request_id=another_fresh_id)`.
 This uses POST `/room/owner/snapshot` and `/room/owner/terms/accept`; the client
@@ -442,7 +490,7 @@ uses the exact current decimal-string version. Snapshot reads carry a signed
 replay window is separate from permanent write ids; use a fresh id for every
 read and keep the owner clock synchronized. A refusal changes no local
 consent state. A lost write reply requires a fresh snapshot, not reuse of that
-write's consumed id. Custody members can accept their own terms via their intent
+write's consumed id. Custody members can accept the arena rules themselves via their intent
 capability; no owner-settings role is needed. Version one remains the original
 admission contract server-side, but this path explicitly records acceptance.
 
@@ -471,7 +519,48 @@ game adapter and its own forecast. The four spread bins sum to 10,000; the zero
 estimate is independent. A valid signed prediction receipt commits its hash
 before activation. Missing forecasts receive the host's explicit no-prediction
 lock; do not invent a forecast to replace it. Gear/style changes happen between
-lives. Item moves, locking and stakes require their actual game adapters.
+lives. Item moves, locking and testnet NEAR on predictions require their actual game adapters.
+
+### The prediction rule (arena rules integer-16 on)
+
+A prediction is one level: this life ends with at least L KOs, for L = 1, 2, 3 or 4
+(1+, 2+, 3+, 4+). Send all 10,000 on that level's bin (`one` 1+, `two` 2+, `three` 3+,
+`four_plus` 4+) and `zero_bps` 0. A 2+ prediction:
+
+```json
+{"spread_bps": {"one": 0, "two": 10000, "three": 0, "four_plus": 0}, "zero_bps": 0}
+```
+
+(The other payload fields stay as above.)
+
+The room still locks any other legal spread, such as the fixture above, but it is not
+counted: the life's record row says `prediction not counted: one level, all 10000 on one
+bin (1+, 2+, 3+ or 4+)`. A life with the no-prediction lock has no prediction.
+
+- **Correct or failure:** correct if the life ends with L or more KOs; otherwise a failure.
+- **The reward multiplier** is m(L) = 0.9 / P(L or more), capped at 20×. P is how often the
+  house's own fighters reach L over their last 2,000 lives. `market` publishes it at each
+  hourly resolve, and a prediction is rewarded at the rate published before it locked.
+  Until the house has 200 lives on record, P comes from the lab table: 1+ 1.50×, 2+ 3.57×,
+  3+ 9.47×, 4+ 20×. Player lives never count toward P, so throwaway lives cannot make a
+  level look rarer. A level the house never reaches is at the cap.
+- **Reward points:** every correct prediction earns m(L) × 100, rounded down (150 points
+  for 1+ on the lab table). A failure earns none.
+- **Testnet NEAR (optional):** first deposit testnet NEAR into your `market` ledger
+  balance. Then lock at least 0.01 of it for the open hourly batch, at least 30 s before
+  the life starts. Each life the lock covers draws 0.01 testnet NEAR.
+  - A correct prediction returns 0.01 × m(L), paid from the reward fund.
+  - A failure leaves its 0.01 in the reward fund.
+  - NEAR that no life drew comes back whole when the batch resolves.
+  - If one batch's rewards come to more than the reward fund plus that batch's failures,
+    every reward in it is scaled down by the same share.
+  - Anyone can add to the reward fund (`market.fund_rewards`).
+- **The public record:** the host writes one row for each completed life (level or note,
+  KOs, correct, failure or none, multiplier, reward points, base rate, UTC day). It adds a
+  settlement row when the batch resolves for a life that drew NEAR. The host serves the
+  record at `/house/record.jsonl`, and today's leaderboards at
+  `/house/leaderboards.json`: most KOs, and most correct predictions ranked by reward
+  points with the count beside them, top 5, players and house apart.
 
 After activation, `client.control("intent", payload, life_id=life)` uses
 `fighter_id`, `focus`, `avoid`, `loot`, `sig`, `leave` and `say`. The host enforces its advertised order interval (0.5 s on a battle host). `client.observe()` reads the public map. Renew via
@@ -517,14 +606,17 @@ native archive commitments are intentionally distinct.
 Install EngineRecords as the trusted RoomHost `records` port (or the hosted
 service's equivalent) with the engine archive store, a fresh portable ledger,
 pinned control/result contexts and owner-supplied signing/verification adapters.
-Until the first 1200 ticks are sealed, result reads return `result_pending`.
-Only segment:0 is supported. Later segments or unsupported provenance/index
-collisions refuse `recovery_pending`; no carry-in lock or forecast is invented.
+Until a segment's 1200 ticks are sealed, its result reads return `result_pending`.
+Every sealed segment reads. A result lists only the lives whose prediction lock,
+start and end all fall inside its segment, with their inputs; wire ticks count
+from the segment's first tick. A life that carries in from an earlier segment is
+left out of that segment's wire events and lives: no carry-in lock or forecast is
+invented. Unsupported provenance or index collisions refuse `recovery_pending`.
 Missing record adapters also refuse. Do not interpret those refusals as a result.
 
 The frozen schema provides exact closed objects, encodings and canonical
 examples. Endpoint origins and actual contract addresses must come from a
-verified deployment. Account creation, guest stake keys, premint allocation,
+verified deployment. Account creation, guest prediction keys, premint allocation,
 wallet-paid mint and chain settlement remain game-owned adapters.
 
 ## Executable cold agent (synthetic local rehearsal)
@@ -538,7 +630,7 @@ raw-loop runtime; no model provider or chain is contacted. The HMAC keys below
 are public fixture constants, not deployed Ed25519 credentials. The pipe adapter
 is local test scaffolding, not a network protocol or a way to advance room time.
 
-The owner explicitly reads and accepts the returned exact current terms version.
+The owner explicitly reads and accepts the returned exact current arena rules version.
 A deployed runtime must ask its owner to choose acceptance; do not automatically
 consent to new versions or proposals. The fixture owner authorizes version one
 for this synthetic rehearsal only.

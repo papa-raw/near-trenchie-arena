@@ -5,7 +5,7 @@ import { ROSTER } from './art/roster.js';
 import { shortName } from './arena/names.mjs';
 import { Hud } from './arena/hud.mjs';
 class Element {
-  constructor() { this.children = []; this.style = {}; this.className = ''; this.attributes = {}; this.textContent = ''; }
+  constructor() { this.children = []; this.style = {}; this.dataset = {}; this.className = ''; this.attributes = {}; this.textContent = ''; }   // dataset: a real element always has one
   appendChild(el) { this.children.push(el); return el; }
   querySelector(selector) { return this.children.find((c) => c.className === selector.slice(1)) || null; }
   setAttribute(k, v) { this.attributes[k] = v; }

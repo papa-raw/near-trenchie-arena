@@ -13,6 +13,18 @@ Rules:
   at least as long is allowed.
 - Not blocked: "the Great Rug" and myth theories while no trenchie or real name is in the line;
   a first name or surname on its own; "exit".
+- Every check runs on a normalised copy of the line, and every listed term and trenchie name is normalised the
+  same way (normalise()): NFKC; letters from other scripts folded to the Latin letter they imitate (Unicode's
+  confusables.txt, as confusables.json; near/tools/gen_confusables.py rebuilds it); accents and other combining
+  marks dropped (NFKD), so an accented letter reads as its base letter; zero-width characters deleted;
+  case-folded; every run of characters that are not letters, digits or @ read as one space.
+- Listed names, handles and slurs, and the trenchie names they are weighed against, match on skeleton(), which
+  also reads digit swaps as letters (0 o, 1 l, 3 e, 4 a, 5 s, 7 t) and i as l (i, l and 1 look alike). A term of
+  four or more letters may have a gap between any two of its letters ("b-l-o-r-p", "zz slur"); a shorter one only
+  between its words. Either way the whole match stands alone (no letter or digit just before or after it).
+  So "NAME  SURNAME", "Name/Surname", "N4me Surn4me", "Na me Sur name" and Cyrillic look-alikes all match a
+  listed "Name Surname". The accusation words and the rug rule read normalise(), so "jail" stays "jail".
+  The posted text is never rewritten. Not covered: multi-letter look-alikes ("rn" for m).
 Standard library only.
 """
 
@@ -21,6 +33,7 @@ import json
 import os
 from pathlib import Path
 import re
+import unicodedata
 
 MISSING_NOTICE = "guard list missing"
 ENV = "TRENCHIE_BLOCKLIST"
@@ -30,8 +43,35 @@ RUG = re.compile(r"\b(?:rug pull|rugger|rugged|rug)\b", re.I)
 GREAT_RUG = re.compile(r"\bthe great rug\b", re.I)
 
 
+CONFUSABLES = json.loads((Path(__file__).resolve().parent / "confusables.json").read_text(encoding="ascii"))
+FOLD = str.maketrans(CONFUSABLES["map"])
+DIGITS = str.maketrans("013457i", "oleastl")            # skeleton(): digit swaps, and i read as l
+ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\u00ad\u180e"), None)
+SEPARATORS = re.compile(r"(?:[^\w@]|_)+")      # any run of non-word characters (and _), except @: one gap
+
+
+def _bare(text):
+    """NFKD with every combining mark dropped: accented letters read as their base letter ("o" for "o" + umlaut)."""
+    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+
+
+def normalise(text):
+    """The form every check reads (MED-C): NFKC, look-alikes folded to Latin, accents dropped, zero-width deleted,
+    case-folded, any non-word run (but @) as one space."""
+    folded = _bare(unicodedata.normalize("NFKC", text).translate(FOLD)).translate(FOLD).translate(ZERO_WIDTH)
+    return SEPARATORS.sub(" ", unicodedata.normalize("NFKC", _bare(folded.casefold())))
+
+
+def skeleton(text):
+    """The form listed terms and trenchie names match on: normalise(), then digit swaps and i read as letters."""
+    return normalise(text).translate(DIGITS)
+
+
 def _whole(term):
-    return re.compile(r"(?<![\w@])" + re.escape(term.strip()) + r"(?![\w])", re.I)
+    words = skeleton(term).split()
+    letters = "".join(words)
+    parts = list(letters) if sum(c.isalnum() for c in letters) >= 4 else words    # gaps anywhere vs between words
+    return re.compile(r"(?<![\w@])" + " ?".join(map(re.escape, parts)) + r"(?![\w])")
 
 
 def load_blocklist(path=None):
@@ -70,16 +110,16 @@ class Guard:
         """None when the line may post, else a short code."""
         if self.missing:
             return "guard-list-missing"
-        low = line
-        trenchie_spans = self._spans(self.trenchie, low)
-        real_spans = [s for t, p in self.real for s in (m.span() for m in p.finditer(low))]
+        low, skel = normalise(line), skeleton(line)
+        trenchie_spans = self._spans(self.trenchie, skel)
+        real_spans = [s for t, p in self.real for s in (m.span() for m in p.finditer(skel))]
         real_alive = [s for s in real_spans if not any(t[0] <= s[0] and s[1] <= t[1] and t[1] - t[0] >= s[1] - s[0]
                                                          for t in trenchie_spans)]
         if real_alive:
             return "real-name"
         if any(re.search(r"\b" + w + r"\w*", low, re.I) for w in ALWAYS):
             return "accusation-word"
-        if any(p.search(low) for p in self.slurs):
+        if any(p.search(skel) for p in self.slurs):
             return "slur"
         if (RUG.search(low) or GREAT_RUG.search(low)) and (trenchie_spans or real_spans):
             return "rug-near-a-name"           # the Great Rug is blamed on myths only (B22): never beside a name

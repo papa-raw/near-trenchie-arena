@@ -114,7 +114,8 @@ export class Actors {
     a.h.flash(); a.glowRestoreAt = nowMs + ITEM_FLASH_SETTLE_MS;
     const s = ev.source && this.map.get(ev.source); if (s && s !== a) { s.freezeFrom = nowMs; s.freezeUntil = nowMs + FEEL.hitstopKoMs * 0.6; }
   }
-  onRespawn(ev, tick, nowMs) { const a = this.map.get(ev.fighter); if (a) { a.arriveAt = nowMs; a.koAt = null; } }
+  // a new life drops in; delayMs holds the drop (the pre-jump card stamps first, prejump.mjs) with the body out of sight
+  onRespawn(ev, tick, nowMs, delayMs = 0) { const a = this.map.get(ev.fighter); if (a) { a.arriveAt = nowMs + delayMs; a.koAt = null; } }
 
   // ---- one frame -------------------------------------------------------------------------------------------------------
   // fighters: [{id, x, y (milli), dir (deg), status, hp, shield, items, itemRows}] interpolated for this frame
@@ -139,7 +140,7 @@ export class Actors {
       }
       const w = milliToWorld(x, y);
       o.position.set(w.x, 0, w.z);
-      o.visible = f.status !== 2;
+      o.visible = f.status !== 2 && !(f.status === 0 && a.arriveAt !== null && nowMs < a.arriveAt);   // a held drop: not in sight yet
       out.set(f.id, { x: w.x, z: w.z, state, f });
       this.pose(a, f, state, w, dir, renderTick, nowMs, dtMs);
       a.J.base.scale.y *= a.baseScaleY;
@@ -234,6 +235,7 @@ export class Actors {
     if (state === 'alive' && a.arriveAt !== null) { // respawn: a short drop with a landing
       const t = now - a.arriveAt;
       if (t > FEEL.arriveMs) a.arriveAt = null;
+      else if (t < 0) J.base.position.y = 1.4;   // held above the drop point until the drop starts
       else if (t < 200) { J.base.position.y = (1 - eIn(t / 200)) * 1.4; J.base.scale.y = 1.1; J.base.scale.x = J.base.scale.z = 0.94; }
       else { const k = (t - 200) / 200, sq = Math.sin(Math.PI * k) * (1 - k) * 0.22; J.base.scale.set(1 + sq, 1 - sq * 1.2, 1 + sq); }
     }

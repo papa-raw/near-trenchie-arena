@@ -27,7 +27,12 @@ def _stance(drives, gate, target):
 
 
 _RULES = {
-    "version": "integer-14",
+    "version": "integer-16",
+    # integer-16: a prediction is one level, "L or more KOs"; a correct one earns (1 - margin) / P(>=L) times its amount
+    # (capped), P from the house's own lives as `market` publishes them; arena/predict.py reads this block
+    "predict": {"levels": [1, 2, 3, 4], "margin_bps": 1000, "cap_bps": 200000,
+                "amount_yocto": "10000000000000000000000", "window": 2000, "min_lives": 200},
+    "steer_band": 1000,                # integer-15: drives taper over one tile at their edges; a step scales by the net pull
     "dodge_weapon_warnings": True,
     "beam_slow_active": True,
     "rival_seek": True,
@@ -287,6 +292,29 @@ def validate_rules(rules):
             raise ValueError("item exceeds tier budget")
     for row, quirk in rules.get("item_quirks", {}).items():
         _validate_quirk(rules, row, quirk)
+    if "steer_band" in rules and (type(rules["steer_band"]) is not int or rules["steer_band"] <= 0):
+        raise ValueError("invalid steer band")
+    if "predict" in rules:
+        _validate_predict(rules["predict"])
+
+
+def _validate_predict(p: Mapping) -> None:
+    """integer-16's prediction block: levels 1..4 in order, a margin under 100%, a cap of at least 1x, whole windows."""
+    if not isinstance(p, Mapping) or set(p) != {"levels", "margin_bps", "cap_bps", "amount_yocto", "window", "min_lives"}:
+        raise ValueError("invalid predict block")
+    if list(p["levels"]) != [1, 2, 3, 4]:
+        raise ValueError("prediction levels are 1, 2, 3 and 4 (4 or more)")
+    if type(p["margin_bps"]) is not int or not 0 <= p["margin_bps"] < 10000:
+        raise ValueError("prediction margin must be 0 to 9999 bps")
+    if type(p["cap_bps"]) is not int or p["cap_bps"] < 10000:
+        raise ValueError("prediction cap must be at least 10000 bps (1x)")
+    if type(p["amount_yocto"]) is not str or not p["amount_yocto"].isdigit() or int(p["amount_yocto"]) <= 0:
+        raise ValueError("prediction amount must be a positive yocto string")
+    for key in ("window", "min_lives"):
+        if type(p[key]) is not int or p[key] <= 0:
+            raise ValueError("prediction windows must be positive")
+    if p["min_lives"] > p["window"]:
+        raise ValueError("min_lives cannot exceed the window")
 
 
 def _validate_quirk(rules: Mapping, row: str, quirk: Mapping) -> None:
@@ -341,6 +369,11 @@ def sin_deg(angle, rules):
 def vector(angle, length, rules):
     return (length * sin_deg(angle + rules["quarter_turn"], rules) // rules["trig_scale"],
             length * sin_deg(angle, rules) // rules["trig_scale"])
+
+
+def taper(gap, band, unit):
+    """0 at the edge (gap 0), rising linearly to `unit` once `gap` reaches `band` (integer-15 steering)."""
+    return unit * min(max(gap, 0), band) // band
 
 
 def normalise(x, y, length):
@@ -673,14 +706,20 @@ class Sim:
                 if distance(f, ward) > self.rules["guardian_radius"]:
                     dx, dy = ward["x"] - f["x"], ward["y"] - f["y"]
                     preferred = 0
+            band = self.rules.get("steer_band")
+            step = f["speed"]
             if not fleeing and best[1] == "fighter" and dist < preferred:
                 if f["style"] in ("survivor", "looter"):
                     dx, dy = -dx, -dy
+                    if band:   # integer-15: back off in proportion to how far inside the preferred distance
+                        step = taper(preferred - dist, band, f["speed"])
                 else:
                     dx, dy = 0, 0
+            elif band and not fleeing and best[1] == "fighter" and f["style"] in ("survivor", "looter"):
+                step = taper(dist - preferred, band, f["speed"])   # and close in the same way from outside it
             if best[1] == "drop" and dist <= self.rules["grab_radius"]:
                 dx, dy = 0, 0
-            f["move_x"], f["move_y"] = normalise(dx, dy, f["speed"])
+            f["move_x"], f["move_y"] = normalise(dx, dy, step)
             if self.rules.get("threat_sidestep", False):
                 sx, sy = self._sidestep(f)
                 if sx or sy:
@@ -865,18 +904,23 @@ class Sim:
         if not drops or f["intent"]["loot"] == "ignore":
             return (0, 0), False
         _, _, d = max(drops, key=lambda c: (r["tier_value"][r["items"][c[2]["row"]]["tier"]] * (r["view_radius"] - c[0]), c[1]))
+        if "steer_band" in r:
+            pull = normalise(d["x"] - f["x"], d["y"] - f["y"], taper(distance(f, d), r["steer_band"], r["trig_scale"]))
+            return pull, distance(f, d) <= r["grab_radius"]
         return self._toward(f, d["x"], d["y"]), distance(f, d) <= r["grab_radius"]
 
     def _pull_keep_away(self, f: dict, enemies: list, near_by_id: dict, target_id, radius: int) -> tuple[int, int]:
-        """Away from every enemy inside the radius but the target: half strength at the edge, full touching."""
+        """Away from every enemy inside the radius but the target: half strength at the edge, full touching.
+        With `steer_band` (integer-15): zero at the edge, full touching, so the edge is a resting place."""
         unit = self.rules["trig_scale"]
+        smooth = "steer_band" in self.rules
         px = py = 0
         for e in enemies:
             dist = near_by_id[e["id"]]
             if e["id"] == target_id or dist >= radius:
                 continue
             ax, ay = normalise(f["x"] - e["x"] or (1 if f["id"] < e["id"] else -1), f["y"] - e["y"],
-                               unit * (2 * radius - dist) // (2 * radius))
+                               unit * (radius - dist) // radius if smooth else unit * (2 * radius - dist) // (2 * radius))
             px, py = px + ax, py + ay
         return normalise(px, py, min(unit, isqrt(px * px + py * py))) if px or py else (0, 0)
 
@@ -892,6 +936,14 @@ class Sim:
                 target = min(far, key=lambda c: (c[0], c[1]))[2]
                 return self._toward(f, target["x"], target["y"])
         reach = self._weapon(f)["range"] * f["range_pct"] // self.rules["percent"]
+        if "steer_band" in self.rules:
+            # integer-15: full strength outside reach, easing to nothing at three quarters of reach, so another drive
+            # pulling the other way balances it inside reach instead of across the edge.
+            if target is None:
+                return 0, 0
+            inner = reach * 3 // 4
+            return normalise(target["x"] - f["x"], target["y"] - f["y"],
+                             taper(near_by_id[target_id] - inner, max(1, reach - inner), self.rules["trig_scale"]))
         if target is None or near_by_id[target_id] <= reach:
             return 0, 0
         return self._toward(f, target["x"], target["y"])
@@ -901,6 +953,9 @@ class Sim:
         ally = self.state["fighters"].get(ally_id)
         if ally is None or ally["state"] != "alive" or distance(f, ally) <= self.rules["guardian_radius"]:
             return 0, 0
+        if "steer_band" in self.rules:
+            return normalise(ally["x"] - f["x"], ally["y"] - f["y"], taper(distance(f, ally) - self.rules["guardian_radius"],
+                                                                           self.rules["steer_band"], self.rules["trig_scale"]))
         return self._toward(f, ally["x"], ally["y"])
 
     def _pull_hold(self, f: dict, drives: dict, anchor) -> tuple[int, int]:
@@ -912,8 +967,11 @@ class Sim:
             hx, hy = anchor or (f["x"], f["y"])
         else:
             hx, hy = at["x_milli"], at["y_milli"]
-        if isqrt((hx - f["x"]) ** 2 + (hy - f["y"]) ** 2) <= drives["hold_radius"] * self.rules["tile"]:
+        out = isqrt((hx - f["x"]) ** 2 + (hy - f["y"]) ** 2) - drives["hold_radius"] * self.rules["tile"]
+        if out <= 0:
             return 0, 0
+        if "steer_band" in self.rules:
+            return normalise(hx - f["x"], hy - f["y"], taper(out, self.rules["steer_band"], self.rules["trig_scale"]))
         return self._toward(f, hx, hy)
 
     def _battle_policy(self, f: dict, enemies: list, targets: dict) -> None:
@@ -946,7 +1004,13 @@ class Sim:
             pulls["hold"] = self._pull_hold(f, drives, anchor)
         mx = sum(pulls[k][0] * weights[k] for k in battle.DRIVE_WEIGHTS if k in pulls)
         my = sum(pulls[k][1] * weights[k] for k in battle.DRIVE_WEIGHTS if k in pulls)
-        f["move_x"], f["move_y"] = normalise(mx, my, f["speed"])
+        if "steer_band" in r:
+            # integer-15: the step is as long as the net pull, against the drives that pull at all: drives that
+            # balance leave the fighter standing, never a full stride one way and a full stride back.
+            full = r["trig_scale"] * sum(weights[k] for k in pulls if pulls[k] != (0, 0))
+            f["move_x"], f["move_y"] = normalise(mx, my, f["speed"] * min(full, isqrt(mx * mx + my * my)) // full) if full else (0, 0)
+        else:
+            f["move_x"], f["move_y"] = normalise(mx, my, f["speed"])
         if r.get("threat_sidestep", False):
             sx, sy = self._sidestep(f)
             if sx or sy:

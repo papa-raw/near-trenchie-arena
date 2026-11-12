@@ -18,7 +18,8 @@ _BINDING = ("context", "grant_id", "session_key_id", "member_id", "nft_token_id"
 # Joint member-read contract: the signed request expires within15seconds.
 _MEMBER_READ_TTL_MS = 15_000
 _CONTROL = {"observe": "ObserveRequest", "intent": "IntentRequest", "prediction": "PredictionRequest",
-            "renew": "RenewRequest", "leave": "LeaveRequest", "behaviour": "BattleRequest", "speech": "BattleRequest"}
+            "renew": "RenewRequest", "leave": "LeaveRequest", "behaviour": "BattleRequest", "speech": "BattleRequest",
+            "bench": "BattleRequest", "note": "BattleRequest"}
 
 
 class SnapTransport(Protocol):
@@ -28,6 +29,13 @@ class SnapTransport(Protocol):
     def open_control(self, url: str) -> dict: ...
     def frame(self, connection_id: str, body: bytes) -> dict: ...
     def drain_private(self, connection_id: str) -> list[dict]: ...
+
+
+# Seat refusals that leave a prediction locked and the member queued for the same life (room/service.py
+# _activate, then _activate_when_ready): the room keeps the lock and starts that life when a seat opens. The lock
+# step itself never returns these codes; version_mismatch is left out because the consent check can raise it
+# before any lock exists.
+SEAT_QUEUE_CODES = frozenset(("room_full", "ownership_unavailable"))
 
 
 class SnapRefusal(ValueError):
@@ -77,6 +85,9 @@ class SnapClient:
         self._pending: tuple[dict, bytes] | None = None
         self._pending_join: tuple[dict, dict, bytes] | None = None
         self._predictions: dict[str, dict] = {}
+        # A prediction the room locked while the seat itself is still waiting: the room's receipt says refused with
+        # the queue reason, and its signed lock reaches this client only in the sealed result of that life.
+        self._queued: dict[str, dict] = {}
 
     def _checked(self, name: str, value: dict, context: dict | None = None) -> dict:
         if isinstance(value, dict) and value.get("type") == "error":
@@ -290,6 +301,8 @@ class SnapClient:
             if lock is None or lock["life_id"] != life_id or lock["prediction_hash"] != expected["request_digest"]:
                 raise SnapRefusal("prediction_closed")
             self._predictions[life_id] = {"receipt": deepcopy(reply), "request": deepcopy(request)}
+        elif kind == "prediction" and reply["state"] == "refused" and reply.get("code") in SEAT_QUEUE_CODES:
+            self._queued[life_id] = deepcopy(request)
         self._pending = None
         self._sequence += 1
         return reply
@@ -312,6 +325,14 @@ class SnapClient:
         if not own:
             raise SnapRefusal("result_pending")
         for life in own:
+            queued = self._queued.get(life["life_id"])
+            if queued is not None and life["life_id"] not in self._predictions:
+                lock = life["prediction_lock"]
+                if lock["prediction_hash"] != digest(queued, exclude=("signature",)) or lock["life_id"] != life["life_id"]:
+                    raise SnapRefusal("bad_message")
+                # The room-signed result now carries the lock the queued receipt could not.
+                self._predictions[life["life_id"]] = {"receipt": {"prediction_lock": deepcopy(lock)}, "request": queued}
+                del self._queued[life["life_id"]]
             known = self._predictions.get(life["life_id"])
             if known is not None and life["prediction_lock"] != known["receipt"]["prediction_lock"]:
                 raise SnapRefusal("bad_message")

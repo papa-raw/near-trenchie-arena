@@ -1,5 +1,5 @@
-// Battle mode view case: in a live DEV crowd the speaker's emoji floats over the right fighter, the line itself
-// shows only in the B2 a ticker (tag + emoji + text), big moments reach the ticker, and nothing overlaps at 1440 and at a
+// Battle mode view case: in a live DEV crowd a spoken line shows only in the merged feed (name + emoji + line; no emoji
+// over a head, Q4), big moments reach the feed, and nothing overlaps at 1440 and at a
 // true 390 CSS px viewport. Needs a host whose feed rows carry `emoji` (the house feed's emoji pick).
 //   node near/web/arena-battle-view-case.mjs            (SNAP_CASE_ROOT=<tree>, SNAP_CASE_EVIDENCE=<dir> optional)
 import assert from 'node:assert/strict';
@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import net from 'node:net';
 import http from 'node:http';
 const exec = promisify(execFile), require = createRequire(import.meta.url);
+const HOSTS = require('./snapin/qa/hosts.cjs');   // each host ends with this case however it ends
 const root = process.env.SNAP_CASE_ROOT || fileURLToPath(new URL('../../', import.meta.url));
 const evidence = resolve(process.env.SNAP_CASE_EVIDENCE || await mkdtemp(join(tmpdir(), 'battle-view-evidence-')));
 await mkdir(evidence, { recursive: true });
@@ -22,7 +23,7 @@ const procs = [], errors = [], transcript = [], sessions = [], found = {};
 let chrome, seq = 0, carry = ''; const pending = new Map();
 const pause = (ms) => new Promise((res) => setTimeout(res, ms));
 const port = () => new Promise((res, rej) => { const s = net.createServer(); s.on('error', rej); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
-function processChild(args, more = {}) { const p = spawn('python3', args, { cwd: root, env, stdio: ['ignore', 'ignore', 'pipe'], ...more }); p.stderr.on('data', () => {}); procs.push(p); return p; }
+function processChild(args, more = {}) { const p = HOSTS.host(args, { cwd: root, env, stdio: ['ignore', 'ignore', 'pipe'], ...more }); p.stderr.on('data', () => {}); procs.push(p); return p; }
 function get(url) {
   return new Promise((res, rej) => {
     const proxy = env.HTTP_PROXY || env.http_proxy;
@@ -51,14 +52,14 @@ async function sheet(name, folder) {
   const { stdout } = await exec('python3', ['-I', join(root, 'near/lore/check_personas.py'), file], { env });
   assert.match(stdout, /1\/1 valid/); return file;
 }
-// Every speaker emoji against every name tag, HUD panel, the ticker and the buttons: the list of overlaps (empty = none).
+// No emoji over a head (Q4); every feed line against the buttons, and the snap-in call to action: the list of overlaps (empty = none).
 const OVERLAPS = `(() => {
   const r = (el) => { const b = el.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height, el }; };
   const hit = (a, b) => Math.min(a.x + a.w, b.x + b.w) > Math.max(a.x, b.x) + 0.5 && Math.min(a.y + a.h, b.y + b.h) > Math.max(a.y, b.y) + 0.5;
   const marks = [...document.querySelectorAll('.say-emoji')].filter((e) => e.style.display !== 'none').map(r);
   const tags = [...document.querySelectorAll('#world .atag')].map(r);
   const panels = [...document.querySelectorAll('#world [data-panel]:not([data-kind="world"])')].map(r);
-  const ticker = [...document.querySelectorAll('.arena-say-feed > div')].map(r);
+  const ticker = [...document.querySelectorAll('.arena-say-feed > li')].map(r);
   const buttons = [...document.querySelectorAll('#world [data-panel="btn0"], #world [data-panel="btn1"]')].map(r);
   const out = [];
   for (const m of marks) for (const o of [...tags, ...panels, ...ticker]) if (hit(m, o)) out.push('emoji ' + m.el.dataset.fighterId + ' over ' + (o.el.dataset.panel || o.el.className));
@@ -109,34 +110,31 @@ try {
   await call('Page.navigate', { url: page }); await noHop('1440');
   await until(() => evaluate('document.querySelectorAll("#world .atag").length > 0'), 120000, 'fighters\' name tags');
 
-  // 1. the creator speaks: its emoji over its own tag, the line only in the ticker
+  // 1. the creator speaks: its line and emoji in the merged feed, none over its head
   if (joined) {
   await until(() => evaluate('!!document.querySelector(' + JSON.stringify('.atag[data-fighter-id="' + joined.id + '"]') + ')'), 120000, 'the creator\'s tag');
   const order = await cli(base, dir, 'intent', '--say', 'One ripple at a time.');
   assert.equal(order.state, 'accepted');
-  const mine = await until(() => evaluate(`(() => { const m = document.querySelector('.say-emoji[data-fighter-id="${joined.id}"]'), t = document.querySelector('.atag[data-fighter-id="${joined.id}"]');
-    const line = document.querySelector('.arena-say-feed [data-fighter-id="${joined.id}"]');
-    if (!m || !t || !line || !line.textContent.includes('One ripple at a time.')) return null;
-    const a = m.getBoundingClientRect(), b = t.getBoundingClientRect();
-    return { emoji: m.textContent, line: line.textContent, dx: Math.abs((a.left + a.width / 2) - (b.left + b.width / 2)), gap: b.top - a.bottom, emojiH: a.height }; })()`), 20000, 'the creator\'s emoji and ticker line');
-  assert.ok(mine.line.includes(mine.emoji), 'the ticker line carries the same emoji');
-  assert.ok(mine.dx < 140 && mine.gap > -mine.emojiH - 60, 'the emoji sits by its own tag: ' + JSON.stringify(mine));
+  const mine = await until(() => evaluate(`(() => { const line = [...document.querySelectorAll('.arena-say-feed [data-fighter-id="${joined.id}"]')].find((l) => l.textContent.includes('One ripple at a time.'));
+    if (!line) return null;
+    return { who: line.querySelector('.who')?.textContent, emoji: line.querySelector('.emo')?.textContent || null, line: line.textContent }; })()`), 20000, 'the creator\'s feed line');
+  assert.ok(mine.emoji && mine.line.includes(mine.emoji), 'the feed line carries the speaker\'s emoji: ' + JSON.stringify(mine));
+  assert.equal(await evaluate('document.querySelectorAll(".say-emoji").length'), 0, 'no emoji over a head (Q4)');
   assert.equal(await evaluate('document.querySelectorAll(".say-line").length'), 0, 'no bubble beside a fighter');
   assert.equal(await evaluate(`[...document.querySelectorAll('.arena-say-layer *')].some((e) => e.textContent.includes('One ripple'))`), false, 'the line is not drawn in the arena');
   found.creator = mine;
   await shot('01-creator-speaks-1440');
   }
-  // 2. a house fighter speaks (keyed lines on KOs and grabs): its emoji over its own tag
-  const house = await until(() => evaluate(`(() => { for (const m of document.querySelectorAll('.say-emoji')) { const id = m.dataset.fighterId;
-      if (id === ${JSON.stringify(joined ? joined.id : '')}) continue; const t = document.querySelector('.atag[data-fighter-id="' + id + '"]'), l = document.querySelector('.arena-say-feed [data-feed-id="' + m.dataset.feedId + '"]');
-      if (!t || !l) continue; const a = m.getBoundingClientRect(), b = t.getBoundingClientRect();
-      return { id, emoji: m.textContent, line: l.textContent, dx: Math.abs((a.left + a.width / 2) - (b.left + b.width / 2)), gap: b.top - a.bottom, emojiH: a.height }; } return null; })()`), 240000, 'a house speaker');
-  assert.ok(house.line.includes(house.emoji), 'the ticker line carries the same emoji');
-  assert.ok(house.dx < 140 && house.gap > -house.emojiH - 60, 'the emoji sits by its own tag: ' + JSON.stringify(house));
+  // 2. a house fighter speaks (keyed lines on KOs and grabs): its emoji in its feed line, beside its name, none over its head
+  const house = await until(() => evaluate(`(() => { for (const l of document.querySelectorAll('.arena-say-feed li.say')) { const id = l.dataset.fighterId;
+      if (!id || id === ${JSON.stringify(joined ? joined.id : '')} || !l.querySelector('.emo')) continue;
+      return { id, who: l.querySelector('.who')?.textContent, emoji: l.querySelector('.emo').textContent, line: l.textContent }; } return null; })()`), 240000, 'a house speaker');
+  assert.ok(house.line.includes(house.emoji), 'the feed line carries the same emoji');
+  assert.equal(await evaluate('document.querySelectorAll(".say-emoji").length'), 0, 'no emoji over a head (Q4)');
   assert.equal(await evaluate('document.querySelectorAll(".say-line").length'), 0, 'no bubble beside a fighter');
   found.house = house;
   await shot('02-house-speaks-1440');
-  // 3. big moments reach the ticker
+  // 3. big moments reach the feed
   found.moment = await until(() => evaluate(`(() => { const l = document.querySelector('.arena-say-feed [data-moment]'); return l ? { kind: l.dataset.moment, text: l.textContent } : null; })()`), 300000, 'a big-moment line');
   await shot('03-moment-1440');
   // 4. no overlap at 1440, then at a true 390 CSS px viewport
@@ -156,6 +154,7 @@ try {
   for (const { base, dir } of sessions) { try { await cli(base, dir, 'stop'); } catch {} }
   await writeFile(join(evidence, 'commands.txt'), transcript.join('\n'));
   for (const p of procs) p.kill(); chrome?.kill();
+  { const left = await HOSTS.finish(); if (left.length) { console.error('FAIL ' + left.length + ' host group(s) this case started survived it'); process.exitCode = 1; } }
   for (const { timer } of pending.values()) clearTimeout(timer);
   await pause(500); await rm(scratch, { recursive: true, force: true });
 }

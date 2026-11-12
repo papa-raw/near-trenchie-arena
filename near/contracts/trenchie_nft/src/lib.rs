@@ -47,6 +47,10 @@ const GAS_FOR_NFT_ON_APPROVE: Gas = Gas::from_tgas(10);
 const MAX_ID_LEN: usize = 64;
 /// A paid mint's token id is `"paid-" + nonce`, so a nonce is at most 59 characters.
 const PAID_PREFIX: &str = "paid-";
+/// Storage kept free by apply_rows for its own closing writes (the batch id's entry and state growth), on top of
+/// the batch id's length: a record is made only when the balance still covers this after it.
+const RECORD_RESERVE_BYTES: u64 = 512;
+const RECORD_PRESET: &str = "identity-nft";
 /// At most this many approvals on one token, so no owner can inflate the gas of
 /// every batch that loads it.
 pub const MAX_APPROVALS: usize = 8;
@@ -64,6 +68,7 @@ enum Key {
     Retired,
     Batches,
     Nonces,
+    Burned,
 }
 
 #[near(serializers = [borsh, json])]
@@ -208,6 +213,8 @@ pub struct ContractState {
     pub last_seq: U64,
     pub transfers_open: bool,
     pub premint: PremintState,
+    /// Inventory deployments: the account new tokens' records are filed under; `null` when unknown tokens are skipped.
+    pub mirror: Option<AccountId>,
 }
 
 /// The held premint (F78, W3): `cap` tokens at most, `held` in custody now,
@@ -230,8 +237,13 @@ pub struct ApplyOutcome {
     pub rows: u32,
     pub already_applied: bool,
     /// Rows whose persona no longer exists (burned while the row was in
-    /// flight): skipped and named, never a reason to revert the batch.
+    /// flight), or has no record here and none can be made: skipped and named,
+    /// never a reason to revert the batch.
     pub skipped: Vec<String>,
+    /// Records `apply_rows` made for tokens it met for the first time (filed under `mirror`).
+    pub created: Vec<String>,
+    /// Of `skipped`: tokens whose record the contract's balance could not cover (storage), so none was made.
+    pub unfunded: Vec<String>,
 }
 
 #[ext_contract(ext_receiver)]
@@ -284,6 +296,119 @@ pub struct TrenchieNft {
     premint_claimed: u32,
     /// preset -> (its premint persona digest, copies minted).
     premints: BTreeMap<String, (String, u16)>,
+    /// Inventory deployments (arena set): the account a token's record is filed under when `apply_rows` meets a
+    /// token it has no record of (the identity NFT holds the token itself, on another contract or network).
+    /// `None`: unknown tokens are skipped, as on every deployment before this field.
+    mirror: Option<AccountId>,
+    /// Token ids `nft_burn` removed: a burned token is never re-created by `apply_rows`.
+    burned: LookupSet<TokenId>,
+}
+
+/// The state layout before `mirror` and `burned` (every deployment up to this release): `migrate` reads it once.
+#[near(serializers = [borsh])]
+struct TrenchieNftV1 {
+    owner: AccountId,
+    minter: AccountId,
+    arena: Option<AccountId>,
+    custodian: AccountId,
+    presets: Vec<String>,
+    network_id: String,
+    permit_public_key: [u8; 32],
+    permit_epoch: String,
+    permit_ttl_ms: u64,
+    mint_cost: u128,
+    mint_cap: u32,
+    minted_by_minter: u32,
+    max_rows_per_batch: u32,
+    row_count: u16,
+    paused: bool,
+    ended: bool,
+    last_apply_ns: u64,
+    last_seq: u64,
+    metadata: NFTContractMetadata,
+    tokens: LookupMap<TokenId, TokenState>,
+    token_ids: IterableSet<TokenId>,
+    owners: LookupMap<AccountId, Vec<TokenId>>,
+    digests: LookupSet<String>,
+    serials: LookupMap<u32, TokenId>,
+    retired: LookupSet<u32>,
+    batches: LookupSet<String>,
+    nonces: LookupSet<String>,
+    premint_cap: u32,
+    premint_claimed: u32,
+    premints: BTreeMap<String, (String, u16)>,
+}
+
+/// The layout of the first inventory deployments (arena not yet optional; e.g. nft.trenchie-r4b at 9a7b3b2).
+#[near(serializers = [borsh])]
+struct TrenchieNftV0 {
+    owner: AccountId,
+    minter: AccountId,
+    arena: AccountId,
+    custodian: AccountId,
+    presets: Vec<String>,
+    network_id: String,
+    permit_public_key: [u8; 32],
+    permit_epoch: String,
+    permit_ttl_ms: u64,
+    mint_cost: u128,
+    mint_cap: u32,
+    minted_by_minter: u32,
+    max_rows_per_batch: u32,
+    row_count: u16,
+    paused: bool,
+    ended: bool,
+    last_apply_ns: u64,
+    last_seq: u64,
+    metadata: NFTContractMetadata,
+    tokens: LookupMap<TokenId, TokenState>,
+    token_ids: IterableSet<TokenId>,
+    owners: LookupMap<AccountId, Vec<TokenId>>,
+    digests: LookupSet<String>,
+    serials: LookupMap<u32, TokenId>,
+    retired: LookupSet<u32>,
+    batches: LookupSet<String>,
+    nonces: LookupSet<String>,
+    premint_cap: u32,
+    premint_claimed: u32,
+    premints: BTreeMap<String, (String, u16)>,
+}
+
+impl From<TrenchieNftV0> for TrenchieNftV1 {
+    fn from(o: TrenchieNftV0) -> Self {
+        Self {
+            owner: o.owner,
+            minter: o.minter,
+            arena: Some(o.arena),
+            custodian: o.custodian,
+            presets: o.presets,
+            network_id: o.network_id,
+            permit_public_key: o.permit_public_key,
+            permit_epoch: o.permit_epoch,
+            permit_ttl_ms: o.permit_ttl_ms,
+            mint_cost: o.mint_cost,
+            mint_cap: o.mint_cap,
+            minted_by_minter: o.minted_by_minter,
+            max_rows_per_batch: o.max_rows_per_batch,
+            row_count: o.row_count,
+            paused: o.paused,
+            ended: o.ended,
+            last_apply_ns: o.last_apply_ns,
+            last_seq: o.last_seq,
+            metadata: o.metadata,
+            tokens: o.tokens,
+            token_ids: o.token_ids,
+            owners: o.owners,
+            digests: o.digests,
+            serials: o.serials,
+            retired: o.retired,
+            batches: o.batches,
+            nonces: o.nonces,
+            premint_cap: o.premint_cap,
+            premint_claimed: o.premint_claimed,
+            premints: o.premints,
+        }
+    }
 }
 
 fn emit(standard: &str, version: &str, event: &str, data: serde_json::Value) {
@@ -347,7 +472,9 @@ impl TrenchieNft {
         row_count: u16,
         metadata: NFTContractMetadata,
         premint_cap: Option<u32>,
+        mirror: Option<AccountId>,
     ) -> Self {
+        require!(mirror.is_none() || arena.is_some(), "a mirror is for inventory deployments (arena set) only");
         require!(!presets.is_empty() && presets.iter().all(|p| is_id(p)), "invalid presets");
         require!(network_id == "testnet" || network_id == "mainnet", "network_id must be testnet or mainnet");
         require!(metadata.spec == "nft-1.0.0", "metadata spec must be nft-1.0.0");
@@ -383,6 +510,8 @@ impl TrenchieNft {
             premint_cap: premint_cap.unwrap_or(50),
             premint_claimed: 0,
             premints: BTreeMap::new(),
+            mirror,
+            burned: LookupSet::new(Key::Burned),
         }
     }
 
@@ -564,7 +693,8 @@ impl TrenchieNft {
         require!(!self.paused, "paused");
         require!(is_id(&batch_id), "invalid batch id");
         if self.batches.contains(&batch_id) {
-            return ApplyOutcome { batch_id, rows: rows.len() as u32, already_applied: true, skipped: Vec::new() };
+            return ApplyOutcome { batch_id, rows: rows.len() as u32, already_applied: true, skipped: Vec::new(),
+                                  created: Vec::new(), unfunded: Vec::new() };
         }
         require!(
             seq.0 > self.last_seq,
@@ -574,23 +704,60 @@ impl TrenchieNft {
 
         // A persona burned while its row was in flight is skipped and named, so
         // one owner's burn can never revert every other row of the batch.
-        let mut skipped: Vec<String> = Vec::new();
-        let rows: Vec<Row> = rows
-            .into_iter()
-            .filter(|r| {
-                let live = self.tokens.contains_key(&r.token_id);
-                if !live {
-                    skipped.push(r.token_id.clone());
-                }
-                live
-            })
-            .collect();
-
-        // Load every touched token once; a token appears in one row at most.
-        let mut states: Vec<TokenState> = Vec::with_capacity(rows.len());
         let mut seen = std::collections::BTreeSet::new();
         for row in &rows {
             require!(seen.insert(row.token_id.clone()), "a persona appears twice in one batch");
+        }
+        let mut skipped: Vec<String> = Vec::new();
+        let mut created: Vec<String> = Vec::new();
+        let mut unfunded: Vec<String> = Vec::new();
+        let mut known: Vec<Row> = Vec::with_capacity(rows.len());
+        let mut fresh: Vec<Row> = Vec::new();
+        for r in rows {
+            if self.tokens.contains_key(&r.token_id) {
+                known.push(r);
+            } else if self.mirror.is_some() && !self.burned.contains(&r.token_id) && is_id(&r.token_id) {
+                fresh.push(r);
+            } else {
+                skipped.push(r.token_id.clone());
+            }
+        }
+        // The rows of tokens this inventory knows apply first, as always.
+        self.apply_group(&known);
+        // Then each token met for the first time (its identity lives on the identity NFT): its record is made under
+        // `mirror` and its row applied, and only then is solvency measured, with a reserve for this batch's own
+        // closing writes. A token the contract's balance can't carry (record, bag, serials and that reserve) is undone
+        // and named in `unfunded`; it never makes the batch fail storage, so every other row's results still land.
+        let reserve = RECORD_RESERVE_BYTES + batch_id.len() as u64;
+        let mut applied = known.len();
+        for r in fresh {
+            let token_id = r.token_id.clone();
+            self.insert_record(&token_id);
+            self.apply_group(std::slice::from_ref(&r));
+            self.flush();
+            if self.storage_covered(reserve) {
+                emit("nep171", "1.2.0", "nft_mint", json!({"owner_id": self.mirror, "token_ids": [token_id.clone()], "memo": "inventory record"}));
+                created.push(token_id);
+                applied += 1;
+            } else {
+                self.undo_record(&r);
+                unfunded.push(token_id.clone());
+                skipped.push(token_id);
+            }
+        }
+        self.batches.insert(batch_id.clone());
+        self.last_seq = seq.0;
+        self.last_apply_ns = env::block_timestamp();
+        emit("trenchie", "1.0.0", "apply_rows", json!({"batch_id": batch_id, "seq": seq, "rows": applied, "skipped": skipped,
+                                                      "created": created, "unfunded": unfunded}));
+        ApplyOutcome { batch_id, rows: applied as u32, already_applied: false, skipped, created, unfunded }
+    }
+
+    /// Apply a group of rows of existing records: removals across the group first, then adds, then each record.
+    fn apply_group(&mut self, rows: &[Row]) {
+        // Load every touched token once; a token appears in one row at most.
+        let mut states: Vec<TokenState> = Vec::with_capacity(rows.len());
+        for row in rows {
             let state = self.token(&row.token_id);
             require!(row.bag.len() <= MAX_BAG, "a bag holds at most 48 entries");
             let mut rows_in_bag = std::collections::BTreeSet::new();
@@ -638,12 +805,8 @@ impl TrenchieNft {
             }
             self.tokens.insert(row.token_id, state);
         }
-        self.batches.insert(batch_id.clone());
-        self.last_seq = seq.0;
-        self.last_apply_ns = env::block_timestamp();
-        emit("trenchie", "1.0.0", "apply_rows", json!({"batch_id": batch_id, "seq": seq, "rows": rows.len(), "skipped": skipped}));
-        ApplyOutcome { batch_id, rows: rows.len() as u32, already_applied: false, skipped }
     }
+
 
     // ------------------------------------------------------- NEP-171 core
 
@@ -861,6 +1024,9 @@ impl TrenchieNft {
         self.tokens.remove(&token_id);
         self.token_ids.remove(&token_id);
         self.owner_index_remove(&owner, &token_id);
+        if self.arena.is_some() {
+            self.burned.insert(token_id.clone()); // never re-created by apply_rows
+        }
         self.flush();
         let byte = env::storage_byte_cost().as_yoctonear();
         let freed = before.saturating_sub(env::storage_usage()) as u128 * byte;
@@ -910,13 +1076,60 @@ impl TrenchieNft {
     }
 
     /// Upgrade entry: deploy new code and call this in the same
-    /// transaction with the contract account's own key. Today it reads the
-    /// current layout unchanged; a release that changes the layout replaces
-    /// this body with the conversion from the old one.
+    /// transaction with the contract account's own key. From the layout before
+    /// `mirror` and `burned` it converts once, setting `mirror` (inventory
+    /// deployments only); on the current layout it keeps the state as it is and
+    /// refuses to change a mirror already set.
     #[private]
     #[init(ignore_state)]
-    pub fn migrate() -> Self {
-        env::state_read().unwrap_or_else(|| env::panic_str("no state to migrate"))
+    pub fn migrate(mirror: Option<AccountId>) -> Self {
+        let raw = env::storage_read(b"STATE").unwrap_or_else(|| env::panic_str("no state to migrate"));
+        if let Ok(current) = near_sdk::borsh::from_slice::<TrenchieNft>(&raw) {
+            require!(mirror.is_none() || mirror == current.mirror, "the mirror is set once, at the migrate that adds it");
+            return current;
+        }
+        let old: TrenchieNftV1 = match near_sdk::borsh::from_slice::<TrenchieNftV1>(&raw) {
+            Ok(v1) => v1,
+            Err(_) => near_sdk::borsh::from_slice::<TrenchieNftV0>(&raw)
+                .unwrap_or_else(|_| env::panic_str("state is none of the current layout and the two before it"))
+                .into(),
+        };
+        require!(mirror.is_none() || old.arena.is_some(), "a mirror is for inventory deployments (arena set) only");
+        emit("trenchie", "1.0.0", "migrate", json!({"from": "an earlier layout", "mirror": mirror}));
+        Self {
+            owner: old.owner,
+            minter: old.minter,
+            arena: old.arena,
+            custodian: old.custodian,
+            presets: old.presets,
+            network_id: old.network_id,
+            permit_public_key: old.permit_public_key,
+            permit_epoch: old.permit_epoch,
+            permit_ttl_ms: old.permit_ttl_ms,
+            mint_cost: old.mint_cost,
+            mint_cap: old.mint_cap,
+            minted_by_minter: old.minted_by_minter,
+            max_rows_per_batch: old.max_rows_per_batch,
+            row_count: old.row_count,
+            paused: old.paused,
+            ended: old.ended,
+            last_apply_ns: old.last_apply_ns,
+            last_seq: old.last_seq,
+            metadata: old.metadata,
+            tokens: old.tokens,
+            token_ids: old.token_ids,
+            owners: old.owners,
+            digests: old.digests,
+            serials: old.serials,
+            retired: old.retired,
+            batches: old.batches,
+            nonces: old.nonces,
+            premint_cap: old.premint_cap,
+            premint_claimed: old.premint_claimed,
+            premints: old.premints,
+            mirror,
+            burned: LookupSet::new(Key::Burned),
+        }
     }
 
     /// The owner's emergency stop for the writes our own keys make: `mint_trenchie`,
@@ -1007,6 +1220,7 @@ impl TrenchieNft {
             last_seq: U64(self.last_seq),
             transfers_open: self.exits_open(),
             premint: self.premint_state(),
+            mirror: self.mirror.clone(),
         }
     }
 
@@ -1115,6 +1329,38 @@ impl TrenchieNft {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// A first record for a token this inventory has none of: owned by `mirror`, empty bag, not sale-ready, preset
+    /// "identity-nft" (the persona lives on the identity NFT), a digest derived from its id (never entered in `digests`).
+    fn insert_record(&mut self, token_id: &TokenId) {
+        let mirror = self.mirror.clone().unwrap_or_else(|| env::panic_str("no mirror"));
+        let digest: String = env::sha256(format!("inventory-record|{token_id}").as_bytes())
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        self.insert_token(token_id, &mirror, RECORD_PRESET.to_string(), digest, TokenMetadata::default(), false, 0);
+    }
+
+    /// Undo `insert_record` plus its row: the serials its bag took, the record, the indexes.
+    fn undo_record(&mut self, row: &Row) {
+        let mirror = self.mirror.clone().unwrap_or_else(|| env::panic_str("no mirror"));
+        for entry in row.bag.iter().filter(|e| e.serial != 0) {
+            if self.serials.get(&entry.key()) == Some(&row.token_id) {
+                self.serials.remove(&entry.key());
+            }
+        }
+        self.tokens.remove(&row.token_id);
+        self.token_ids.remove(&row.token_id);
+        self.owner_index_remove(&mirror, &row.token_id);
+        self.flush();
+    }
+
+    /// The contract's balance covers all its storage now plus `reserve_bytes` more (the runtime refuses a receipt
+    /// that would leave storage uncovered, and that would revert the whole batch).
+    fn storage_covered(&self, reserve_bytes: u64) -> bool {
+        let need = (env::storage_usage() + reserve_bytes) as u128 * env::storage_byte_cost().as_yoctonear();
+        env::account_balance().as_yoctonear() + env::account_locked_balance().as_yoctonear() >= need
+    }
+
     fn insert_token(
         &mut self,
         token_id: &TokenId,

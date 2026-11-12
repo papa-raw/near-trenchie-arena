@@ -10,6 +10,7 @@ bytes) and simulates the result with the contract model; its tx ids read `DRY-RU
 import hashlib
 import json
 import sys
+import threading
 
 from . import near_tx, rpc as rpclib
 from .model import Panic
@@ -21,11 +22,16 @@ class RpcSender:
     def __init__(self, rpc: rpclib.Rpc, keys: dict):
         self.rpc = rpc
         self.keys = keys          # role -> near_tx.Key
+        self.locks = {role: threading.Lock() for role in keys}   # one send per key at a time: nonce + 1 is read, then used
 
     def account(self, role):
         return self.keys[role].account_id
 
     def call(self, role, receiver, method, args, tgas, deposit=0):
+        with self.locks[role]:
+            return self._call(role, receiver, method, args, tgas, deposit)
+
+    def _call(self, role, receiver, method, args, tgas, deposit=0):
         key = self.keys[role]
         try:
             ak = self.rpc.access_key(key.account_id, key.public_key)

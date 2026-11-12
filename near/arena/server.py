@@ -20,8 +20,9 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 try:
-    from . import sim, replay as replay_engine
+    from . import predict, sim, replay as replay_engine
 except ImportError:
+    import predict
     import sim
     import replay as replay_engine
 
@@ -253,7 +254,7 @@ class Arena:
                  profile_provider=None, identity_resolver=None, receipt_signer=None,
                  admission_gate=None, life_guard=None, pick_resolver=None, sale_adapter=None,
                  house_runtime=None, server_time_ms=None, rules=sim.DEFAULT_RULES, recover=False, dev_host=None,
-                 prediction_log=None, chain=None):
+                 prediction_log=None, chain=None, record=None):
         self.context = copy_data(context)
         if self.context.get("rules_hash") != sim.digest(rules):
             raise ValueError("context rules hash mismatch")
@@ -297,6 +298,14 @@ class Arena:
         self.prediction_log_hashes = {}
         self.prediction_log_refusals = deque(maxlen=100)
         self.server_time_ms = server_time_ms or (lambda: time.time_ns() // (rules["nanoseconds_per_second"] // rules["milliseconds_per_second"]))
+        # The public record (arena/predict.py): a seal row per completed life; the chain writer adds settlement rows.
+        # A host passes its one record (a file under its persistent state dir) to every round's arena; alone, an arena
+        # keeps its rows in memory, never in the store (replay data only). `record_run` names this arena in the rows: its deployment and its first published
+        # seed, which differ between arenas (life ids restart in each) and are the same after a journal recovery, so
+        # nothing more is stored (the store keeps only seeds, inputs, boundary state and sealed records).
+        self.record = record if record is not None else predict.Record(None)
+        self.record_run = f"{self.context.get('deployment_id', 'arena')}@{self.seeds[0]}"
+        self.sealed_rows = {}
         self.members = {}
         self.inventories = {}
         self.locks = {}
@@ -309,6 +318,9 @@ class Arena:
         self.commands = []
         self.input_events = []
         self.completed_lives = []
+        # life id -> house or not, noted when the life ends: by the seal a trenchie that swam home is no longer a
+        # member or a fighter, and its record row still needs it (seal-house-flag)
+        self.life_house = {}
         self.deferred, self.deferred_seq = [], 0     # engine effects held across a segment seal (see at_edge)
         self.initial_state = self.sim.export()
         self.serialisations = 0
@@ -448,6 +460,12 @@ class Arena:
     def _member_changed(self, name):
         self._record("member", {"name": name, "member": self.members.get(name)})
 
+    def _fighter_event(self, name, kind, text):
+        """A display-only line for the fighter's own panel (the host's log); never an engine input."""
+        sink = getattr(self, "fighter_event", None)
+        if sink is not None:
+            sink(name, kind, text)
+
     def _life_deadline(self, member):
         window = self.sim.rules["prediction_window_ticks"]
         member["deadline_tick"] = self.sim.state["tick"] + window
@@ -513,11 +531,20 @@ class Arena:
         for name in sorted(list(self.members), key=lambda n: self.members[n]["queue_order"]):
             m = self.members[name]
             f = self.sim.state["fighters"].get(name)
-            if m["released"] or m["spawn_pending"] or self._ring_load() >= r["ring_max"]:
+            if m["released"] or m["spawn_pending"]:
                 continue
             if f is None or f["state"] != "bench":
                 continue
-            if m["ever_started"] and (tick >= f["respawn_at"] or self._ring_load() < r["ring_min"]):
+            if m.get("bench_hold") and m["ever_started"]:
+                # Q5: the player keeps this trenchie on the bench; the 45 s timer is stopped until it is sent back in
+                if m.get("held_since") is None:
+                    m["held_since"] = tick
+                    self._member_changed(name)
+                    self._fighter_event(name, "held", "On the bench, held. The 45 s timer is stopped.")
+                continue
+            if self._ring_load() >= r["ring_max"]:
+                continue
+            if m["ever_started"] and (tick >= f["respawn_at"] + m.get("held_ticks", 0) or self._ring_load() < r["ring_min"]):
                 if not m["awaiting_life"]:
                     m["life_number"] += 1
                     m["life_id"] = name + ":life:" + str(m["life_number"])
@@ -572,6 +599,7 @@ class Arena:
                 m["spawn_pending"] = False
                 m["ever_started"] = True
                 m["awaiting_life"] = False
+                m["held_ticks"], m["held_since"] = 0, None
                 self._member_changed(name)
             if event["kind"] in ("ko", "leave"):
                 if self.chain is not None:
@@ -583,6 +611,7 @@ class Arena:
                               "prediction_lock": lock["lock"], "ko_count": str(f["life_kos"]),
                               "inventory_hash": sim.digest(f["bag"]), "completed": True}
                     self.completed_lives.append(record)
+                    self.life_house[record["life_id"]] = bool(m["profile"]["house"])
                     self._record("life_end", record)
                     self._log_player_end(m, m["life_id"], f["life_kos"])
                 if event["kind"] == "ko":
@@ -665,8 +694,37 @@ class Arena:
             log_hash = self.prediction_log.log_hash()      # a re-seal of the same segment journals only a changed hash
             self._record("house_predictions", {"segment_id": self.segment_id, "log_hash": log_hash})
             self.prediction_log_hashes[self.segment_id] = log_hash
+        self.sealed_rows = self._seal_rows(lives)
         if self.chain is not None:
             self.chain.sealed(self, self.segment_id, record)
+
+    def _base_rate_at(self, at_ms):
+        """The five-bin base rate a prediction locked at `at_ms` is rewarded at: the chain writer's last resolve
+        before it, else the lab table (an arena with no chain, or before the first resolve)."""
+        reader = getattr(self.chain, "base_rate_at", None)
+        return list(reader(at_ms)) if reader is not None and at_ms is not None else list(predict.LAB_BASE_BPS)
+
+    def _seal_rows(self, lives):
+        """The public record's seal row for each life completed in this segment, {life_id: row as first written}."""
+        rules, rows = self.sim.rules, {}
+        now_ns = self.server_time_ms() * (rules["nanoseconds_per_second"] // rules["milliseconds_per_second"])
+        for life in lives:
+            token, life_id = life["nft_token_id"], life["life_id"]
+            m, f = self.members.get(token), self.sim.state["fighters"].get(token)
+            house = self.life_house.get(life_id)
+            if house is None:
+                house = m["profile"]["house"] if m is not None else bool(f is not None and f.get("house"))
+            lock = self.locks.get(life_id)
+            pick = (lock["public"].get("pick") if lock is not None else None)
+            level, note = (predict.read_level(rules, pick["payload"]["spread_bps"], pick["payload"]["zero_bps"])
+                           if pick is not None else (None, None))
+            base = self._base_rate_at(lock.get("at_ms") if lock is not None else None)
+            name = (m["profile"].get("public_name") if m is not None else None) or token
+            self.record.add(predict.seal_row(life_id=life_id, persona=token, house=house, rules=rules, level=level,
+                                             note=note, kos=life["ko_count"], base_bps=base, sealed_ns=now_ns,
+                                             run=self.record_run, name=name))
+            rows[life_id] = self.record.life(self.record_run, life_id)
+        return rows
 
     def _open_next_segment(self):
         next_index = self.segment_index + 1
@@ -688,6 +746,7 @@ class Arena:
         self.sim.state["seen"] = {key: self.sim.state["seen"][key] for key in sorted(pending)}
         self.initial_state = self.sim.export()
         self.commands, self.input_events, self.completed_lives = [], [], []
+        self.life_house = {}
         self.receipts = {}
         active_lives = {m["life_id"] for m in self.members.values()}
         self.locks = {k: self.locks[k] for k in sorted(self.locks) if k in active_lives}
@@ -738,6 +797,9 @@ class Arena:
                 self.input_events.append(value)
             elif kind == "life_end":
                 self.completed_lives.append(value)
+                m = self.members.get(value["nft_token_id"])      # the journal retires it later, if at all
+                if m is not None:
+                    self.life_house[value["life_id"]] = bool(m["profile"]["house"])
             elif kind == "open":
                 if self.sim.state["tick"] - self.segment_start == self.sim.rules["segment_ticks"]:
                     self.journal_tick = self.sim.state["tick"]
@@ -747,6 +809,7 @@ class Arena:
                 self.segment_start = self.sim.state["tick"]
                 self.initial_state = self.sim.export()
                 self.commands, self.input_events, self.completed_lives = [], [], []
+                self.life_house = {}
                 self.receipts = {}
                 active_lives = {m["life_id"] for m in self.members.values()}
                 self.locks = {k: self.locks[k] for k in sorted(self.locks) if k in active_lives}
@@ -876,7 +939,9 @@ class ArenaBridge:
                     "prediction_deadline": str(m["deadline_ms"])}
         if len(a.members) >= a.sim.rules["capacity"]:
             return error("room_full")
-        if any(m["binding"]["slot_id"] == b["slot_id"] for m in a.members.values()):
+        # A released member keeps its entry until its fighter has swum home (retired at "left"), but the room has
+        # already freed its slot and may hand that slot id to the next joiner: only a member still holding it clashes.
+        if any(not m["released"] and m["binding"]["slot_id"] == b["slot_id"] for m in a.members.values()):
             return error("stale_slot")
         supplied = a.profile_provider(b)
         fields = ("house", "public_name", "model", "style", "loadout", "bag")
@@ -962,6 +1027,10 @@ class ArenaBridge:
             chosen = copy_data(a.pick_resolver(binding, payload))
             fighter = a.sim.state["fighters"].get(binding["nft_token_id"])
             bag = fighter["bag"] if fighter is not None else m["profile"]["bag"]
+            for slot, row in sorted((m.get("bench_kit") or {}).items()):
+                # gear the player swapped on at the bench stays on while it is still owned (a KO may have dropped it)
+                if slot in chosen and (a.sim.rules["items"][row]["default"] or row in bag):
+                    chosen[slot] = row
             a.sim._check_kit(chosen, bag, m["profile"]["house"])
             m["profile"]["loadout"] = chosen
             a._member_changed(binding["nft_token_id"])
@@ -973,7 +1042,8 @@ class ArenaBridge:
                   "pick": None if pick is None else {k: pick[k] for k in (
                       "domain", "context", "grant_id", "session_key_id", "member_id", "nft_token_id",
                       "persona_digest", "slot_id", "generation", "sequence", "life_id", "kind", "payload", "signature") if k in pick}}
-        record = {"pick_hash": fingerprint, "lock": lock, "public": public}
+        # at_ms: the rarity a level is rewarded at is the base rate published before this moment (arena/predict.py)
+        record = {"pick_hash": fingerprint, "lock": lock, "public": public, "at_ms": a.server_time_ms()}
         a._record("lock", record)
         a.locks[life_id] = record
         a._log_player_lock(m, life_id, pick)
@@ -997,6 +1067,16 @@ class ArenaBridge:
             return {**copy_data(m["activation"]), "binding": copy_data(slot_binding)}
         m["activation_requested"] = True
         a._member_changed(slot_binding["nft_token_id"])
+        f = a.sim.state["fighters"].get(slot_binding["nft_token_id"])
+        if f is not None and f["state"] == "bench" and m["ever_started"] and not m["profile"]["house"]:
+            # A player's pick locks at the KO; the life still waits out the 45 s respawn timer (plus any held time),
+            # and Q5's bench hold keeps it out until the player sends it back in. The room keeps the life queued
+            # (room_full) and retries every tick, as it does for a full ring.
+            if m.get("bench_hold"):
+                return error("room_full")
+            if (a.sim.state["tick"] < f["respawn_at"] + m.get("held_ticks", 0)
+                    and a._ring_load() >= a.sim.rules["ring_min"]):
+                return error("room_full")
         if a._ring_load() >= a.sim.rules["ring_max"]:
             return error("room_full")
         if any(other["queue_order"] < m["queue_order"] and other["activation_requested"]
@@ -1014,6 +1094,114 @@ class ArenaBridge:
                             "lock_ref": lock_ref, "start_tick": start}
         a._member_changed(name)
         return copy_data(m["activation"])
+
+    def _bench_down(self, m, f):
+        return f is not None and f["state"] == "bench" and m["ever_started"]
+
+    def _bench_kit(self, m, f):
+        """The kit the next life wears, as the respawn will resolve it (a gear row no longer owned falls back)."""
+        r = self.arena.sim.rules
+        if f is not None and f["state"] == "alive":
+            return dict(f["equipped"])
+        bag = f["bag"] if f is not None else m["profile"]["bag"]
+        kit = m["profile"]["loadout"]
+        return {slot: (row if r["items"][row]["default"] or row in bag else r["default_loadout"][slot]) for slot, row in kit.items()}
+
+    def bench_view(self, name):
+        """Board 1's bench card: the hold, the stopped or running timer, the four equipped items and the bag."""
+        a = self.arena
+        m, f = a.members.get(name), a.sim.state["fighters"].get(name)
+        if m is None:
+            return {}
+        r, tick = a.sim.rules, a.sim.state["tick"]
+        names = getattr(a, "item_names", {})
+        down = self._bench_down(m, f)
+        held = bool(m.get("bench_hold")) and down and not m["spawn_pending"]
+        remaining = None
+        if down and not m["spawn_pending"]:
+            due = f["respawn_at"] + m.get("held_ticks", 0)
+            remaining = max(0, due - (m["held_since"] if held and m.get("held_since") is not None else tick))
+        ms = lambda ticks: None if ticks is None else ticks * r["milliseconds_per_second"] // r["tick_hz"]
+        kit = self._bench_kit(m, f)
+        bag = f["bag"] if f is not None else m["profile"]["bag"]
+        worn = set(kit.values())
+        return {"hold": bool(m.get("bench_hold")), "held": held, "down": down,
+                "respawn_in_ms": None if held else ms(remaining), "remaining_ms": ms(remaining),
+                "next_life": m["life_number"] + 1, "life_id": m["life_id"],
+                "equipped": [{"slot": slot, "item_id": kit[slot], "name": names.get(kit[slot], kit[slot]),
+                              "tier": r["items"][kit[slot]]["tier"]} for slot in sorted(kit)],
+                "bag": [{"item_id": row, "name": names.get(row, row), "slot": r["items"][row]["slot"],
+                         "tier": r["items"][row]["tier"], "serial": bag[row]["serial"]}
+                        for row in sorted(bag) if row not in worn]}
+
+    def bench(self, binding, payload):
+        """Q5's hold and item 55's swaps, one signed battle frame each. A hold stops the respawn timer (it never
+        skips it: the remainder runs after the send-back); a swap changes only the next life's kit, on the bench."""
+        a = self.arena
+        name, tick = binding["nft_token_id"], a.sim.state["tick"]
+        m, f = self._member(binding), a.sim.state["fighters"].get(binding["nft_token_id"])
+        names = getattr(a, "item_names", {})
+
+        def ack(status, summary):
+            return {"type": "bench_ack", "status": status, "receive_tick": tick, "bench": self.bench_view(name),
+                    "summary": summary}
+        if m is None or m["released"]:
+            return ack("refused", "Bench refused: rejoin with the current grant first.")
+        if m["profile"]["house"]:
+            return ack("refused", "Bench refused: house trenchies keep their own kit.")
+        down = self._bench_down(m, f)
+        if "hold" in payload:
+            if payload["hold"]:
+                if m.get("bench_hold"):
+                    return ack("applied", "Stay on the bench is already on.")
+                m["bench_hold"] = True
+                if down and not m["spawn_pending"]:
+                    m["held_since"] = tick
+                    self.arena._fighter_event(name, "held", "On the bench, held. The 45 s timer is stopped.")
+                a._member_changed(name)
+                return ack("applied", "Held on the bench: the 45 s timer is stopped until you send it back in." if down and not m["spawn_pending"]
+                           else "Stay on the bench is on: after its next KO, it waits on the bench until you send it back in.")
+            if not m.get("bench_hold"):
+                return ack("applied", "Stay on the bench is already off.")
+            m["bench_hold"] = False
+            was_held = m.get("held_since") is not None
+            if was_held:
+                m["held_ticks"] = m.get("held_ticks", 0) + tick - m["held_since"]
+                m["held_since"] = None
+                if m["life_id"] not in a.locks:
+                    a._life_deadline(m)  # the pick window reopens: it ran out while the timer was stopped
+            a._member_changed(name)
+            if not was_held:
+                return ack("applied", "Stay on the bench is off.")
+            view = self.bench_view(name)
+            seconds = (view["remaining_ms"] or 0) // 1000
+            self.arena._fighter_event(name, "released", f"Sent back in. Life {view['next_life']} in {seconds} s.")
+            return ack("applied", f"Sent back in: life {view['next_life']} starts in {seconds} s.")
+        slot, row = payload["equip"]["slot"], payload["equip"]["item_id"]
+        if f is None or f["state"] != "bench" or m["spawn_pending"]:
+            return ack("refused", "Swap refused: gear changes only on the bench, between lives. Turn on Stay on the bench and swap after the KO.")
+        item = a.sim.rules["items"].get(row)
+        if item is None or item["slot"] != slot:
+            return ack("refused", f"Swap refused: that item does not go in the {slot} slot.")
+        bag = f["bag"]
+        if not item["default"] and row not in bag:
+            return ack("refused", "Swap refused: that item is not in your bag.")
+        kit = self._bench_kit(m, f)
+        old = kit[slot]
+        if old == row:
+            return ack("applied", f"{names.get(row, row)} is already on.")
+        chosen = {**m["profile"]["loadout"], slot: row}
+        try:
+            a.sim._check_kit(chosen, bag, False)
+        except ValueError as exc:
+            return ack("refused", "Swap refused: " + str(exc) + ".")
+        a._op({"op": "loadout", "name": name, "payload": {slot: row}})
+        m["profile"]["loadout"] = chosen
+        m.setdefault("bench_kit", {})[slot] = row
+        a._member_changed(name)
+        text = f"{names.get(row, row)} goes on; {names.get(old, old)} goes to the bag."
+        self.arena._fighter_event(name, "equip", text)
+        return ack("applied", text)
 
     def _public_fighter(self, name, f):
         a = self.arena

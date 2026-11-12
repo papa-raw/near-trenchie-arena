@@ -60,6 +60,23 @@ class CheckDeps(unittest.TestCase):
         self.assertIn("jsonschema==4.26.0", out)
         self.assertIn("cryptography==46.0.7", out)
 
+    def test_a_constraints_file_is_followed_and_its_pins_bind_only_what_is_installed(self):
+        # -c pins a dependency's version without asking for it: absent is fine (pip installs it only when needed,
+        # e.g. typing-extensions below Python 3.13); installed at another version is a failure.
+        code, out = run(self.reqs("-c constraints.txt\n", {"constraints.txt": "no-such-package-xyz==1.0\n"}))
+        self.assertEqual(code, 0, out)
+        self.assertIn("unused  no-such-package-xyz==1.0", out)
+        code, out = run(self.reqs("-c constraints.txt\n", {"constraints.txt": "pip==0.0.1\n"}))
+        self.assertEqual(code, 1)
+        self.assertIn("WRONG   pip==0.0.1 (installed " + self._pip_version() + ")", out)
+
+    def test_the_trees_constraints_pin_every_dependency_of_the_three_pinned_packages(self):
+        code, out = run()
+        for pin in ("certifi==2026.7.22", "urllib3==2.6.3", "referencing==0.37.0", "rpds-py==0.30.0", "cffi==2.0.0",
+                    "pycparser==3.0", "attrs==26.1.0", "idna==3.13", "charset-normalizer==3.4.7",
+                    "jsonschema-specifications==2025.9.1", "typing-extensions==4.15.0"):
+            self.assertIn(pin, out)
+
 
 if __name__ == "__main__":
     unittest.main()

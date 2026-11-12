@@ -17,7 +17,7 @@ checkouts must include the tracked `room/` copy.
 `SnapClient`, and an explicit wallet callback. `begin()` allocates a held token
 and joins through the ordinary room challenge/proof path. The visitor supplies
 compute; this module never supplies house inference or collects model keys.
-The owner runtime reads and explicitly accepts the room terms, predicts and
+The owner runtime reads and explicitly accepts the arena rules, predicts and
 fights using that client. No wallet callback runs along that path.
 An interrupted admission can retry `begin()` on the same controller with the
 same preset, request id, edge metadata and compute declaration. The native
@@ -38,7 +38,7 @@ The trusted engine host sends its completed-life record to
 `claim()` invokes the wallet callback, obtains a one-use claim challenge and
 submits both the visitor session signature and independently verified wallet
 account-control proof. `stake_wallet()` is the other explicit wallet entry;
-actual staking remains in its separate wallet flow. Wallet disconnection cannot
+adding testnet NEAR to a prediction stays in its separate wallet flow. Wallet disconnection cannot
 silently transfer a token.
 
 This is the functional order and controller seam, not a new modal drawing.

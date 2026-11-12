@@ -114,6 +114,16 @@ class ChainWriterCases(unittest.TestCase):
         self.assertEqual(b["resolve"]["status"], "resolved")
         self.assertEqual(rig.model.open_batch, 1)
 
+    def test_a_manifest_writer_posts_with_the_flag_and_the_contract_keeps_it(self):
+        rig = Rig(self.tmp, batch_segments=1, commit_size=5, lookahead=2, manifest=True)
+        rig.arena()
+        rig.run_segments(1)
+        rig.writer.process()
+        [b] = rig.batches()
+        self.assertEqual(b["status"], "applied", rig.log)
+        self.assertIs(rig.posts()[0]["actions"][0]["args"]["manifest"], True)
+        self.assertIs(rig.model.batches[b["batch_id"]]["manifest"], True)
+
     def test_failed_hop_is_retried_with_the_same_id(self):
         rig = Rig(self.tmp, batch_segments=1, commit_size=5, lookahead=2)
         rig.arena()

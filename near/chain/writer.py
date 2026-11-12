@@ -60,7 +60,7 @@ def estimate_tgas(segments: int, rows: int) -> float:
     return round(7 + 0.36 * segments + 2.22 * rows + 1.7 + 3, 1)
 COMMIT_TGAS = 30
 ACTUALS_WINDOW = 2000      # lives the trailing base rate is taken over (resolver.next_base_rate)
-RESOLVES_KEPT = 2          # only the last base rate is read back
+RESOLVES_KEPT = 4          # the last base rates, each with when it landed: a level is rewarded at the one before its lock
 LOCK_SEEN_TTL_NS = 6 * 3600 * 10 ** 9
 RESOLVE_TGAS = 30
 
@@ -90,7 +90,7 @@ def merge_bag(chain: list, base_arena: list, arena: list) -> list:
 
 class ChainWriter:
     def __init__(self, sender, cfg, data_dir, *, batch_segments=60, parts=3, commit_size=60, lookahead=15, attempts=4,
-                 max_rows=72, sleep=time.sleep, log=None, clock=time.time, identity=None):
+                 max_rows=72, sleep=time.sleep, log=None, clock=time.time, identity=None, manifest=False):
         self.sender, self.cfg = sender, cfg
         if identity is None or not cfg.identity_nft:
             raise ValueError("a chain writer needs the identity NFT and its reader (identity=, cfg.identity_nft): "
@@ -100,6 +100,10 @@ class ChainWriter:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.batch_segments, self.commit_size, self.lookahead = batch_segments, commit_size, lookahead
         self.attempts, self.max_rows, self.parts = attempts, max_rows, parts
+        # MANIFEST (B96): batches posted with the flag keep their slim record forever; `make demo` re-simulates them.
+        self.manifest = bool(manifest)
+        self.record = None                 # the arena's public record (arena/predict.py), set at its first seal
+        self.predict_block = None          # the serving rules table's predict block (integer-16 on), or None
         self.sleep, self.clock = sleep, clock
         self._log = log or (lambda line: print(line, flush=True))
         self.lock = threading.RLock()      # the worker: one chain step at a time
@@ -518,6 +522,9 @@ class ChainWriter:
                     bag = arena.inventories[token]["bag"]
                 if bag is not None:
                     bags[token] = fmt.bag_entries(bag, row_index)
+            self.record = getattr(arena, "record", None)      # the arena's public record; settlement rows go there
+            self.predict_block = arena.sim.rules.get("predict")
+            rows = copy.deepcopy(getattr(arena, "sealed_rows", {}))
             picks, locks = {}, {}
             for p in record["predictions"]:
                 locks[p["life_id"]] = self.last_seal_ns
@@ -529,7 +536,8 @@ class ChainWriter:
                 "sealed": {k: copy.deepcopy(s[k]) for k in ("seed", "seed_hash", "inputs_hash", "rules_hash",
                                                             "final_state_hash", "predictions_log_hash", "lives",
                                                             "nft_token_ids")},
-                "picks": picks, "bags": bags, "accounts": accounts,
+                "picks": picks, "bags": bags, "accounts": accounts, "rows": rows,
+                "levels": arena.sim.rules.get("predict") is not None,
                 "house_log": getattr(arena, "prediction_log_hashes", {}).get(segment_id),
                 "local": str(arena.store.segments / (segment_id.replace(":", "-") + ".json")),
                 "locks": locks, "sealed_ns": time.time_ns()})
@@ -591,13 +599,26 @@ class ChainWriter:
                 self.state["lock_seen"].setdefault(life_id, at)
         self.state["bags"].update(e["bags"])
         lives = []
+        rows = e.get("rows", {})
         for life in s["lives"]:
             token, kos = life["nft_token_id"], int(life["ko_count"])
             t = self.state["tallies"].setdefault(token, {"lives": 0, "kos": 0, "skill_sum": 0, "skill_n": 0})
             t["lives"] += 1
             t["kos"] += kos
-            self.state["actuals"].append(kos)            # trimmed to ACTUALS_WINDOW in _compact
+            row = rows.get(life["life_id"])
+            # Rarity comes from house lives only, so no player can cheapen a level with throwaway lives (r5-predict).
+            if row is not None and row["house"]:
+                self.state["actuals"].append(kos)        # trimmed to ACTUALS_WINDOW in _compact
             spread = e["picks"].get(life["life_id"])
+            if e.get("levels"):                          # integer-16 on: one level per life, scored in the seal row
+                level = row["level"] if row is not None else None
+                first = self.state["lock_seen"].pop(life["life_id"], None) or e["locks"].get(life["life_id"])
+                lives.append({"account": self.state["accounts"].get(token), "token": token, "life_id": life["life_id"],
+                              "kos": kos, "bins": None, "level": level,
+                              "multiplier_bps": row["multiplier_bps"] if level is not None else None,
+                              "result": row["result"] if row is not None else "none", "locked_after_ns": first,
+                              "run": row.get("run", "local") if row is not None else "local"})
+                continue
             bins = resolver.bins_from_spread(spread) if spread else None
             if bins is not None:
                 ai = resolver.quote.rps_numerator(bins, kos) * resolver.MICRO // resolver.RPS_MAX
@@ -676,7 +697,7 @@ class ChainWriter:
         mine = opened[seg_cut[i]:seg_cut[i + 1]]
         last = i == parts - 1
         b = {"batch_id": ids[i], "period": n, "part": i + 1, "parts": parts,
-             "segments": [o["segment"] for o in mine], "rows": rows[row_cut[i]:row_cut[i + 1]], "manifest": False,
+             "segments": [o["segment"] for o in mine], "rows": rows[row_cut[i]:row_cut[i + 1]], "manifest": self.manifest,
              "lives": [l for o in opened for l in o["lives"]] if last else [],
              "period_segments": [o["segment"] for o in opened] if last else None,
              "house_log": house_log if last else None, "local": [o["local"] for o in mine],
@@ -796,6 +817,21 @@ class ChainWriter:
         self.pending_bases[token] = {"bag": filed, "arena": arena, "at": "filed"}   # the base once this row applies
         return filed
 
+    def _unfunded(self, b, out):
+        """The inventory could not afford the record of a token it met for the first time (trenchie_nft apply_rows'
+        `unfunded`): that row did not apply, so its bag base stays and its row goes again in the next batch."""
+        unfunded = sorted({t for e in out.get("events") or [] if e.get("event") == "apply_rows"
+                           for d in e.get("data") or [] for t in d.get("unfunded") or []})
+        if not unfunded:
+            return
+        for t in unfunded:
+            (b.get("pending_bases") or {}).pop(t, None)
+        b["unfunded"] = unfunded
+        self.state["carry"] = sorted(set(self.state["carry"]) | set(unfunded))
+        self.log("RECORD_UNFUNDED", batch=b["batch_id"], tokens=unfunded,
+                 why="the inventory's balance could not make these tokens' records; their rows go again in the next "
+                     "batch (top up the inventory contract)")
+
     def _commit_bases(self, b):
         """The batch applied: its rows are the chain's bags now, so they become the tokens' bases."""
         for token, base in (b.pop("pending_bases", None) or {}).items():
@@ -832,6 +868,7 @@ class ChainWriter:
                                "operator", out)
             b["status"] = status
             if status == "applied":
+                self._unfunded(b, out)
                 self._commit_bases(b)
             self.log("post_batch", batch=b["batch_id"], attempt=attempt, tx=out.get("tx"), status=status, why=why,
                      tgas=out.get("tgas"))
@@ -944,7 +981,8 @@ class ChainWriter:
         parts = {s["account_id"]: s["stake"]["parts"] for s in stakes}
         base_rate = self.state["resolves"][-1]["base_rate"] if self.state["resolves"] else list(resolver.quote.PUBLISHED_BASE_BPS)
         plan = resolver.compute(amounts, b["lives"], pot, base_rate, parts=parts)
-        nxt = resolver.next_base_rate(self.state["actuals"])
+        p = self.predict_block
+        nxt = resolver.next_base_rate(self.state["actuals"], min_lives=p["min_lives"] if p else 1)
         args = {"batch": str(mb), "results": plan["results"], "pot_delta": plan["pot_delta"], "base_rate": nxt,
                 "log_hash": log_hash}
         r.update(plan=plan, args=args)
@@ -953,7 +991,9 @@ class ChainWriter:
             out = self.sender.tx_status(out["tx"], "resolver") or out
         if out.get("landed") and out.get("ok"):
             r.update(status="resolved", tx=out["tx"])
-            self.state["resolves"].append({"batch_id": b["batch_id"], "market_batch": mb, "base_rate": nxt})
+            self.state["resolves"].append({"batch_id": b["batch_id"], "market_batch": mb, "base_rate": nxt,
+                                           "previous": base_rate, "at_ms": int(self.clock() * 1000)})
+            self._settlement_rows(plan, b["lives"], out["tx"])
             self._hash_row(f"resolve stake batch {mb} for {b['batch_id']} ({len(plan['results'])} stakes)", "resolver", out)
             self.log("resolve", batch=b["batch_id"], market_batch=mb, stakes=len(plan["results"]),
                      pot_delta=plan["pot_delta"], tx=out["tx"], tgas=out.get("tgas"))
@@ -961,6 +1001,26 @@ class ChainWriter:
         r["status"] = "retry"            # read back (resolved, voided or still closed) at the next cycle
         self.log("resolve_retry", batch=b["batch_id"], market_batch=mb, landed=out.get("landed"), tx=out.get("tx"),
                  failure=out.get("failure"))
+
+    def base_rate_at(self, at_ms) -> list:
+        """The base rate published by the last resolve that landed before `at_ms` (a lock's time): a level is rewarded
+        at the rarity the player saw when it locked. Before the first resolve kept, the base rate it replaced."""
+        kept = self.state["resolves"]
+        for r in reversed(kept):
+            if r.get("at_ms", 0) <= at_ms:
+                return list(r["base_rate"])
+        return list(kept[0].get("previous") or resolver.quote.PUBLISHED_BASE_BPS) if kept else list(resolver.quote.PUBLISHED_BASE_BPS)
+
+    def _settlement_rows(self, plan, lives, tx):
+        """A settlement row in the public record for each life NEAR was drawn for (arena/predict.py)."""
+        record = self.record
+        if record is None:
+            return
+        by_life = {l["life_id"]: l for l in lives}
+        for d in plan["detail"]:
+            if "life_id" in d and int(d.get("draw", "0")) > 0:
+                life = by_life.get(d["life_id"], {})
+                record.settled(life.get("run", "local"), d["life_id"], life.get("token"), int(d["draw"]), int(d["paid"]), tx)
 
     def flush_open(self) -> None:
         """Close the open segments as a short batch (a run's last minutes); logged as such."""

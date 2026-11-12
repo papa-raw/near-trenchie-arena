@@ -13,16 +13,9 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function start(args, ready) {
-  const child = spawn('python3', ['-B', ...args], { cwd: path.dirname(NEAR), stdio: ['ignore', 'pipe', 'pipe'] });
-  return new Promise((resolve, reject) => {
-    let out = '';
-    const t = setTimeout(() => reject(new Error('no start line: ' + out.slice(0, 300))), 30000);
-    const on = (d) => { out += d; const m = ready(out); if (m) { clearTimeout(t); resolve({ child, m }); } };
-    child.stdout.on('data', on); child.stderr.on('data', (d) => { out += d; });
-    child.on('exit', (c) => reject(new Error('exited ' + c + ': ' + out.slice(0, 300))));
-  });
-}
+// hosts start through the shared harness: each ends with this case however it ends (qa/hosts.cjs)
+const HOSTS = require('./hosts.cjs');
+const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname(NEAR));
 
 (async () => {
   const arenaPort = 20000 + Math.floor(Math.random() * 20000);
@@ -115,6 +108,7 @@ function start(args, ready) {
   await fetch('http://127.0.0.1:' + arenaPort + '/dev/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Dev-Admin': arena.m } }).catch(() => {});
   web.child.kill(); arena.child.kill();
   fs.writeFileSync(path.join(OUT, 'cta-case.json'), JSON.stringify({ pass, fail, at: new Date().toISOString() }, null, 1));
+  ok((await HOSTS.finish()).length === 0, 'no host this case started survives it');
   console.log(`${pass} passed, ${fail} failed; frames in ${OUT}`);
   process.exit(fail ? 1 : 0);
 })();

@@ -8,11 +8,11 @@ From the repository root, with Python 3.10+ and the pinned dependencies:
 
 ```sh
 python3 -m pip install -r near/requirements.txt
-(cd near && make demo)
+(cd near && make rehearsal)
 (cd near && make desk)
 ```
 
-Open the printed loopback URL. `demo` finishes without starting a persistent
+Open the printed loopback URL. `rehearsal` finishes without starting a persistent
 server. It extracts the exact executable agent from SNAP.md into a clean
 temporary owner folder. The agent uses SnapClient over the existing bounded
 pipe transport. The real copied room and engine run with a synthetic rival,
@@ -36,9 +36,9 @@ python3 -B near/arena/replay.py near/.demo/segment.json
 
 The native seal and portable room seal use different formulas and are labelled
 separately. A local replay is not a chain check. No deployment, RPC, archival
-transaction, custody, mint, claim or stake capability is added here.
+transaction, custody, mint, claim or testnet NEAR capability is added here.
 
-`(cd near && make demo DEMO_DIR=/absolute/path)` changes the export directory. To read
+`(cd near && make rehearsal DEMO_DIR=/absolute/path)` changes the export directory. To read
 it, use `python3 -B near/web/runtime.py --demo-dir /absolute/path`. Without an
 archive the desk retains pending states; an invalid archive is unavailable,
 never checked. The server binds only 127.0.0.1, checks Host/origin, allows fixed

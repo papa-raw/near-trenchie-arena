@@ -15,7 +15,7 @@ Pat's call.
 2. **Turtle stances outlive the default AI by 2-3x in big crowds.** Under integer-14, `flee` (2.02x at 10, 3.01x
    at 16), `hold` (2.19x, 2.25x) and `defend` (2.09x, 2.24x) are over P4's 2x on survival time per life, while
    their KO index stays 0.37-0.66x. They live long and score little. Because the leaderboard counts KOs, they
-   don't win it. But in a game where you carry your items at stake, a stance that keeps you alive 3x longer keeps
+   don't win it. But in a game where the items you carry are on the line, a stance that keeps you alive 3x longer keeps
    your gear 3x longer. For Pat to decide: flagged, not proposed for a nerf (this report measures; it doesn't tune).
 3. **The 1v1 target (no side above 60%; a target, not a gate) is missed in every duel pairing but flee and hold,
    and integer-14 flips which side wins.** Under integer-13 the chasers won (`hunt-weakest` 7-3-14, `berserk`

@@ -28,7 +28,7 @@ class BattleEvents:
         if not alive and self.alive:
             events.append(dict(kind='life_end', life_id=self.life, reason='ko' if fighter['state'] == 'ko' else fighter['state']))
         self.life, self.alive = life, alive
-        events.extend(self._actions(state['events'], who))
+        events.extend(self._actions(state['events'], who, rules))
         events.extend(self._low_health(state['fighters'], who, allies))
         if alive:
             events.extend(self._loot(state['drops'], fighter, rules))
@@ -42,7 +42,7 @@ class BattleEvents:
         return [dict(event, tick=tick, emitted_at_ms=emitted_at_ms) for event in events]
 
     @staticmethod
-    def _actions(actions, who):
+    def _actions(actions, who, rules):
         rows = []
         for event in actions:
             kind = event['kind']
@@ -58,7 +58,8 @@ class BattleEvents:
                 if kind == 'reflex':
                     row.update(index=event['index'], on=event['on'])
                 if kind == 'intent_refused':
-                    row['fix'] = 'Wait until the 0.5 s order window opens, then send a new order.'
+                    ms = rules['intent_interval'] * rules.get('milliseconds_per_second', 1000) // rules['tick_hz']   # integer-1/-2 predate the key
+                    row['fix'] = f'Wait until the {ms / 1000:g} s order window opens, then send a new order.'
                 rows.append(row)
         return rows
 

@@ -72,8 +72,8 @@ to that runtime adapter.
 Each coming life has one immutable, durable prediction or explicit no-prediction
 lock. A two-second prediction window is published as an absolute server-time
 deadline; retries do not extend it. The optional zero-KO estimate is independent
-of the four-bin payout spread. A chosen kit is a logged engine input. The
-composition currently refuses stake authorisations, paired item moves and sale
+of the four-bin spread. A chosen kit is a logged engine input. The
+composition currently refuses testnet NEAR authorisations, paired item moves and sale
 locks in a pick until their game adapters are integrated. It never acknowledges
 those actions as applied. Sale-control delegates to its supplied game adapter;
 an absent adapter returns `recovery_pending`.
@@ -200,10 +200,12 @@ keyed by the complete canonical native source, not merely its seal header.
 Unchanged reads reuse those verified facts; changed source revalidates before
 use. The ledger's full wire seal and current signing authority are still checked
 on every result. Concurrent first verification refuses rather than repeating
-engine work; the single supported segment bounds the cache to one entry.
-Only segment:0 with complete in-segment provenance is supported;
-future-boundary rows, index collisions and later segments refuse rather than
-inventing carry-in history. Until sealing, results return `result_pending`.
+engine work; at most 8 segments are kept, oldest dropped first.
+Every sealed segment projects, with complete in-segment provenance only: a
+result lists the lives locked, started and ended inside its segment, and a life
+that carries in from an earlier segment is left out rather than given invented
+carry-in history. Future-boundary rows and index collisions refuse. Until
+sealing, results return `result_pending`.
 
 From the repository root, the single cold case is:
 
@@ -214,7 +216,7 @@ python3 -B near/arena/test_snap_cold.py SnapCold.test_snap_only_temp_agent_accep
 It extracts the executable program from SNAP.md verbatim into a clean temporary
 owner folder and starts isolated Python. The cold process imports only the public
 client/schema slice, joins from synthetic account proof, reads and explicitly
-accepts current terms, predicts, sends intents, renews, observes combat and a KO,
+accepts the current arena rules, predicts, sends intents, renews, observes combat and a KO,
 and verifies its own signed result and public lock. The parent drives the real
 room and engine with synthetic adapters; it substitutes no result responses.
 The same new case checks unchanged native archives, unsupported carry-in refusal,
@@ -372,12 +374,12 @@ uses the first rare life: it must defeat all distinct newcomers before dying,
 with at least N-1 KOs. Surviving winners count; unresolved runs stay censored.
 The stop-at-one
 and shared-owner scenarios measure fight trajectories; prediction-log scoring
-and stake settlement require their separate game adapters.
+and settling testnet NEAR on predictions require their separate game adapters.
 The summary also scores a clearly labelled counterfactual all-on-one attacker
 policy against those observed trajectories. Its five-bin ranked score keeps
 zero outcomes, and its empirical own-base diagnostic remains unset below ten
 lives. These are synthetic diagnostic rows, with no model call, pre-life
-signature, live trailing calibration or stake transfer claimed.
+signature, live trailing calibration or NEAR transfer claimed.
 
 The checked-in report records one seed per cell as exploratory observations.
 It retains missing cells and exceedances and carries no balance certification.
@@ -431,3 +433,20 @@ view stood still for the whole segment (`BATTLE-BALANCE.md` finding 4); under
 `integer-14` they meet and land a hit within about 3 s. `integer-13` stays on disk
 and keeps its own behaviour for its segments. The cases are `ChaseSeek` in
 `python3 -B near/arena/test_behaviour.py`.
+
+## Rules table integer-15: no stepping back and forth on the spot
+
+`integer-15` is `integer-14` plus one key, `steer_band: 1000` (one tile). Under
+`integer-14` every drive switched on or off at its edge (the keep-away radius, weapon
+reach, the hold radius, the ally radius, a drop) and the summed pull always moved the
+fighter a full stride, so a fighter on an edge stepped across it and straight back,
+tick after tick: a body vibrating on the spot. Under `integer-15` each pull is
+continuous at its edge (keep-away is zero at the radius and full touching; chase is
+full outside reach and eases to nothing at three quarters of reach; hold, protect and
+loot ease in over one tile) and the step is as long as the net pull against the
+drives that pull at all, so drives that balance leave the fighter standing. A fighter
+with no behaviour, in the survivor or looter style, backs off and closes in the same
+way around its preferred distance. In a 5-fighter crowd the visible back-and-forth
+fell from 93, 148 and 27 reversals per 1000 alive ticks to at most 2. `integer-14`
+stays on disk and keeps its own movement for its segments. The cases are `Steering`
+in `python3 -B near/arena/test_behaviour.py`.

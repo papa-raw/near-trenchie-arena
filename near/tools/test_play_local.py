@@ -72,6 +72,37 @@ class PlayLocal(unittest.TestCase):
         guard = [n for n in notes if "guard" in n]
         self.assertTrue(guard)
 
+    def test_chain_testnet_runs_hosted_live_with_the_hosted_flags_and_keeps_its_keys_from_the_web_server(self):
+        def hosted(chain):
+            return type("A", (), {"live": False, "house": "keyed", "budget": "auto", "arena_port": 9999, "bind": "0.0.0.0",
+                                  "public_origin": "https://neartrenchies.xyz", "state_dir": "/data", "chain": chain})()
+        args = hosted("testnet")
+        base = {k: v for k, v in os.environ.items() if k not in (play_local.CHAIN_ENV, play_local.CHAIN_KEYS)}
+        with self.assertRaisesRegex(SystemExit, "--chain testnet needs TRENCHIE_CHAIN_ENV and TRENCHIE_CHAIN_KEYS"):
+            play_local.plan(args, base)
+        folder = Path(self.id().replace(".", "_")); folder.mkdir(exist_ok=True)
+        settings, keys = folder / "chain.env", folder / "keys.json"
+        settings.write_text("TRENCHIE_NETWORK=testnet\n"); keys.write_text('{"operator": {"private_key": "ed25519:sk-chain"}}')
+        env = {**base, play_local.CHAIN_ENV: str(settings), play_local.CHAIN_KEYS: str(folder / "missing.json")}
+        try:
+            with self.assertRaisesRegex(SystemExit, "TRENCHIE_CHAIN_KEYS names .*missing.json, which is not a file"):
+                play_local.plan(args, env)
+            env[play_local.CHAIN_KEYS] = str(keys)
+            argv, child, notes = play_local.plan(args, env)
+            dev_argv, dev_child, _ = play_local.plan(hosted(None), env)
+        finally:
+            settings.unlink(); keys.unlink(); folder.rmdir()
+        self.assertEqual(argv[1:6], ["-I", "-B", str(play_local.ROOT / "near/chain/hosted_live.py"), "--chain", "testnet"])
+        for flag, value in (("--bind", "0.0.0.0"), ("--public-origin", "https://neartrenchies.xyz"), ("--state-dir", "/data"),
+                            ("--house", "keyed"), ("--budget", "auto"), ("--port", "9999")):
+            self.assertEqual(argv[argv.index(flag) + 1], value, flag)
+        self.assertEqual(child[play_local.CHAIN_KEYS], str(keys))                   # the chain host gets the keys path
+        self.assertIn("chain: testnet", " ".join(notes)); self.assertNotIn("sk-chain", " ".join(notes + argv))
+        self.assertTrue(dev_argv[2].endswith("near/arena/snap_local.py"))
+        self.assertNotIn(play_local.CHAIN_KEYS, dev_child)                          # DEV: the keys never reach the host
+        web = play_local.web_env({**env, play_local.KEY_ENV: "sk-model"})
+        self.assertNotIn(play_local.CHAIN_KEYS, web); self.assertNotIn(play_local.KEY_ENV, web)   # nor the web server
+
     def test_the_readiness_probe_reads_the_whole_answer(self):
         import http.server, threading
         errors = []

@@ -5,8 +5,13 @@ MAKEFLAGS += --no-print-directory
 PY ?= python3
 DEMO_DIR ?= .demo
 
-.PHONY: demo desk test-desk
+# make demo: re-simulate every segment in replay/MANIFEST and check it against its settle tx, read from testnet archival
+# RPC (no key; network only). make rehearsal: the reviewer desk's synthetic local life (no network); make desk serves it.
+.PHONY: demo rehearsal desk test-desk
 demo:
+	$(PY) -I replay/demo.py
+
+rehearsal:
 	$(PY) -B web/demo.py --output "$(DEMO_DIR)"
 
 desk:
@@ -19,6 +24,8 @@ test-desk:
 test:
 	$(PY) -I tools/check_deps.py
 	$(PY) -I tools/check_snap.py
+	$(PY) -I tools/check_words.py --selftest
+	$(PY) -I tools/check_words.py
 	$(PY) -B tools/test_gate.py
 	$(PY) -B tools/test_check_deps.py
 	$(PY) -I lore/check_sheets.py --kits
@@ -30,6 +37,7 @@ test:
 	$(MAKE) --no-print-directory test-members
 	$(MAKE) --no-print-directory test-arrival
 	$(MAKE) --no-print-directory test-chain
+	$(MAKE) --no-print-directory test-replay
 	@echo "old-names: private mode only (needs the TRENCHIE_DENY_FILE env var; the retired-name list is not in this repo)"
 
 test-arena:
@@ -47,9 +55,15 @@ test-arena:
 	$(PY) -B arena/test_engine_evidence.py
 	$(PY) -B arena/test_returns.py
 	$(PY) -B arena/test_balance.py
+	$(PY) -B arena/test_predict.py
 
 test-chain:
 	$(PY) -I chain/test_chain.py
+	$(PY) -I chain/test_predict_chain.py
+
+.PHONY: test-replay
+test-replay:
+	$(PY) -B replay/test_demo.py
 
 # Read every pinned settled batch back from archival RPC (no key; network only).
 .PHONY: verify-batches

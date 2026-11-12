@@ -8,6 +8,8 @@
   var receipt = function (s) { return '<div class="receipt" data-material="paper">' + s + '</div>'; };
   var chips = function (a) { return '<div class="ribbon">' + a.map(function (s) { return '<span>' + s + '</span>'; }).join('') + '</div>'; };
   var line = function (k, v) { return '<div class="line"><b>' + k + '</b><span>' + v + '</span></div>'; };
+  // a duration in ms as the reader sees it: '500' -> '0.5 s', '60000' -> '60 s' (never rounded to a whole second)
+  var seconds = function (ms) { var n = Number(ms); return Number.isFinite(n) && n >= 0 ? String(Math.round(n) / 1000) + ' s' : '?'; };
 
   // storage that never throws (private windows, blocked site data)
   var mem = {};
@@ -42,5 +44,5 @@
     return Promise.resolve(false);
   }
 
-  root.SnapUI = { esc: esc, btn: btn, receipt: receipt, chips: chips, line: line, store: store, paint: paint, copyText: copyText };
+  root.SnapUI = { esc: esc, btn: btn, receipt: receipt, chips: chips, line: line, seconds: seconds, store: store, paint: paint, copyText: copyText };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

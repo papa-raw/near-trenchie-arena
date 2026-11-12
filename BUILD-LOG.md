@@ -273,13 +273,48 @@ Every piece above went through a separate reviewer, and several came back more t
 
 Check: `cargo test` in each contract under `near/contracts/` passes.
 
+## 2026-11-12 · Predictions you can read at a glance
+
+A player now predicts a number: "2+ KOs this life". The rarer the level, the bigger the reward, scaled by how often house trenchies have reached it over their last 2000 lives. A prediction can carry 0.01 testnet NEAR. If it fails, that amount goes to the reward fund. A player who never picks a level makes no prediction; nothing is filled in for them. Every completed life is written to one public record per arena, and two boards read from it: most KOs this hour and most correct predictions today, each split into players and house.
+
+Check: `python3 -B near/arena/test_predict.py` passes.
+
+## 2026-11-12 · A new arena screen
+
+The arena screen was redrawn from a playtest. Speech and KOs share one feed. The emoji over each fighter's head is gone. Circles beside a fighter's name tag fill green with each KO toward its prediction, and a short animation plays before it jumps in. The two boards sit on a wall sign, and a dropped legendary gets a floor sign with its name and a small picture. A name is never cut: at phone width it wraps between words.
+
+Check: not runnable without a browser; the cases ship with the code.
+
+## 2026-11-12 · Agents stay in the fight
+
+An agent's live session used to drop out whenever the arena started a new round. It now rejoins by itself, signing with its own session key over the new round and a fresh time; a stranger's rejoin is refused and changes nothing. Each order the agent gives now reaches the owner's panel with the trenchie's reply in its own voice and the reason behind it. On a subscription the session reports its share of the week, and it stops giving orders at the limit the owner set, then picks up again once it's back under.
+
+Check: SNAP.md's live section describes the rejoin, the notes and the weekly limit.
+
+## 2026-11-12 · The hosted arena, under load
+
+neartrenchies.xyz runs the arena on our own server, inside a container held to one CPU and 1 GB. It comes back by itself after a reboot. The first test with 50 spectators failed: the arena used the whole CPU and fell behind. Two jobs it did every tick were the cause, and with both gone a tick takes about 3 ms of CPU instead of 23. The same test then passed: 50 spectators for a minute at 20 frames a second, no dropped ticks, a quarter of the CPU in use. That speed fix is still in review and comes to this repo when it passes.
+
+## 2026-11-12 · The identity contract, rehearsed again
+
+The mainnet kit ran end to end on testnet a second time, from a fresh account: deploy, 50 free trenchies held for their first owners, the deploy key deleted. One free trenchie was then claimed through the hosted arena and fought, and its record was written on testnet. The only change to the contract since its security review is how it pays for each new record, and that change was reviewed on its own.
+
+Check: `cargo test` in each contract under `near/contracts/` passes.
+
+## 2026-11-12 · Room for bigger weapons
+
+Newly made weapons may now be up to 4 units tall instead of 1.6, under a new version of the item limits. Every existing item still checks against the version it was made under, so nothing already minted changes.
+
+Check: `python3 -I near/items/check_items.py` names the limits version it used for each item.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
 
 - the identity contract on mainnet
 - the gas measurements that set the batch size
-- the hosted arena, up before review starts on 2026-11-16
+- the hosted arena's speed fix and its load test with 200 spectators
+- the new snap-in guide and trenchie panel, and the fight animations with bigger weapons
 - `make demo`'s check of each replayed hash against the hash written on testnet, fetched from archival RPC
 - the balance sweep's final report
 

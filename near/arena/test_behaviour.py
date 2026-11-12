@@ -362,11 +362,16 @@ class Engine(unittest.TestCase):
         twelve = json.loads((RULES_DIR / "integer-12.json").read_bytes())
         self.assertEqual({k for k in set(thirteen) | set(twelve) if thirteen.get(k) != twelve.get(k)},
                          {"version", "intent_interval", "input_kinds", "behaviour"})
-        current = json.loads((RULES_DIR / "integer-14.json").read_bytes())
-        self.assertEqual(sim.digest(current), sim.digest(sim.DEFAULT_RULES))
-        self.assertEqual({k for k in set(current) | set(thirteen) if current.get(k) != thirteen.get(k)}, {"version", "behaviour"})
-        self.assertEqual({k: v for k, v in current["behaviour"].items() if thirteen["behaviour"].get(k) != v},
+        fourteen = json.loads((RULES_DIR / "integer-14.json").read_bytes())
+        self.assertEqual(sim.digest(fourteen), "3975d414b4c313622c351f9d132951a8d4d8a1f446cd63cfa9db1e0838af6a4b")
+        self.assertEqual({k for k in set(fourteen) | set(thirteen) if fourteen.get(k) != thirteen.get(k)}, {"version", "behaviour"})
+        self.assertEqual({k: v for k, v in fourteen["behaviour"].items() if thirteen["behaviour"].get(k) != v},
                          {"chase_seek": True})
+        fifteen = json.loads((RULES_DIR / "integer-15.json").read_bytes())
+        self.assertEqual(sim.digest(fifteen), "0bcbd83d92dab9bc89b2c7a461ca21e44f1b9c8062595315cc156dadf3174fbe")
+        self.assertEqual({k: fifteen.get(k) for k in set(fifteen) | set(fourteen) if fifteen.get(k) != fourteen.get(k)},
+                         {"version": "integer-15", "steer_band": 1000})
+        # integer-16 (predictions) is the current table; arena/test_predict.py checks it is 15 plus the predict block
 
     def test_a_battle_segment_replays_to_the_same_hash_and_resumes(self):
         def segment():
@@ -659,14 +664,17 @@ class GateAtAttackStart(unittest.TestCase):
                          "facing away again: the swing starts")
 
     def test_pats_example_on_seeds_7_to_12_starts_every_attack_inside_the_gate(self):
-        keys = ("attacks", "attacks_meeting_gate", "signature_starts", "signature_starts_meeting_gate", "hits",
-                "hits_meeting_gate")
+        keys = ("attacks", "attacks_meeting_gate", "signature_starts", "signature_starts_meeting_gate",
+                "signature_self_defence", "hits", "hits_meeting_gate")
         rows = [battle_measure.run(seed, 4000, 9, battle_measure.EXAMPLE) for seed in range(7, 13)]
         total = {k: sum(r[k] for r in rows) for k in keys}
         print("\nseeds 7-12:", total, flush=True)
         self.assertGreater(total["attacks"], 0)
         self.assertEqual(total["attacks_meeting_gate"], total["attacks"])
-        self.assertEqual(total["signature_starts_meeting_gate"], total["signature_starts"])
+        # BEHAVIOUR.md "Attack gate": an offensive signature starts only at a target that passes, except a shockwave in
+        # self-defence (own hp under its threshold, an enemy in trigger range), which a `never` gate also forbids. The
+        # measure labels those starts self_defence; every other start must meet the gate, and every hit must.
+        self.assertEqual(total["signature_starts_meeting_gate"] + total["signature_self_defence"], total["signature_starts"])
         self.assertEqual(total["hits_meeting_gate"], total["hits"])
 
     def test_a_segment_with_no_behaviour_replays_as_before_the_fix(self):
@@ -718,6 +726,58 @@ class ChaseSeek(unittest.TestCase):
         give(game, "a", {"v": 1, "drives": {"chase": 10}})
         self.assertGreater(moved(game)[1], 0, "b is out of view (22 tiles) yet passes the gate: walk to it")
         self.assertIsNone(game.state["fighters"]["a"]["target"], "seeking is movement, not a target")
+
+
+def jitter(rules, stances, ticks=2400, seed=20261112):
+    """Visible back-and-forth per 1000 alive ticks, and the share of idle ticks, in a 5-fighter crowd.
+
+    A visible reversal is a tick whose move points against the previous tick's (negative dot product) while
+    both steps are at least half the fighter's speed: a body stepping back and forth on the spot."""
+    game = sim.Sim(seed, rules)
+    houses = sorted(rules["house"])[:len(stances)]
+    for i, name in enumerate(houses):
+        game.enqueue(sim.Input(0, "join", name, 0, {"house": True, "angle": i * 72}))
+    for name, stance in zip(houses, stances):
+        if stance is not None:
+            out, _, refused, _ = behaviour.normalise({"v": 1, "stance": stance}, rules, name)
+            assert not refused, refused
+            game.enqueue(sim.Input(1, "behaviour", name, 1, out))
+    previous, reversals, alive = {}, 0, 0
+    for _ in range(ticks):
+        game.step()
+        for name, f in game.state["fighters"].items():
+            if f["state"] != "alive":
+                previous.pop(name, None)
+                continue
+            alive += 1
+            move, half = (f["move_x"], f["move_y"]), f["speed"] // 2
+            last = previous.get(name)
+            big = lambda m: m[0] * m[0] + m[1] * m[1] >= half * half
+            if last is not None and big(last) and big(move) and last[0] * move[0] + last[1] * move[1] < 0:
+                reversals += 1
+            previous[name] = move
+    return reversals * 1000 // max(1, alive)
+
+
+class Steering(unittest.TestCase):
+    """Fighters seen "stuck in one place vibrating" in a click-through. Each drive switched on or off at its boundary
+    (keep-away radius, weapon reach, hold radius) and the summed pull was always scaled to full speed, so a
+    fighter on a boundary stepped a full stride across it and a full stride back. integer-15 (`steer_band`)
+    makes every pull continuous at its boundary and scales the step by the net pull."""
+
+    CROWDS = (("flee", "loot", "hold", "defend", "berserk"),
+              ("hunt-weakest", "loot", "flee", "hold", "defend"),
+              (None, None, None, None, None))           # no plan: the default policy (survivor/looter styles)
+
+    def test_no_crowd_steps_back_and_forth_on_the_spot(self):
+        for stances in self.CROWDS:
+            with self.subTest(stances=stances):
+                self.assertLessEqual(jitter(R, stances), 2, "visible reversals per 1000 alive ticks")
+
+    def test_integer_14_still_steps_as_it_did(self):
+        fourteen = sim.freeze(json.loads((RULES_DIR / "integer-14.json").read_bytes()))
+        self.assertNotIn("steer_band", fourteen)
+        self.assertGreater(jitter(fourteen, self.CROWDS[0]), 50, "the old table keeps its old movement, so its segments replay")
 
 
 class PatsExample(unittest.TestCase):

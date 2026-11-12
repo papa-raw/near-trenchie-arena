@@ -13,15 +13,9 @@ const OUT = process.argv[2] || path.join(os.tmpdir(), 'snapin-premint'); fs.mkdi
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('PASS', m); } else { fail++; console.log('FAIL', m); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-function start(args, ready) {
-  const child = spawn('python3', ['-B', ...args], { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'] });
-  return new Promise((resolve, reject) => {
-    let out = ''; const t = setTimeout(() => reject(new Error('no start line: ' + out.slice(0, 300))), 30000);
-    const on = (d) => { out += d; const m = ready(out); if (m) { clearTimeout(t); resolve({ child, m }); } };
-    child.stdout.on('data', on); child.stderr.on('data', (d) => { out += d; });
-    child.on('exit', (c) => reject(new Error('exited ' + c + ': ' + out.slice(0, 300))));
-  });
-}
+// hosts start through the shared harness: each ends with this case however it ends (qa/hosts.cjs)
+const HOSTS = require('./hosts.cjs');
+const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
 (async () => {
   // ---- the folder itself
   let dir = ''; try { dir = execFileSync('python3', ['-I', 'near/lore/check_personas.py', '--dir', PM], { cwd: REPO }).toString(); } catch (e) { dir = String(e.stdout || ''); }
@@ -90,6 +84,7 @@ function start(args, ready) {
     ok(own.length === 0, 'no page errors or failed requests beyond the test-supplied 404' + (own.length ? ': ' + own.slice(0, 4).join(' | ') : ''));
   } catch (e) { ok(false, 'case crashed: ' + String(e && e.message || e).slice(0, 300)); try { await p.screenshot({ path: path.join(OUT, 'crash.png'), fullPage: true }); } catch (e2) { /* gone */ } }
   await b.close().catch(() => {}); web.child.kill();
+  ok((await HOSTS.finish()).length === 0, 'no host this case started survives it');
   console.log(`${pass} passed, ${fail} failed; frames in ${OUT}`);
   process.exit(fail ? 1 : 0);
 })();

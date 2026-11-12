@@ -27,10 +27,13 @@ Each prints its result on the last line. Nothing here needs a key, an account or
 | `python3 -I near/lore/check_sheets.py --kits` | `kits.json: 14 OK, 72 items, 4 rival pairs, 2 alliances (enums checked against this file's constants)` |
 | `python3 -B near/arena/test_sim.py Determinism` | `OK` |
 | `python3 -B near/arena/test_room_host.py CopiedRoom` | `OK` |
-| `(cd near && make demo)` | `Open the desk: (cd near && make desk)` |
+| `(cd near && make rehearsal)` | `Open the desk: (cd near && make desk)` |
 | `python3 -I near/tools/check_snap.py` | `SNAP.md: OK` |
+| `python3 -I near/tools/check_words.py` | `rate: 0 hit(s); the order rate is 0.5 s (500 ms) from the rules table` |
 | `python3 -B near/arena/test_behaviour.py` | `OK` |
 | `make play` | `play: stopped; nothing left running` (after Ctrl-C; it serves the arena on 127.0.0.1:8181 until then) |
+
+`(cd near && make demo)` needs the network and no key: it re-simulates every segment in `near/replay/MANIFEST` and checks it against its settle transaction on testnet archival RPC. Its last line is `40/40 PASS`.
 
 Run only the cases for the files you changed. The full suite is `(cd near && make test)`.
 
@@ -47,7 +50,7 @@ Run only the cases for the files you changed. The full suite is `(cd near && mak
 
 - Only your AI writes a behaviour. The person who owns the trenchie tells it what they want; there is no direct control.
 - Answer every order twice: first in the persona's own voice (obey any legal order, grumble if the temperament disagrees, never claim what the host did not accept), then the host's receipt, word for word.
-- The engine takes one order per 0.5 s per fighter and one line of speech per 10 s. The agent door's own rate is in SNAP.md.
+- The engine takes one order per 0.5 s per fighter and one line of speech per 10 s. The order rate comes from the rules table; `snap.py terms` prints what the host advertises.
 - A refused order changes nothing. Read the `fix` in the receipt and send it again.
 - Send a behaviour from your session with `snap.py live`: one signed connection carries your orders, the signed receipts and the battle events. SNAP.md has the recipe and [near/arena/BATTLE_PROTOCOL.md](near/arena/BATTLE_PROTOCOL.md) the frames.
 
@@ -68,10 +71,11 @@ A persona is one JSON file: ten core elements and one optional `game` block. [ne
 - No real person's name, handle or firm, in any file or any banter line. Use an original spoof.
 - Blame the Great Rug only on the three off-island myths in LORE.md. Never on another trenchie, and never call anyone a rugger or a scammer.
 - Spell it "onchain".
+- Players read "Arena rules", never `terms` (the protocol name stays in code and in SNAP.md's one mention for agents). A trenchie predicts and earns rewards, or the prediction is a failure: never `bet`, `stake`, `pot` or `payout`. `python3 -I near/tools/check_words.py` checks both, and that every order rate the docs state matches the rules table.
 - Put no key, token or wallet seed in a file. Keys live in env files outside the repo.
 - Do not edit `room/`. Report a fault in it and leave the copy as it is.
 - A change to a rules table is a new table, never an edit of a released one.
 
 ## What is not built
 
-The hosted arena (so there is no public copy of the predictions log yet), and the mainnet deploy of the identity contract (it is built and rehearsed on testnet; mainnet holds only the trenchie's identity, and everything else runs on testnet). Battle orders from an agent session are built: see SNAP.md. The hourly batch, the stake ledger and the public prediction log are built and run on testnet or locally. If a step you need depends on one, it says so in README.md. Do not assume it exists.
+The hosted arena (so there is no public copy of the predictions log yet), and the mainnet deploy of the identity contract (it is built and rehearsed on testnet; mainnet holds only the trenchie's identity, and everything else runs on testnet). Battle orders from an agent session are built: see SNAP.md. The hourly batch, the testnet NEAR ledger for predictions and the public prediction log are built and run on testnet or locally. If a step you need depends on one, it says so in README.md. Do not assume it exists.

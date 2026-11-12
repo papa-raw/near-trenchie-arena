@@ -1,0 +1,144 @@
+/* The arena HUD, approved board 2 (direction C, "Wall sign"): the wall sign, the paper-slip feed, the corner buttons,
+   "How it works", the name-tag circles, the crowd card, the legendary floor sign and the pre-jump card.
+   Values follow the approved sheet's hud.css and final.css. Fonts are the HUD art's own (hud-art/fonts). */
+@font-face { font-family: 'Lilita One'; src: url(../hud-art/fonts/LilitaOne-400.woff2) format('woff2'); font-display: block; }
+@font-face { font-family: 'Space Mono'; src: url(../hud-art/fonts/SpaceMono-400.woff2) format('woff2'); font-weight: 400; font-display: block; }
+@font-face { font-family: 'Space Mono'; src: url(../hud-art/fonts/SpaceMono-700.woff2) format('woff2'); font-weight: 700; font-display: block; }
+@font-face { font-family: 'Fredoka'; src: url(../hud-art/fonts/Fredoka-var.woff2) format('woff2'); font-weight: 300 700; font-display: block; }
+
+.b2 { position: absolute; inset: 0; pointer-events: none; z-index: 4; color: #2a2622; font: 13px/1.4 'Space Mono', monospace; }
+.b2 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; pointer-events: auto; }
+.b2 button:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; }
+
+/* name tags: the trenchie's name, a thin divider, then the circles */
+.atag .sep { display: inline-block; width: 1px; height: 10px; background: rgba(59,47,37,.35); margin: 0 4px; vertical-align: -1px; }
+.pips { display: inline-flex; gap: 2px; align-items: center; vertical-align: -1px; }
+.pips i { width: 7px; height: 7px; border-radius: 50%; border: 1.3px solid #6b5a43; background: transparent; box-sizing: border-box; }
+.pips i.on { background: #3fae7d; border-color: #2e8b6a; }
+.pips.met i { box-shadow: 0 0 0 1.5px #bfe9d3; }
+.pips b { font: 700 9px Fredoka, system-ui, sans-serif; color: #2e8b6a; margin-left: 1px; }
+.pips.big i { width: 13px; height: 13px; border-width: 2px; }
+
+/* the crowd card: "N here", each name with its circles, left to right */
+.gcard { position: absolute; left: 0; top: 0; background: rgba(255,248,234,.96); border-radius: 6px; box-shadow: 0 0 0 1px rgba(59,47,37,.55), 0 3px 6px #3b2f2533; padding: 4px 8px 5px; font: 600 11px/1.3 Fredoka, system-ui, sans-serif; z-index: 3; min-width: 130px; will-change: transform; }
+.gcard .gh { font: 700 10px 'Space Mono', monospace; color: #6b5a43; letter-spacing: .04em; }
+.gcard .gr { display: flex; justify-content: space-between; gap: 10px; align-items: center; white-space: nowrap; }
+.gcard .gr.lead > span:first-child::before { content: '★ '; color: #8a6a12; }
+.gcard .gr .dev { margin-left: 4px; padding: 0 3px; border-radius: 3px; background: #3B2F25; color: #FFF8EA; font-size: 8px; font-weight: 700; letter-spacing: .06em; }
+.gcard::after { content: ''; position: absolute; border: 6px solid transparent; }
+.gcard[data-pos=up]::after { left: 50%; bottom: -6px; margin-left: -6px; border-bottom: 0; border-top-color: rgba(59,47,37,.55); }
+.gcard[data-pos=below]::after { left: 50%; top: -6px; margin-left: -6px; border-top: 0; border-bottom-color: rgba(59,47,37,.55); }
+.gcard[data-pos=right]::after { left: -6px; top: 50%; margin-top: -6px; border-left: 0; border-right-color: rgba(59,47,37,.55); }
+.gcard[data-pos=left]::after { right: -6px; top: 50%; margin-top: -6px; border-right: 0; border-left-color: rgba(59,47,37,.55); }
+
+/* the wall sign */
+.wallsign { position: absolute; top: 0; z-index: 4; pointer-events: none; }
+.wallsign .cords { display: block; }
+.wallsign .plank { position: relative; isolation: isolate; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 16px; margin-top: -2px; }
+.wallsign .material { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+.wallsign:not(:has(.material)) .plank { background: #b98a5f; border-radius: 6px; box-shadow: 0 0 0 2px #6e5236, 0 4px 0 #6e523666; }
+.wallsign .col { background: #fff8ea; border-radius: 3px; padding: 6px 10px 8px; min-width: 0; }
+.wallsign .ct { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+.wallsign .ttl { font: 17px 'Lilita One', 'Fredoka', sans-serif; color: #2a2622; }
+.wallsign .ttl small { font: 12px 'Space Mono', monospace; color: #655541; }
+.wallsign .sw { display: inline-flex; box-shadow: 0 0 0 1px #8a6f4a; border-radius: 4px; overflow: hidden; flex-shrink: 0; }
+.wallsign .sw button { font: 700 11px 'Space Mono', monospace; padding: 2px 7px; background: #fff8ea; color: #5a4528; }
+.wallsign .sw button.on { background: #9fdcc5; color: #20553f; }
+.wallsign .counted { grid-column: 1 / -1; margin: -4px 0 0; font: 11px 'Space Mono', monospace; color: #fff4dc; text-shadow: 0 1px 0 #6e5236; text-align: center; }
+.wallsign.phone .counted { margin-top: -2px; font-size: 10px; }
+.wallsign ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.wallsign li { display: grid; grid-template-columns: 16px 24px minmax(0, 1fr) auto auto; gap: 6px; align-items: center; font-size: 13px; }
+.wallsign li.empty { display: block; color: #655541; font-size: 12px; }
+.wallsign .rk { font: 700 12px 'Space Mono', monospace; color: #8a7a5c; }
+.wallsign .face { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; object-position: 50% 18%; background: #f1e6cf; display: block; }
+.wallsign .nm { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.wallsign .nm .t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* one line; cut only as the last resort (Sign.fit drops the rest first) */
+.b2 .dev { display: inline-block; flex-shrink: 0; padding: 0 4px; border-radius: 3px; background: #3B2F25; color: #FFF8EA; font: 700 9px/1.5 'Space Mono', monospace; letter-spacing: .06em; align-self: center; }
+.wallsign .num { font: 700 14px 'Space Mono', monospace; text-align: right; white-space: nowrap; }
+.wallsign .num small { font: 400 11px 'Space Mono', monospace; color: #655541; }
+.wallsign .cnt { font-size: 12px; color: #20553f; min-width: 34px; text-align: right; white-space: nowrap; }
+/* a narrow sign (an open panel): short title, no faces */
+/* a narrow sign (board 1's panel open): the sheet's short title and no faces */
+.wallsign.narrow .face { display: none; }
+.wallsign.narrow:not(.phone) li { grid-template-columns: 16px minmax(0, 1fr) auto auto; }
+.wallsign.narrow:not(.phone) li:not(:has(.cnt)) { grid-template-columns: 16px minmax(0, 1fr) auto; }
+/* tight (Sign.fit: a name would not fit on its line): the rank, the face and the word "points" drop before any name
+   is cut */
+.wallsign.tight .face, .wallsign.tight .rk, .wallsign.tight .num small { display: none; }
+/* ...then the name wraps between words onto at most 2 lines (the sheet: the name is never cut); an ellipsis only
+   beyond 2 lines. A single word longer than the whole line is the one case broken inside a word (break-word). */
+.wallsign.tight .nm .t { white-space: normal; overflow-wrap: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; line-height: 1.25; }
+.wallsign.tight li, .wallsign.tight.narrow:not(.phone) li { grid-template-columns: minmax(0, 1fr) auto; }
+.wallsign.tight li:has(.cnt), .wallsign.tight.narrow:not(.phone) li:has(.cnt) { grid-template-columns: minmax(0, 1fr) auto auto; }
+/* stack (a name still needs more than 2 lines beside its numbers): the name takes the row's whole width, the numbers
+   sit on the line below, right-aligned */
+.wallsign.stack li, .wallsign.stack.narrow:not(.phone) li, .wallsign.stack li:has(.cnt) { grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 0; }
+.wallsign.stack .nm { grid-column: 1 / -1; }
+.wallsign.stack li .num { grid-column: 2; } .wallsign.stack li .cnt { grid-column: 3; }
+.wallsign.stack li:not(:has(.cnt)) .num { grid-column: 2 / -1; }
+.wallsign .nm .t .dev { margin-left: 3px; vertical-align: 1px; }
+.wallsign .nm .t .nb { white-space: nowrap; }   /* the name's last word piece and its DEV chip never part */
+/* a phone: the leader's full name and its number (and the count of correct calls); rank, face and "points" drop */
+.wallsign.phone .plank { gap: 6px; padding: 8px; }
+.wallsign.phone .col { padding: 4px 6px; }
+.wallsign.phone .ct { flex-direction: column; align-items: flex-start; gap: 2px; }
+.wallsign.phone .ttl { font-size: 14px; }
+.wallsign.phone .ttl small { font-size: 11px; }
+.wallsign.phone li { grid-template-columns: minmax(0, 1fr) auto; font-size: 12px; }
+.wallsign.phone li:has(.cnt) { grid-template-columns: minmax(0, 1fr) auto auto; }
+.wallsign.phone .rk, .wallsign.phone .face, .wallsign.phone .num small { display: none; }
+.wallsign.phone .cnt { min-width: 0; margin-left: 6px; }
+
+/* the feed: paper slips bottom-left, newest last, older fading */
+.b2-slips { position: absolute; left: 16px; bottom: 16px; max-width: 560px; z-index: 4; pointer-events: none; }
+.b2-slips.hidden { visibility: hidden; }
+.feed.slipfeed { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.feed.slipfeed li { display: flex; align-items: baseline; gap: 6px; font-size: 13px; line-height: 1.35; background: #fbf3e2; padding: 5px 10px 6px; border-radius: 2px; box-shadow: 0 1px 0 #d8cdb8, 0 2px 6px #3b2f2522; width: max-content; max-width: 560px; border-left: 4px solid transparent; }
+.feed.slipfeed li.ko { border-left-color: #c2453a; }
+.feed.slipfeed li.leg { border-left-color: #e9b23a; }
+.feed.slipfeed li.res, .feed.slipfeed li.pred { border-left-color: #3fae7d; }
+.feed .who { font: 700 13px 'Space Mono', monospace; white-space: nowrap; }
+.feed .emo { font-size: 13px; }
+.feed .line { color: #2a2622; min-width: 0; overflow-wrap: anywhere; }
+.feed .line .dev { margin: 0 2px 0 5px; }   /* the DEV chip never touches the name it follows */
+.feed .gl { font: 700 10px 'Space Mono', monospace; padding: 1px 5px; border-radius: 3px; white-space: nowrap; align-self: center; }
+.gl.ko { background: #f3d7cf; color: #8c2e1f; } .gl.pred { background: #dcefe5; color: #20553f; } .gl.res { background: #3fae7d; color: #fff; } .gl.leg { background: #f7cf6b; color: #6b4c00; }
+.feed .pts { color: #20553f; } .feed .legn { color: #8a6a12; } .feed .status { color: #655541; }
+.b2-slips.n5 li:nth-last-child(5), .b2-slips.n3 li:nth-last-child(3) { opacity: .55; }
+.b2-slips.n5 li:nth-last-child(4), .b2-slips.n3 li:nth-last-child(2) { opacity: .8; }
+.b2-slips.phone { left: 8px; right: 8px; max-width: none; }
+.b2-slips .chip { display: inline-block; margin-bottom: 6px; padding: 2px 8px; border-radius: 10px; background: #e3dccd; color: #5a4528; font: 700 11px 'Space Mono', monospace; }
+.b2-slips .chip[hidden] { display: none; }
+.b2-slips.phone .feed.slipfeed li { max-width: 100%; width: auto; }
+
+/* corner buttons: visible on and off, words at both widths */
+.corner { position: absolute; right: 16px; bottom: 16px; display: flex; gap: 10px; z-index: 5; }
+.corner .rb { display: inline-flex; align-items: center; gap: 6px; background: #fff8ea; border-radius: 22px; padding: 8px 14px; box-shadow: 0 0 0 1.5px #8a6f4a, 0 3px 0 #8a6f4a66; color: #2a2622; font: 700 13px 'Space Mono', monospace; min-height: 40px; }
+.corner .rb.off { background: #e3dccd; color: #7a6c58; box-shadow: 0 0 0 1.5px #a8987c inset; }
+.corner .rb.menu { background: #f7cf6b; }
+.corner.phone .rb { padding: 8px 10px; font-size: 12px; min-height: 44px; }
+
+/* how it works */
+.b2-how { position: fixed; inset: 0; z-index: 20; }
+.b2-how .scrim { position: absolute; inset: 0; background: #2a262255; }
+.b2-how .how { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(720px, calc(100% - 16px)); max-height: 86vh; background: #fff8ea; border-radius: 8px; box-shadow: 0 0 0 3px #8a6f4a, 0 8px 0 #8a6f4a66; display: flex; flex-direction: column; color: #2a2622; font: 13px/1.4 'Space Mono', monospace; }
+.b2-how .hh { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 10px; border-bottom: 1px dashed #bbaa8c; }
+.b2-how .hh h2 { font: 30px 'Lilita One', 'Fredoka', sans-serif; margin: 0; }
+.b2-how .rb.x { background: #fff8ea; border: 0; border-radius: 22px; box-shadow: 0 0 0 1.5px #8a6f4a, 0 3px 0 #8a6f4a66; padding: 6px 12px; font: 700 16px 'Space Mono', monospace; cursor: pointer; min-width: 44px; min-height: 40px; }
+.b2-how .rb.x:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; }
+.b2-how .hb { overflow: auto; padding: 8px 20px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
+.b2-how .hb h3 { font: 18px 'Lilita One', 'Fredoka', sans-serif; margin: 10px 0 2px; }
+.b2-how .hb p { margin: 0; font-size: 13px; }
+@media (max-width: 600px) { .b2-how .hb { grid-template-columns: 1fr; } }
+
+/* the legendary floor sign: no rule line, no number, the item's picture */
+.legsign { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 6px; background: #fbf3e2; padding: 4px 10px 5px 4px; border-radius: 3px; box-shadow: 0 0 0 1.5px #c9a24a, 0 3px 6px #3b2f2533; font: 700 12px 'Space Mono', monospace; z-index: 2; white-space: nowrap; will-change: transform, opacity; }
+.legsign img, .legsign .noimg { width: 26px; height: 26px; border-radius: 50%; background: #f7cf6b; display: block; }
+.legsign b { color: #8a6a12; }
+.legpin { position: absolute; left: 0; top: 0; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #c2453a; z-index: 2; will-change: transform, opacity; }
+.legsign.phone { font-size: 11px; }
+
+/* the pre-jump card */
+.pjcard { position: absolute; left: 0; top: 0; background: #fff8ea; border-radius: 6px; padding: 7px 12px; box-shadow: 0 0 0 2px #2e8b6a, 0 4px 0 #2e8b6a55; font: 13px 'Space Mono', monospace; white-space: nowrap; display: flex; gap: 6px; align-items: center; z-index: 6; transform-origin: 50% 50%; will-change: transform, opacity; }
+.pjcard b { font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { .pjcard { transition: none; } }

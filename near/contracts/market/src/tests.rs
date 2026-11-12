@@ -522,3 +522,32 @@ fn n2_a_refund_credits_exactly_the_storage_it_frees() {
     }
     assert!(m.solvency().solvent);
 }
+
+/// r5-predict: anyone seeds the reward fund; it adds exactly the deposit, credits no ledger account, stays
+/// solvent, and a later resolve pays a correct prediction from it.
+#[test]
+fn fund_rewards_adds_to_the_fund_and_pays_a_later_resolve() {
+    let (mut m, mut e) = setup();
+    let ledger_before = m.solvency();
+    e.call("operator.testnet", 50 * STAKE, other_key());
+    assert_eq!(m.fund_rewards().0, 50 * STAKE);
+    assert_eq!(m.state().pot.0, 50 * STAKE);
+    assert_eq!(m.balance_of(acc("operator.testnet")).0, 0, "the seed credits no account");
+    assert!(m.solvency().solvent);
+    assert_eq!(m.solvency().ledger.0, ledger_before.ledger.0);
+    funded(&mut m, &mut e, "alice.testnet", NEAR);
+    e.call("alice.testnet", 0, fc_key());
+    m.stake(U128(STAKE));
+    let before = m.balance_of(acc("alice.testnet")).0 + m.stake_of(acc("alice.testnet")).unwrap().storage_fee.0;
+    // a correct 2+ at 3.5714x: 0.01 comes back with 0.025714 from the fund
+    let gain = STAKE * 25714 / 10_000;
+    e.call("resolver.testnet", 0, fc_key());
+    m.close_batch();
+    let rec = m.resolve(U64(0), vec![StakeResult { account_id: acc("alice.testnet"), net: I128(gain as i128) }],
+                        I128(-(gain as i128)), [4010, 3470, 1570, 640, 310], "cd".repeat(32));
+    assert_eq!(rec.pot_after.0, 50 * STAKE - gain);
+    assert_eq!(m.balance_of(acc("alice.testnet")).0, before + STAKE + gain);
+    assert!(m.solvency().solvent);
+    e.call("bob.testnet", 0, other_key());
+    assert!(probe(&e, || m.fund_rewards()).unwrap_err().contains("fund_rewards needs attached NEAR"));
+}

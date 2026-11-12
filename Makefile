@@ -1,7 +1,8 @@
 # Trenchie Arena: root Makefile. Run from the repository root.
 #   make setup  install the Python packages, and the browser the member-page cases drive (needs the network)
 #   make test   every check that needs nothing outside this repo (runs from a clean clone)
-#   make demo   NOT BUILT yet: says so and exits 2
+#   make demo   re-simulate the recorded segments in near/replay/MANIFEST and check each final-state hash against its
+#               settle transaction, read from testnet archival RPC (needs the network, no key)
 #   make live   the local DEV host with the house for LIVE_SECONDS (default 30), then a summary of what ran:
 #               the live model with NEARAI_API_KEY set, else the deterministic house (it says so); without
 #               TRENCHIE_BLOCKLIST every feed line is muted and it prints "guard list missing"
@@ -20,9 +21,7 @@ test:
 	$(MAKE) --no-print-directory -C near test
 
 demo:
-	@echo "NOT BUILT: make demo (re-simulate the recorded segments and check each final-state hash against its settle transaction on archival RPC) does not exist yet."
-	@echo "What runs today: (cd near && make demo) builds the reviewer-desk rehearsal from synthetic local records."
-	@exit 2
+	@$(MAKE) --no-print-directory -C near demo
 
 LIVE_SECONDS ?= 30
 LIVE_BUDGET ?= auto

@@ -1,4 +1,4 @@
-"""Game-owned first-segment projection; native archives and locks stay intact."""
+"""Game-owned per-segment projection; native archives and locks stay intact."""
 from __future__ import annotations
 
 import base64
@@ -110,7 +110,10 @@ def _check_commands(native: dict, input_lives: list[dict]) -> set[int]:
 
 
 def _check_predictions(native: dict) -> None:
-    """Keep the exact archive lock, including its original ref and journal index."""
+    """Keep the exact archive lock, including its original ref and journal index.
+
+    A later segment's archive also lists the locks of lives that carry in from an earlier segment; those have
+    no lock row here and are not projected (_foreign_lives). A first segment carries nothing in."""
     predictions = {row["life_id"]: row for row in native["predictions"]}
     seen = set()
     for event in native["sealed"]["input_events"]:
@@ -123,12 +126,31 @@ def _check_predictions(native: dict) -> None:
                 or archived["prediction_lock"] != event["payload"]["prediction_lock"]):
             raise Refusal("bad_message")
         seen.add(event["life_id"])
-    if seen != set(predictions):
+    if not seen <= set(predictions) or native["initial_state"]["tick"] == 0 and seen != set(predictions):
         raise Refusal("bad_message")
 
 
-def _events(native: dict, omitted: set[int]) -> list[dict]:
+def _foreign_lives(native: dict) -> tuple[set[int], set[str]]:
+    """Positions of input rows that belong to lives this segment cannot prove, and the lives it can.
+
+    A wire result proves a life only when its prediction lock and its start are both in this segment's events
+    (room/ledger.py verify_sealed). A life locked or started in an earlier segment carries in with no such rows
+    here; its start, orders and leave stay in the native archive and its own segments, and are left out of this
+    segment's wire events. No carry-in provenance is invented: such a life is in no wire result.
+    """
+    events = native["sealed"]["input_events"]
+    locked = {row["life_id"] for row in events if row["kind"] == "prediction_lock"}
+    started = {row["life_id"] for row in events if row["kind"] == "life_start" and row["life_id"] in locked}
+    foreign = {position for position, row in enumerate(events)
+               if (row["kind"] == "life_start" and row["life_id"] not in locked)
+               or (row["kind"] in ("intent", "leave") and row["life_id"] not in started)}
+    return foreign, started
+
+
+def _events(native: dict, omitted: set[int], start: int = 0) -> list[dict]:
     """Project effective tick order and wire hash chain, preserving every lock.
+
+    Wire ticks count from the segment's first tick (``start``), so every segment's rows lie in 0..1199.
 
     Native event indices count segment events; immutable lock indices address
     the engine journal. Wire prediction rows use that existing lock index.
@@ -141,8 +163,9 @@ def _events(native: dict, omitted: set[int]) -> list[dict]:
     sources = [row for position, row in enumerate(native["sealed"]["input_events"]) if position not in omitted]
     for source in sorted(sources, key=lambda row: (int(row["tick"]), int(row["index"]))):
         event = deepcopy(source)
-        if not 0 <= int(event["tick"]) < 1200:
+        if not 0 <= int(event["tick"]) - start < 1200:
             raise Refusal("recovery_pending")
+        event["tick"] = str(int(event["tick"]) - start)
         index = (int(event["payload"]["prediction_lock"]["ledger_index"])
                  if event["kind"] == "prediction_lock" else previous_index + 1)
         if index <= previous_index:
@@ -156,18 +179,24 @@ def _events(native: dict, omitted: set[int]) -> list[dict]:
 
 def _project(native: dict) -> tuple[dict, dict]:
     """Re-simulate real archive facts before deriving a separate wire seal."""
-    # Carry-in needs its source-owned provenance contract; do not invent one.
-    if native["initial_state"]["tick"] != 0 or native["sealed"]["segment_id"] != "segment:0":
+    # A segment starts on its own boundary. Lives that carry in from an earlier segment are left out, never
+    # re-proved here (_foreign_lives): carry-in needs its source-owned provenance contract.
+    start, segment_ticks = native["initial_state"]["tick"], load_rules(native["rules_hash"])["segment_ticks"]
+    if (not isinstance(start, int) or start < 0 or start % segment_ticks
+            or native["sealed"]["segment_id"] != "segment:" + str(start // segment_ticks)):
         raise Refusal("recovery_pending")
     evidence = replay_evidence(native)
     omitted = _check_commands(native, evidence["input_lives"])
     _check_predictions(native)
-    events = _events(native, omitted)
+    foreign, started = _foreign_lives(native)
+    events = _events(native, omitted | foreign, start)
     locks = {row["payload"]["prediction_lock"]["lock_ref"] for row in events if row["kind"] == "prediction_lock"}
-    if locks != set(evidence["predictions"]):
+    if not locks <= set(evidence["predictions"]):
         raise Refusal("bad_message")
+    if start == 0 and (foreign or locks != set(evidence["predictions"])):
+        raise Refusal("bad_message")  # a first segment has nothing to carry in
     predictions = {key: evidence["predictions"][key] for key in locks}
-    lives = evidence["lives"]
+    lives = [life for life in evidence["lives"] if life["life_id"] in started]
     record = dict(segment_id=native["sealed"]["segment_id"],
         life_ids=[life["life_id"] for life in lives],
         nft_token_ids=sorted({life["nft_token_id"] for life in lives}),
@@ -179,11 +208,15 @@ def _project(native: dict) -> tuple[dict, dict]:
     return record, dict(final_state_hash=evidence["final_state_hash"], lives=lives, predictions=predictions)
 
 
+PROJECTION_CACHE = 8  # segments; the same bound as the host's in-memory replay cache
+
+
 class EngineRecords:
     """Read port for RoomHost, backed by real archives and the portable ledger.
 
-    Only segment:0 is supported until cross-segment life provenance is frozen.
-    Each result is signed by ResultAuthority after its independent native
+    Every sealed segment of the arena projects to a result. A result lists the lives whose prediction lock,
+    start and end all fall inside its segment; a life that crosses a segment boundary is in no result (see
+    _foreign_lives). Each result is signed by ResultAuthority after its independent native
     engine replay and exact projection comparison. No settlement writer exists.
     The supplied signer and verifier use the same encoded 64-byte signature
     contract as RoomHost. Deployed implementations must pin Ed25519 adapters.
@@ -202,10 +235,10 @@ class EngineRecords:
             verifier=lambda key, body, raw: verify(key, body, base64.urlsafe_b64encode(raw).decode().rstrip("=")),
             key_allowed=key_allowed)
         self.reader = ResultReader(self.ledger, self.authority, self._replay)
-        # Only segment:0 is supported, so one immutable source/projection entry
-        # bounds memory. Source equality is full canonical material, not merely
-        # a seal header. Successful facts are separate from live authorization.
-        self._projection_cache: tuple[bytes, dict, dict] | None = None
+        # At most PROJECTION_CACHE immutable source/projection entries, oldest
+        # dropped first, bound memory. Source equality is full canonical material,
+        # not merely a seal header. Successful facts are separate from live authorization.
+        self._projection_cache: dict[str, tuple[bytes, dict, dict]] = {}
         self._projection_lock = threading.Lock()
 
     def _native(self, segment_id: str) -> dict:
@@ -216,21 +249,22 @@ class EngineRecords:
 
     def _projection(self, segment_id: str) -> tuple[dict, dict]:
         """Reuse only an agreed projection of unchanged full native source."""
-        if segment_id != "segment:0":
-            raise Refusal("recovery_pending")
         native = self._native(segment_id)
         source = canonical(native)
         if not self._projection_lock.acquire(blocking=False):
             raise Refusal("rate_limited")
         try:
-            cached = self._projection_cache
+            cached = self._projection_cache.get(segment_id)
             if cached is None or cached[0] != source:
                 record, evidence = _project(native)
                 # A real native replay has just produced this exact outcome.
                 # Require portable agreement before making it reusable.
                 verify_sealed(record, lambda readonly: deepcopy(evidence))
                 cached = (source, deepcopy(record), deepcopy(evidence))
-                self._projection_cache = cached
+                self._projection_cache.pop(segment_id, None)
+                self._projection_cache[segment_id] = cached
+                while len(self._projection_cache) > PROJECTION_CACHE:
+                    self._projection_cache.pop(next(iter(self._projection_cache)))
             return deepcopy(cached[1]), deepcopy(cached[2])
         finally:
             self._projection_lock.release()

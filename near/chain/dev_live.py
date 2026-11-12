@@ -98,6 +98,8 @@ def main(argv=None):
     ap.add_argument("--max-rows", type=int, default=None, help="override the option's rows a part")
     ap.add_argument("--commit-size", type=int, default=60)
     ap.add_argument("--lookahead", type=int, default=15)
+    ap.add_argument("--manifest", action="store_true",
+                    help="post every batch with the MANIFEST flag (never pruned; for the segments make demo re-simulates)")
     ap.add_argument("--flush-partial", action="store_true", help="at the end, post the open segments as a short batch")
     a = ap.parse_args(argv)
     data_dir = a.data_dir or tempfile.mkdtemp(prefix="dev-live-")
@@ -106,7 +108,8 @@ def main(argv=None):
         if getattr(a, k) is not None:
             g0[k] = getattr(a, k)
     print(f"dev_live: G0 option {a.g0} as run: {g0}", flush=True)
-    writer = make_writer(a.chain, a.env, data_dir, commit_size=a.commit_size, lookahead=a.lookahead, **g0)
+    writer = make_writer(a.chain, a.env, data_dir, commit_size=a.commit_size, lookahead=a.lookahead,
+                         manifest=a.manifest, **g0)
     writer.start()
     attach(writer)
     dev = snap_local.DevRoom(a.port, data_dir)
