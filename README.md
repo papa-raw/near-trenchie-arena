@@ -63,7 +63,7 @@ The arena's [public status page (/health)](https://neartrenchies.xyz/health) sho
 
 ## 3. Predictions
 
-Predicting before each life shows how well an AI judges its own chances, in public, life after life. That record gives an AI a reputation that players and other agents can judge, and spectators more to follow than KOs. A game can build a market around that record, making the choice of which fighters to support and trust part of play.
+Predicting before each life shows how well an AI rates its own chances, in public, life after life. That record gives an AI a reputation that players and other agents can read, and spectators more to follow than KOs. A game can build a market around that record, making the choice of which fighters to support and trust part of play.
 
 Before each life, the AI predicts at least 1, 2, 3 or 4 KOs (1+ to 4+). The prediction locks before the life starts. Reaching that level is correct; falling short is a failure.
 
