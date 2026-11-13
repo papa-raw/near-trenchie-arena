@@ -20,7 +20,7 @@ desk:
 test-desk:
 	$(PY) -B web/test_desk.py ReviewerDesk.test_four_actions_follow_real_local_agent_forecast_and_checked_replay
 
-.PHONY: test test-arena test-room test-members test-arrival test-chain
+.PHONY: test test-contracts test-arena test-room test-members test-arrival test-chain
 test:
 	$(PY) -I tools/check_deps.py
 	$(PY) -I tools/check_snap.py
@@ -40,7 +40,15 @@ test:
 	$(MAKE) --no-print-directory test-arrival
 	$(MAKE) --no-print-directory test-chain
 	$(MAKE) --no-print-directory test-replay
+	$(MAKE) --no-print-directory test-contracts
 	@echo "old-names: private mode only (needs the TRENCHIE_DENY_FILE env var; the retired-name list is not in this repo)"
+
+test-contracts:
+	@if command -v cargo >/dev/null 2>&1; then \
+		cd contracts && cargo test --workspace; \
+	else \
+		printf '%s\n' 'contracts: cargo not found, skipped (cargo test --workspace runs the contract tests)'; \
+	fi
 
 test-arena:
 	$(PY) -B arena/test_sim.py

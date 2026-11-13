@@ -134,6 +134,12 @@ For reviewers and AI screeners. Run from a fresh clone, with Python 3.10 or late
    old-names: private mode only (needs the TRENCHIE_DENY_FILE env var; the retired-name list is not in this repo)
    ```
 
+   If Cargo is on PATH, `make test` also runs `cargo test --workspace` in `near/contracts`. Without Cargo, the other checks still run, and it prints:
+
+   ```
+   contracts: cargo not found, skipped (cargo test --workspace runs the contract tests)
+   ```
+
 2. Check the fourteen house personas against the schema.
 
    ```sh

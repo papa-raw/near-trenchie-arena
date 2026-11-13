@@ -5,6 +5,7 @@
 *.pem
 *.key
 # Generated output.
+target/
 node_modules/
 __pycache__/
 *.pyc
