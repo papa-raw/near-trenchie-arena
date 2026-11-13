@@ -1,8 +1,8 @@
 // W18 case: the live arena's "Snap in your trenchie" call to action, in a real browser at 1440 and 390.
-// Starts its own DEV arena (near/arena/snap_local.py) and the one-origin DEV server (snapin/serve.py) on free loopback ports,
+// Starts its own DEV arena (near/arena/snap_local.py) and the one-origin DEV server (snapin/serve.py) on one loopback origin,
 // then: the button and Satrenchi's cue are on screen, unclipped and clear of the fixed HUD; Tab reaches it with a visible
 // focus ring; Enter opens the guide at the wallet step with the arena's address carried; "Keep watching", × and Escape
-// return to the live page; the browser's Back returns to the guide; both consoles stay clean. Frames go to <out-dir>.
+// return to the live page; the browser's Back returns to the guide; both consoles stay clean. Frames are captured only when <out-dir> is supplied.
 // usage: NODE_PATH=$HOME/.nvm/versions/node/v24.22.1/lib/node_modules node near/web/snapin/qa/cta_case.cjs [out-dir]
 'use strict';
 const { spawn } = require('child_process'), fs = require('fs'), path = require('path'), os = require('os');
@@ -18,11 +18,9 @@ const HOSTS = require('./hosts.cjs');
 const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname(NEAR));
 
 (async () => {
-  const arenaPort = 20000 + Math.floor(Math.random() * 20000);
-  const arena = await start(['near/arena/snap_local.py', '--port', String(arenaPort)], (o) => (o.match(/X-Dev-Admin: (\S+)/) || [])[1]);
-  const web = await start(['near/web/snapin/serve.py', '--port', '0', '--arena', 'http://127.0.0.1:' + arenaPort], (o) => (o.match(/http:\/\/127\.0\.0\.1:(\d+)\//) || [])[1]);
-  const base = 'http://127.0.0.1:' + web.m, ws = 'ws://127.0.0.1:' + arenaPort;
-  const b = await chromium.launch({ args: ['--single-process', '--no-zygote'] });
+  const web = await start(['near/web/snapin/qa/arena_case_host.py', process.env.CTA_CASE_PORT || '0'], (o) => (o.match(/arena-case: http:\/\/127\.0\.0\.1:(\d+)\//) || [])[1]);
+  const base = 'http://127.0.0.1:' + web.m, ws = 'ws://127.0.0.1:' + web.m;
+  const b = await chromium.launch(process.env.HTTPS_PROXY ? { args: ['--single-process', '--no-zygote', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--proxy-bypass-list=<-loopback>'], proxy: { server: process.env.HTTPS_PROXY } } : { args: ['--single-process', '--no-zygote', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
   // the arena draws every frame; a capture needs the frame loop held still for a moment
   await ctx.addInitScript(() => { const r = window.requestAnimationFrame.bind(window); window.requestAnimationFrame = (cb) => (window.__freeze ? 0 : r(cb)); });
@@ -33,7 +31,7 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
   const still = async () => { await p.evaluate(() => { window.__freeze = true; }); await sleep(250); };
   p.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ': ' + m.text() + ' @ ' + p.url()); });
   p.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
-  const shot = async (name) => { await p.evaluate(() => { window.__freeze = true; }); await sleep(250); await p.screenshot({ path: path.join(OUT, name + '.png'), timeout: 60000 }); await p.evaluate(() => { window.__freeze = false; }); };
+  const shot = async (name) => { if (!process.argv[2]) return; await p.evaluate(() => { window.__freeze = true; }); await sleep(250); await p.screenshot({ path: path.join(OUT, name + '.png'), timeout: 60000 }); await p.evaluate(() => { window.__freeze = false; }); };
   const live = async () => { await p.waitForFunction(() => document.getElementById('status').className === 'live', null, { timeout: 45000 }); await p.waitForFunction(() => { const w = document.getElementById('world'); return w.querySelector('[data-panel="feed"]') && w.querySelector('[data-panel="btn1"]') && w.querySelector('[data-panel="board"]'); }, null, { timeout: 150000 }); await sleep(2500); };
   const guide = () => p.waitForFunction(() => window.__SNAPIN_READY === true, null, { timeout: 60000 });
   try {
@@ -80,15 +78,16 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
       await shot(`w18-arena-focus-${W}`);
       await Promise.all([p.waitForURL(/snapin\/index\.html/), p.keyboard.press('Enter')]); await guide(); await sleep(400);
       const w = await p.evaluate(() => ({ step: Snapin.view.step, h1: document.querySelector('h1') && document.querySelector('h1').textContent, url: location.search }));
-      ok(w.step === 'wallet' && /Own your persona/.test(w.h1) && w.url.includes('ws='), `${W}: Enter opens the guide at the wallet step (${w.h1}; ${w.url})`);
+      ok(w.step === 'wallet' && w.h1 === 'Connect a NEAR wallet' && w.url.includes('ws='), `${W}: Enter opens the guide at the wallet step (${w.h1}; ${w.url})`);
       await shot(`w18-guide-wallet-${W}`);
-      // back to watching, three ways
-      await Promise.all([p.waitForURL(/arena\.html/), p.click('[data-act="step:watch"]')]);
+      // The phone hides the watching link; its visible Close action returns to the same arena.
+      if (W < 600) ok(!(await p.locator('[data-act="g:watch"]').isVisible()), '390: Keep watching is hidden; use the visible Close action');
+      await Promise.all([p.waitForURL(/arena\.html/), p.click('[data-act="' + (W < 600 ? 'g:close' : 'g:watch') + '"]')]);
       ok(p.url().includes('ws=' + encodeURIComponent(ws)) || p.url().includes('ws=' + ws), `${W}: "Keep watching" returns to the live arena on the same host`);
       await live(); await still();
       await Promise.all([p.waitForURL(/snapin\/index\.html/), p.goBack()]); await guide();
       ok(await p.evaluate(() => Snapin.view.step === 'wallet'), `${W}: the browser's Back from the arena returns to the guide's wallet step`);
-      await Promise.all([p.waitForURL(/arena\.html/), p.click('[data-act="close"]')]);
+      await Promise.all([p.waitForURL(/arena\.html/), p.click('[data-act="g:close"]')]);
       ok(true, `${W}: × returns to the live arena`);
       await live(); await still();
       await Promise.all([p.waitForURL(/snapin\/index\.html/), p.click('#snapin-cta')]); await guide();
@@ -105,8 +104,6 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
     try { console.log('at', p.url(), await p.evaluate(() => (document.getElementById('status') || {}).textContent)); console.log(errs.slice(0, 6).join('\n')); await shot('crash'); } catch (e2) { /* page gone */ }
   }
   await b.close().catch(() => {});
-  await fetch('http://127.0.0.1:' + arenaPort + '/dev/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Dev-Admin': arena.m } }).catch(() => {});
-  web.child.kill(); arena.child.kill();
   fs.writeFileSync(path.join(OUT, 'cta-case.json'), JSON.stringify({ pass, fail, at: new Date().toISOString() }, null, 1));
   ok((await HOSTS.finish()).length === 0, 'no host this case started survives it');
   console.log(`${pass} passed, ${fail} failed; frames in ${OUT}`);

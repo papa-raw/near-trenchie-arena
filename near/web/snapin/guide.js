@@ -17,6 +17,7 @@
                    'Magnet': 'Magnet: a shield, and floor items pull toward you.', 'Chain Storm': 'Chain Storm: a strike that jumps from foe to foe.' };
   var g = { keyText: '', keyStatus: '', keyMsg: '', answer: '', code: null, codeErr: '', expired: false, poll: null, tick: null, copied: false, requesting: false,
             name: { checked: '', free: null, picked: '' }, joining: false };
+  var keyTest = 0;   // replies belong to one test of one selected door and key
   var esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
   var nb = function (s) { return String(s).replace(/(\d) (s|tiles|of 10)\b/g, '$1&nbsp;$2'); };
   function b(act, label, cls, attr) { return '<button type="button" class="' + (cls || 'plate') + '"' + (act ? ' data-act="' + act + '"' : '') + (attr ? ' ' + attr : '') + '>' + label + '</button>'; }
@@ -30,7 +31,11 @@
   function cap() { var c = Number(store().get(CAP_STORE)); return c > 0 ? c : 0; }
   function keyOf(door) { return store().get(KEY_STORE + door) || ''; }
   function keyDoorOk(h, door) { var d = h.P.door; return !!(d && d.route === 'key' && d.door === door && keyOf(door)); }
-  function aiReady(h) { var d = h.P.door; if (!d || !d.door) return false; return d.route === 'plan' ? true : !!keyOf(d.door) && cap() > 0; }
+  function aiReady(h) {
+    var d = h.P.door, p = pick(h); if (!d || !d.door) return false;
+    if (p && (p.route !== d.route || p.door !== (d.route === 'plan' ? d.identity : d.door))) return false;
+    return d.route === 'plan' ? true : !!keyOf(d.door) && cap() > 0;
+  }
   function nameOk(h) { var n = (h.P.name || '').trim(), SS = root.SnapSheet; return !!n && (!SS || SS.guard(n).ok) && g.name.free !== false; }
   function done(h, i) {
     var P = h.P;
@@ -57,9 +62,9 @@
     return r ? '<div class="note" role="status" style="margin:0 0 12px">' + r + '</div>' : '';
   }
   function walletBody(h) {
-    var w = C.wallet, P = h.P, ch = h.chain ? h.chain() : { on: false, network: 'testnet', signed: '' }, net = String(ch.network || 'testnet').toUpperCase();
+    var w = C.wallet, P = h.P, ch = h.chain ? h.chain() : { on: false, network: 'testnet', signed: '' }, net = ch.known ? String(ch.network || 'testnet').toUpperCase() : ch.retrying ? 'Retrying…' : 'Loading…';
     return returning(h) + '<p class="lead">' + w.line + '</p>' + (P.wallet ? '<p class="chipok">' + esc(F(w.connected, { wallet: h.shortAcct(P.wallet.accountId) })) + ' · ' + lnk('g:wallet-forget', w.other) + '</p>' + (ch.signed ? '<p class="note" style="margin:0 0 10px">' + esc(ch.signed) + '</p>' : '') : '') + '<div class="list">' +
-      w.rows.filter(function (r) { return !(ch.on && r[0] === 'dev-throwaway'); }).map(function (r) { return '<button type="button" class="li' + (P.wallet && P.wallet.id === r[0] ? ' sel' : '') + '" data-act="g:wallet:' + r[0] + '"><span>' + r[1] + '</span><span class="r">' + F(r[2], { network: net }) + '</span></button>'; }).join('') +
+      w.rows.filter(function (r) { return r[0] !== 'dev-throwaway' || (ch.known === true && !ch.on); }).map(function (r) { return '<button type="button" class="li' + (P.wallet && P.wallet.id === r[0] ? ' sel' : '') + '" data-act="g:wallet:' + r[0] + '"' + (ch.known ? '' : ' disabled') + '><span>' + r[1] + '</span><span class="r">' + F(r[2], { network: net }) + '</span></button>'; }).join('') +
       '</div><p class="small" style="margin:12px 0 0">' + w.none + ' <a href="' + w.getUrl + '" target="_blank" rel="noopener noreferrer">' + w.get + '</a></p>';
   }
   function kitOf(h) { var SS = root.SnapSheet, pr = SS && SS.PRESETS.filter(function (x) { return x.name === h.P.preset; })[0]; return pr ? { move: MOVE[pr.weapon] || pr.weapon, sig: SIG[pr.signature] || pr.signature } : null; }
@@ -81,10 +86,11 @@
     var ids = QUIRK_ORDER.concat((P.quirks || []).filter(function (id) { return QUIRK_ORDER.indexOf(id) < 0; }));
     var temps = SS ? SS.TEMPERAMENTS : [], quirks = SS ? ids.map(function (id) { return SS.QUIRKS.filter(function (q) { return q.id === id; })[0]; }).filter(Boolean) : [];
     var t = temps.filter(function (x) { return x.id === P.temper; })[0] || temps[0], short = String(P.name || '').trim().split(/\s+/)[0] || '';
-    return returning(h) + '<label class="f" for="name">' + p.name + '</label><div class="row"><input id="name" value="' + esc(P.name) + '" maxlength="32" autocomplete="off" aria-label="Name">' + st + '</div>' + line +
+    var body = returning(h) + '<label class="f" for="name">' + p.name + '</label><div class="row"><input id="name" value="' + esc(P.name) + '" maxlength="32" autocomplete="off" aria-label="Name">' + st + '</div>' + line +
       '<label class="f">' + p.temper + '</label><div class="chipline">' + temps.map(function (x) { return '<button type="button" class="chip' + (x.id === P.temper ? ' on' : '') + '" data-act="g:temper:' + x.id + '" aria-pressed="' + (x.id === P.temper) + '">' + x.name + '</button>'; }).join('') + '</div>' +
       '<label class="f" style="margin-top:16px">' + p.quirks + ' <span class="muted" style="font-weight:400">· ' + p.quirksMax + '</span></label><div class="chipline">' + quirks.map(function (q) { var on = (P.quirks || []).indexOf(q.id) >= 0; return '<button type="button" class="chip' + (on ? ' on' : '') + '" data-act="g:quirk:' + q.id + '" aria-pressed="' + on + '">' + q.label + '</button>'; }).join('') + '</div>' +
       (t && short ? '<p class="small" style="margin:16px 0 0"><span class="who">' + esc(short) + '</span> “' + esc(t.sample[0]) + '”</p>' : '');
+    return h.fixedPersona && h.fixedPersona() ? '<p class="note" role="status">' + esc(p.fixed) + '</p><fieldset disabled style="border:0;padding:0;margin:0;min-width:0">' + body + '</fieldset>' : body;
   }
   function doorLabel(name) {
     return '<span class="door-label">' + root.SnapMarks.mark(name === 'Claude Code' ? 'Claude' : name) + '<span>' + esc(name) + '</span></span>';
@@ -209,6 +215,7 @@
 
   // ------------------------------------------------------------------ the AI door: a key, tested from this browser
   async function testKey(h, door) {
+    var attempt = ++keyTest;
     var el = root.document.querySelector('#key'), P = root.SnapProviders;
     var key = el && !el.dataset.saved ? el.value.trim() : g.keyText || keyOf(door);
     if (!key) { g.keyStatus = 'error'; g.keyMsg = C.key.placeholder + '.'; return h.render(); }
@@ -216,6 +223,9 @@
     var fn = P && (door === 'NEAR AI Cloud' ? P.nearai : door === 'Claude' ? P.claude : door === 'OpenRouter' ? P.openrouter : door === 'Codex' ? P.codex : null);
     if (!fn) { g.keyStatus = 'error'; g.keyMsg = 'This AI cannot be reached from the browser yet.'; return h.render(); }
     var r; try { r = await fn.test(key); } catch (e) { r = { ok: false, kind: 'other', message: e.message }; }
+    // A later test, edited key or different door supersedes this reply, including failures.
+    var selected = pick(h);
+    if (attempt !== keyTest || !selected || selected.route !== 'key' || selected.door !== door) return;
     if (r && r.ok) {
       store().set(KEY_STORE + door, key); store().set(LAST_STORE, door); g.keyText = ''; g.keyStatus = 'ok'; g.answer = r.say || '';
       h.P.door = { door: door, route: 'key', identity: door === 'Claude' ? 'Claude Console' : door, keyMask: mask(key), hi: g.answer }; h.save();
@@ -260,6 +270,7 @@
     if (x === 'close' || x === 'watch') return h.backToArena();
     if (x.indexOf('wallet:') === 0) { var id = x.slice(7); return id === 'dev-throwaway' ? h.devWallet() : h.connectWallet(id); }
     if (x === 'wallet-forget') { P.wallet = null; h.save(); return h.render(); }
+    if (h.fixedPersona && h.fixedPersona() && /^(build|temper:|quirk:)/.test(x)) return h.say(C.persona.fixed, true);
     if (x.indexOf('preset:') === 0) { h.setPreset(x.slice(7)); return h.render(); }
     if (x === 'use') { P.fighterChosen = true; h.save(); return h.claim(); }
     if (x === 'build') { P.fighterChosen = true; P.claim = null; if (!P.name) P.name = ''; h.save(); return h.go('personality'); }
@@ -267,11 +278,12 @@
     if (x.indexOf('quirk:') === 0) { var q = x.slice(6), qs = P.quirks || (P.quirks = []), i = qs.indexOf(q); if (i >= 0) qs.splice(i, 1); else if (qs.length < 2) qs.push(q); h.save(); return h.render(); }
     if (x.indexOf('door:') === 0) {
       var parts = x.split(':'), route = parts[1], door = parts.slice(2).join(':');
+      keyTest++;
       P.pick = { route: route, door: door }; h.save(); g.keyStatus = ''; g.keyText = ''; g.keyMsg = '';
       if (route === 'plan') { h.go('doors'); return requestCode(h, door); }
       return h.go('doors');
     }
-    if (x === 'other') { stopPlan(); P.pick = null; h.save(); return h.go('doors'); }
+    if (x === 'other') { keyTest++; stopPlan(); P.pick = null; h.save(); return h.go('doors'); }
     if (x === 'ai') { if (P.door && P.door.door) P.pick = { route: P.door.route, door: P.door.route === 'plan' ? P.door.identity : P.door.door }; h.save(); return h.go('doors'); }
     if (x === 'test') return testKey(h, P.pick.door);
     if (x.indexOf('cap:') === 0) { setCap(x.slice(4)); return h.render(); }
@@ -288,9 +300,9 @@
   // typing: the key (kept for Test), the other cap, the name (checked against the ring)
   var nameTimer = null;
   function input(t, h) {
-    if (t.id === 'key') { delete t.dataset.saved; g.keyText = t.value; if (g.keyStatus && g.keyStatus !== 'testing') { g.keyStatus = ''; } return true; }
+    if (t.id === 'key') { keyTest++; delete t.dataset.saved; g.keyText = t.value; g.keyStatus = ''; return true; }
     if (t.id === 'cap-other') { setCap(t.value.trim()); refreshBar(h); return true; }
-    if (t.id === 'name') { h.P.name = t.value; h.save(); g.name.picked = ''; g.name.free = null; root.clearTimeout(nameTimer); nameTimer = root.setTimeout(function () { checkName(h); }, 350); refreshBar(h); return true; }
+    if (t.id === 'name') { if (h.fixedPersona && h.fixedPersona()) return true; h.P.name = t.value; h.save(); g.name.picked = ''; g.name.free = null; root.clearTimeout(nameTimer); nameTimer = root.setTimeout(function () { checkName(h); }, 350); refreshBar(h); return true; }
     return false;
   }
   function refreshBar(h) {   // the bar and the name status change while typing; the field keeps focus (render keeps it)
@@ -305,6 +317,7 @@
   // entering the name step: a default name (empty, or the claimed premint's own) that is in the ring gets a free variant
   async function enterPersona(h) {
     var P = h.P, base = String(P.name || '').trim(), isDefault = !base || (P.claim && base === P.claim.name) || base === 'Newcomer';
+    if (h.fixedPersona && h.fixedPersona()) { g.name.checked = P.name; g.name.free = true; g.name.picked = ''; h.render(); return; }
     if (!isDefault) return checkName(h);
     var taken = await h.ringNames(), name = base || 'Newcomer', n = 2;
     if (String(P.name || '').trim() !== base) return checkName(h);   // the player typed a name meanwhile: theirs stands

@@ -53,6 +53,10 @@ a,.link{color:var(--green);text-decoration:underline;text-underline-offset:3px;f
 .li:hover{background:#f8eedb}
 .li.sel{background:#e5f4ec}
 .li .material{display:none}
+/* A single wallet action needs a button edge and a forward cue, rather than an unadorned list row. */
+.li[data-act="g:wallet:choose"]{grid-template-columns:1fr auto auto;margin:6px 0 10px;padding:14px 16px;border:1.5px solid #a08252;border-radius:8px;background:var(--paper);box-shadow:0 3px 0 #c9bb9c;cursor:pointer}
+.li[data-act="g:wallet:choose"]:after{content:'→';font:24px 'Lilita One';color:var(--green)}
+.li[data-act="g:wallet:choose"]:hover{background:var(--field);border-color:#725031}
 .chipline{display:flex;gap:var(--s2);flex-wrap:wrap}
 .chip{font:700 12px 'Space Mono';padding:7px 11px;border:1.5px solid var(--rule);background:var(--paper);border-radius:4px;min-height:34px}
 .chip .material{display:none}

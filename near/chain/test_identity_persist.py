@@ -196,8 +196,9 @@ class Persistence(unittest.TestCase):
             self.assertEqual(stored['signins'], {})
             self.assertEqual(stored['confirmed'], [])
             data.write_text('{')
-            with self.assertRaisesRegex(identity.chaincfg.ConfigError, 'identity session state'):
-                make()
+            recovered = make()
+            self.assertEqual((recovered.signins, recovered.confirmed, recovered.used), ({}, {}, {}))
+            self.assertEqual(data.read_text(), '{')
 
 
 if __name__ == '__main__':

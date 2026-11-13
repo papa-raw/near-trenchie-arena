@@ -19,7 +19,7 @@
       moves: { Swing: 'Swing: hits every foe in an arc in front of you.', Lunge: 'Lunge: dashes to the target and hits on arrival.', Beam: 'Beam: winds up, then hits along a line.',
                Lob: 'Lob: drops a burst into a marked circle.', Zap: 'Zap: hits one foe, then jumps to others.' },
       sigs: { Shockwave: 'Shockwave: a ring blast around you. It fires when a foe is close, or when your HP is low.' } },
-    persona: { title: 'Name and personality', name: 'Name', free: '✓ Free', taken: '{taken} is in the ring, so we picked another name.',
+    persona: { title: 'Name and personality', name: 'Name', free: '✓ Free', fixed: 'This Trenchie’s name and personality were fixed when it was minted. You can still choose its AI and change how it fights.', taken: '{taken} is in the ring, so we picked another name.',
       inRing: '✗ {name} is in the ring now. Pick another name.', temper: 'Temperament', quirks: 'Quirks', quirksMax: 'up to 2', next: 'Next: AI' },
     doors: { title: 'Choose its AI', line: 'Your Trenchie fights with your AI. You choose; there is no default.',
       keyGroup: 'API key, in this browser', planGroup: 'Your plan, through your own agent session',
@@ -72,7 +72,7 @@
   };
   // the trenchie panel on the arena page (board 1's fight, thinking, changecap, capped, bench, agent and closed states)
   C.panel = {
-    life: 'Life {life} · {source}', session: '{agent} session', hp: 'HP', follow: 'Follow', close: 'Close panel',
+    life: 'Life {life} · {source}', session: '{agent} session', hp: 'HP', leave: 'Leave', leaving: '{name} is swimming home…', leaveFailed: 'Could not leave: {why}. Try Leave again.', leaveAgent: 'Ask your agent to leave the arena from its session.', close: 'Close panel',
     states: { fight: 'Fighting', thinking: 'Thinking…', bench: 'Bench · held', benchDown: 'Bench', capped: 'Own tactics' },
     gearH: 'Equipped', bag: 'Bag · {n}', bagHint: 'Swap on the bench.', slots: { head: 'Head', body: 'Body', weapon: 'Weapon', trinket: 'Trinket' },
     money: { hour: 'This hour {spent} of your {cap} cap', visit: 'This visit {visit}', rate: 'About $0.10 an hour', change: 'Change cap', resets: 'Resets at {time}', set: 'Set cap', caps: ['$0.10', '$0.20', '$0.50', '$1.00'] },

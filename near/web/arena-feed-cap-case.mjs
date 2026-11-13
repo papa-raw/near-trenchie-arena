@@ -38,8 +38,8 @@ for (let i = 1; i <= 3; i++) feed.push({ kind: 'say', who: 'a', text: long(i) })
 ok(feed.box.offsetHeight <= PHONE_MAX, 'long lines: the box stays within the cap (' + feed.box.offsetHeight.toFixed(1) + ' px)');
 ok(feed.list.children.length >= 1 && feed.list.children.length < 3, 'long lines: the oldest dropped out (' + feed.list.children.length + ' shown)');
 const last = feed.list.children[feed.list.children.length - 1];
-ok(text(last).includes('line 3:') && text(last).endsWith('eventually, and so do I”'), 'the newest slip shows, whole');
-ok(feed.list.children.every((li) => /”$/.test(text(li))), 'every shown slip is whole (no slip cut)');
+ok(text(last).includes('line 3:') && text(last).endsWith(long(3)), 'the newest plain feed line shows, whole');
+ok(feed.list.children.every((li) => li.children.some((c) => c.className === 'line' && c.children.some((part) => part.tag === 'em' && [1, 2, 3].some((i) => part.textContent === long(i))))), 'every shown spoken line keeps its complete italic text');
 
 // one slip taller than the cap on its own: it still shows (the newest always shows)
 feed.push({ kind: 'say', who: 'b', text: 'x'.repeat(400) });

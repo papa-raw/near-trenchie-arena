@@ -36,12 +36,12 @@ if (mode === 'dataset') {
   assert.doesNotMatch(line({ text:'(o_o)', blocked:true, muted:false, label:null }), /fraud/);
   assert.match(line({ text:'(o_o)', blocked:true, muted:false, label:'autopilot' }), /blocked line · autopilot/);
 } else if (mode === 'collision') {
-  // Q4 (Pat): no emoji over a head, so no speech mark can cover a tag; the emoji rides in the feed line beside the name
+  // Approved Q4: no emoji over a head; the emoji rides in the feed line beside the name.
   assert.equal(social.placeSpeechPanel, undefined); assert.equal(social.SAY_EMOJI_MS, undefined);
   const said = []; const view = new social.Social({ roster: [] }, { onSay: (item) => said.push(item) });
   view.apply({ version: 1, players: [], feed: [{ id: 7, who: 'dev-pebble', text: 'A calm shore.', emoji: '\u{1F5FF}' }] });
   const sl = feed.slip(said[0], (id) => id);
-  assert.deepEqual([sl.who, sl.emoji, sl.parts[0].text], ['dev-pebble', '\u{1F5FF}', '“A calm shore.”']);
+  assert.deepEqual([sl.who, sl.emoji, sl.parts[0].text], ['dev-pebble', '\u{1F5FF}', 'A calm shore.']);
 } else throw new Error('Choose dataset, focus, name, blocked or collision');
 process.stdout.write(JSON.stringify({ mode, ok: true })+'\n');
 }

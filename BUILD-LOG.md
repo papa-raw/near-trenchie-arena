@@ -347,6 +347,60 @@ The explainer page got a full read and edit: shorter steps, Trenchie with a capi
 
 Check: open `near/web/docs.html`.
 
+## 2026-11-13 · Limits after the red-team review
+
+A red-team review found ways to overload spectator connections and sign-in reads. Both now have limits; the house also charges model calls with unknown outcomes against its budget and stops calls when spend history cannot be read. The text guard refuses wallet and recovery-phrase lures without muting ordinary fight lines.
+
+Check: `python3 -I near/chain/test_signin_limits.py && python3 -B near/arena/test_spectator_limits.py && python3 -B near/house/test_spend_failures.py && python3 -B near/house/test_public_text.py`.
+
+## 2026-11-13 · Choose a NEAR wallet
+
+Sign-in now uses NEAR Connect's wallet chooser instead of our fixed shortlist. Players can choose any compatible NEAR wallet offered by the chooser and prove their account with a signed message. The AI doors use that sign-in too, so connecting an agent no longer loses the wallet's authorization.
+
+Check: open https://neartrenchies.xyz/web/snapin/index.html and choose Connect a NEAR wallet.
+
+## 2026-11-13 · House fighters keep attacking at low health
+
+House plans now chase enemies at every health level, with retreat, loot-seeking and holding a spot turned off. The attack gate stays open inside reflexes too, so a low-health rule cannot stop the fight. A house fighter also drops a stale chase and picks another target when it stops making useful progress; a player's own plan is unchanged.
+
+Check: `python3 -B near/house/test_chaos_engage.py && python3 -B near/house/test_stale_pursuit.py`.
+
+## 2026-11-13 · Steps instead of sliding
+
+Slow walks now show steps instead of sliding across the island. Fighters turn along the short arc and keep their foot pose through the brief freeze when a hit lands, which removes the jitter. These are drawing changes; hits and KOs still happen on the same engine ticks.
+
+Check: `node near/web/arena-slow-walk-case.mjs && node near/web/arena-jitter-case.mjs`.
+
+## 2026-11-13 · Correct predictions are counted
+
+The feed now calls a prediction correct without adding points. The prediction board ranks fighters by how many correct calls they made today, with players and house listed apart. Older numeric fields stay in the public record for compatibility; optional testnet NEAR rewards keep their separate calculation.
+
+Check: open https://neartrenchies.xyz/house/leaderboards.json and read `boards.most_correct_day`.
+
+## 2026-11-13 · A restart brings your fighter back
+
+Sign-ins and confirmed Trenchies now reload after a server restart with their original expiry times. An open browser page brings its fighter back with the same AI settings and hourly cap, without another wallet message. Choosing the bench or leaving prevents that return, and ownership is checked again before registration and each life.
+
+Check: `python3 -I near/chain/test_identity_persist.py && NODE_PATH=near/members/node_modules node near/web/snapin/qa/rejoin_restart_case.cjs` after the README setup steps.
+
+## 2026-11-13 · Drops disappear after 30 seconds
+
+An item nobody grabs now disappears after 30 seconds, under the new integer-17 rules table. Earlier rules tables stay unchanged, so an old fight still replays with the lifetime it had then. The arena uses the drop's recorded expiry for its final flicker and removal.
+
+Check: `python3 -B near/arena/test_floor_30s.py`.
+
+## 2026-11-13 · Codex gets through the first join
+
+The downloaded client now waits for ownership and inventory reads instead of giving up on the first join. An interrupted attempt can recover its unexpired pairing code from the same client address, even with a fresh process and key. Once paired, the code cannot be used again. The client ZIP is built once per host process and reused for later downloads.
+
+Check: `python3 -B near/arena/test_codex_ownership.py && python3 -B near/arena/test_client_bundle_cache.py && python3 -B near/arena/test_code_reclaim.py`.
+
+## 2026-11-13 · A shorter README
+
+The README now starts with how to bring an AI into the live arena. It separates mainnet identity from testnet game records and explains what the public prediction history is for. Screenshots and shorter setup text sit beside the same 17 reviewer steps.
+
+Check: open `README.md`, starting with the live guide link and the Try it section.
+
 ## Not in this repo yet
 
 Still to come, in no set order:

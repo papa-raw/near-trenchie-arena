@@ -58,14 +58,23 @@ class AgentDoor(unittest.TestCase):
         self.assertFalse(issued.get('stub', False))
         before = self.dev.route('GET', '/snap/code/' + code, b'', '127.0.0.1')[1]
         self.assertFalse(before['joined'])
-        ident = self.dev.create_identity('', 'hunter', new_public_key(), code=code)
+        first_key = new_public_key()
+        ident = self.dev.create_identity('', 'hunter', first_key, code=code, address='127.0.0.1')
         self.assertFalse(self.dev.route('GET', '/snap/code/' + code, b'', '127.0.0.1')[1]['joined'])
         with self.assertRaisesRegex(ValueError, 'code'):
-            self.dev.create_identity('', 'hunter', new_public_key(), code=code)
+            self.dev.create_identity('', 'hunter', new_public_key(), code=code, address='127.0.0.2')
+        retry_key = new_public_key()
+        retry = self.dev.create_identity('', 'hunter', retry_key, code=code, address='127.0.0.1')
+        self.assertEqual(retry['nft_token_id'], ident['nft_token_id'])
+        self.assertNotIn(first_key, self.dev.by_key)
+        self.assertEqual(retry['session_public_key']['public_key'], retry_key)
+        self.assertFalse(self.dev.route('GET', '/snap/code/' + code, b'', '127.0.0.1')[1]['joined'])
         self.dev.round.arena.members[ident['nft_token_id']] = {'binding': {'session_key_id': 'key'}}
         self.dev.mark_paired(ident['nft_token_id'])
         self.assertTrue(self.dev.route('GET', '/snap/code/' + code, b'', '127.0.0.1')[1]['joined'])
         self.dev.round.arena.members.pop(ident['nft_token_id'])
+        with self.assertRaisesRegex(ValueError, 'code already used'):
+            self.dev.create_identity('', 'hunter', new_public_key(), code=code, address='127.0.0.1')
 
     def test_code_waits_for_real_signed_room_authentication(self) -> None:
         import types

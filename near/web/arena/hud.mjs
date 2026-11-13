@@ -49,7 +49,7 @@ export class Hud {
     this.lives = new Lives();
     // the top-left KO banner, as at ebb97a0: the panel art's hanging tags (House, and Players when any), their labels, the lead banner
     this.layerHost = document.createElement('div'); this.layerHost.style.cssText = 'position:absolute;left:0;top:0;z-index:3;'; root.appendChild(this.layerHost);
-    this.cardLayer = document.createElement('div'); this.cardLayer.className = 'ha-layer ha-candle'; this.cardLayer.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:3;transform-origin:0 0;transform:scale(' + BANNER_SCALE + ');'; root.appendChild(this.cardLayer);
+    this.cardLayer = document.createElement('div'); this.cardLayer.className = 'ha-layer ha-cards'; this.cardLayer.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:3;transform-origin:0 0;transform:scale(' + BANNER_SCALE + ');'; root.appendChild(this.cardLayer);
     this.artCache = null; this.artRects = {}; this.cardList = []; this.cardRects = []; this.mounting = false; this.lastMount = 0; this.sig = ''; this.bannerLead = null; this.leadAt = 0; this.board = null; this.roster = null;
     this.feed = new Feed(document, this.ui, { name: (id) => this.nameOf(id), colour: (id) => this.colourOf(id), dev: isDev });
     this.feed.list.classList.add('arena-say-feed');
@@ -157,7 +157,7 @@ export class Hud {
     for (const f of list) {
       seen.add(f.id); const bucket = Math.max(0, Math.min(10, Math.round(f.hp * 10)));
       let b = this.bars.get(f.id);
-      if (!b) { const el = document.createElement('div'); el.className = 'ha-p'; el.style.cssText = 'position:absolute;left:0;top:0;will-change:transform;'; this.barLayer.appendChild(el); b = { el, bucket: -1 }; this.bars.set(f.id, b); }
+      if (!b) { const el = document.createElement('div'); el.className = 'ha-p'; el.dataset.kind = 'world'; el.style.cssText = 'position:absolute;left:0;top:0;will-change:transform;'; this.barLayer.appendChild(el); b = { el, bucket: -1 }; this.bars.set(f.id, b); }
       if (b.bucket !== bucket) { b.el.innerHTML = this.barHtml[bucket]; b.bucket = bucket; const r = b.el.firstElementChild ? b.el.firstElementChild.getBoundingClientRect() : null; b.w = (r && r.width) || 46; b.h = (r && r.height) || 8; }
       const bx = f.x - (b.w || 46) / 2, by = f.y + (narrow ? 4 : 6);
       b.el.style.transform = 'translate(' + bx.toFixed(1) + 'px,' + by.toFixed(1) + 'px)';

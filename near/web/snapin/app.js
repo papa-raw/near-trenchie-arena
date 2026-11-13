@@ -116,6 +116,7 @@
   var presetIdx = function () { return Math.max(0, PRESETS.indexOf(P.preset)); };
   function look() { return P.look || Object.assign({}, PRESET_LOOK[presetIdx()]); }
   function setPreset(name) {
+    if (fixedPersona() && name !== P.preset) return say('This Trenchie keeps the battle option and personality it was minted with.', true);
     var i = PRESETS.indexOf(name); if (i < 0) return;
     P.preset = name; if (!P.lookEdited) P.look = null;   // a look the player styled stays when the battle option changes
     P.slots = { weapon: PRESET_WEAPON[i], head: 'Cap', body: 'Tee', trinket: 'Roll' }; save();
@@ -156,6 +157,7 @@
   // "Restore <name>" on the Personality step brings the premint persona back when the player wants it.
   function claimedHere() { return !!(P.claim && P.claim.digest && P.claim.preset === P.preset); }
   async function claimOption() {
+    if (CHAIN && P.wallet && P.wallet.chain && P.wallet.chain.owned.length) { await bindOwnedPersona(); return go('personality'); }
     if (claimedHere()) return go('personality');
     await loadPremint(true);   // pressed before the premint personas arrived (or after a failed read): wait for them rather than fail
     var id = presetId(), e = premintFor(id), SS = root.SnapSheet;
@@ -171,8 +173,51 @@
   }
   function buildSheet() {
     var SS = root.SnapSheet; if (!SS) return null;
+    if (fixedPersona()) return JSON.parse(JSON.stringify(P.minted.sheet));
     if (claimIntact()) return JSON.parse(JSON.stringify(P.claim.sheet));   // the claimed premint persona, exactly as minted
     try { return SS.build(sheetState()); } catch (e) { return { error: e.message }; }
+  }
+  function fixedPersona() {
+    var ch = P.wallet && P.wallet.chain;
+    return !!(CHAIN && ch && P.minted && P.minted.account === P.wallet.accountId &&
+      ch.owned.some(function (t) { return t.token_id === P.minted.token; }));
+  }
+  async function originalSheet(token, candidates) {
+    var SS = root.SnapSheet, sheet = null;
+    for (var k = 0; k < candidates.length; k++) {
+      if (candidates[k] && !candidates[k].error && await SS.digest(candidates[k]) === token.persona_digest) sheet = candidates[k];
+    }
+    await loadPremint(true);
+    var option = Object.keys(PM.opts || {}).filter(function (id) { return PM.opts[id].digest === token.persona_digest; })[0];
+    var meta = option && PM.opts[option];
+    if (!sheet && meta) {
+      var response = await root.fetch('premint/' + meta.file, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Could not load this Trenchie’s original persona. Try again.');
+      sheet = await response.json();
+    }
+    if (!sheet || await SS.digest(sheet) !== token.persona_digest) throw new Error('This Trenchie’s original persona sheet is not saved in this browser. Restore that sheet before continuing.');
+    return { sheet: sheet, option: option, meta: meta };
+  }
+  async function bindOwnedPersona() {
+    var ch = P.wallet && P.wallet.chain;
+    if (!CHAIN || !ch || !ch.owned.length) return;
+    var SS = root.SnapSheet, draft = buildSheet(), dg = draft && !draft.error ? await SS.digest(draft) : '';
+    var ids = ch.token ? [{ token_id: ch.token }] : ch.owned, tokens = [], token = null;
+    for (var i = 0; i < ids.length; i++) {
+      var t = await root.SnapIdentity.inspectOwned(ids[i].token_id); tokens.push(t);
+      if (t.persona_digest === dg) token = t;
+    }
+    token = token || (tokens.length === 1 ? tokens[0] : null);
+    if (!token) throw new Error('Choose the original persona of one of your owned Trenchies before continuing.');
+    var found = await originalSheet(token, [draft, P.sheet, P.claim && P.claim.sheet, P.minted && P.minted.sheet]);
+    var preset = SS.PRESETS.filter(function (p, ix) { return p.id === (found.option || token.preset_id) || 'preset-' + (ix + 1) === token.preset_id; })[0];
+    if (!preset) throw new Error('This Trenchie’s battle option is not available in this guide.');
+    P.minted = { account: P.wallet.accountId, token: token.token_id, digest: token.persona_digest, sheet: JSON.parse(JSON.stringify(found.sheet)) };
+    P.preset = preset.name; P.name = found.sheet.game.name; P.sheet = JSON.parse(JSON.stringify(found.sheet));
+    var temper = SS.TEMPERAMENTS.filter(function (t) { return t.name === found.sheet.game.temperament; })[0];
+    if (temper) P.temper = temper.id;
+    if (found.meta) { P.quirks = found.meta.quirks.slice(); P.voice = found.meta.voice; }
+    ch.token = token.token_id; save();
   }
 
   // ------------------------------------------------------------------ pieces
@@ -313,6 +358,7 @@
   var joining = false;
   async function startJoin() {
     if (joining || !root.SnapRoom) return; joining = true;
+    try { await bindOwnedPersona(); } catch (e) { joining = false; say(e.message, true); return; }
     // the player chose: snap this trenchie back in (a failure shows its own reason). Its own held round result may be read
     // only when the trenchie snapping in is the one whose seat ended (another player's result is never read here)
     // and only within the host's grace for an unread result (180 s from its round's claim; 210 s from when this page saw the
@@ -345,7 +391,7 @@
         compute: { harness: 'browser', model: P.door && P.door.door ? String(P.door.door).slice(0, 96) : 'none-yet', source: 'owner', effort: 'standard' } });
       if (P.timing && P.timing.wallet && !P.timing.ring) { P.timing.ring = Date.now(); save(); }   // measured once: the first brawl after connecting
     } catch (e) { /* the status carries the message; the view shows it with a way back */ }
-    joining = false; render();
+    joining = false; V.msg = ''; V.msgErr = false; render();
   }
   function aiChip() { return P.wallet ? 'Wallet · ' + esc(P.wallet.network || NETWORK) + ' connected' + (P.wallet.accountId ? ' · ' + esc(shortAcct(P.wallet.accountId)) : '') : ''; }
 
@@ -576,7 +622,7 @@
     // keep keyboard focus on the same control across a re-render (a toggle, a status change)
     var fa = doc.activeElement, refocus = fa && fa.dataset && fa.dataset.act ? '[data-act="' + fa.dataset.act.replace(/"/g, '\\"') + '"]' : fa && fa.dataset && fa.dataset.spread != null ? '[data-spread="' + fa.dataset.spread + '"]' : (fa && fa.id && app.contains(fa) ? '#' + fa.id : '');
     var caret = fa && typeof fa.selectionStart === 'number' ? [fa.selectionStart, fa.selectionEnd] : null;
-    css(boardMode());
+    if (!css(boardMode())) return;  // keep the current styled screen until its replacement sheet is ready
     if (boardMode()) return renderBoard(refocus, caret);
     var flowAI = V.mode === 'flow' && (V.step === 'doors'), v = V.mode === 'login' || flowAI ? viewLogin() : V.mode === 'workshop' ? viewWorkshop() : viewFlow();
     var draft = v.ai ? 'b' : 'a', board = V.mode === 'login' || flowAI ? 'S4' : V.mode === 'workshop' ? 'S2' : 'S1';
@@ -590,8 +636,21 @@
   }
   // ------------------------------------------------------------------ board 1: the guide's steps before the ring (guide.js)
   function boardMode() { return !!root.SnapGuide && V.mode === 'flow' && V.step !== 'ring' && !V.closed; }
-  function css(board) {   // board 1's sheet and the older panels' sheet never apply together (their class names overlap)
-    var a = doc.getElementById('css-snapin'), b = doc.getElementById('css-board1'); if (a) a.disabled = board; if (b) b.disabled = !board;
+  function css(board) {   // never remove the current sheet while the other screen's sheet is still fetching
+    var a = doc.getElementById('css-snapin'), b = doc.getElementById('css-board1'), on = board ? b : a, off = board ? a : b;
+    if (on && on.disabled) on.disabled = false;
+    if (on && !on.sheet) {
+      on.onload = function () { on.onload = on.onerror = null; render(); };
+      on.onerror = function () {
+        on.onload = on.onerror = null; on.disabled = true;
+        var feedback = doc.getElementById('feedback') || app.querySelector('[role="status"]');
+        if (feedback) { feedback.textContent = 'Page styles could not load. Reload this page to continue.'; feedback.setAttribute('role', 'alert'); }
+      };
+      return false;
+    }
+    if (on) on.onload = on.onerror = null;
+    if (off && !off.disabled) off.disabled = true;
+    return true;
   }
   var lastPhone = null;
   function renderBoard(refocus, caret) {
@@ -628,7 +687,7 @@
     var ch = P.wallet && P.wallet.chain;
     var signed = !CHAIN || !ch ? '' : 'Signed in. ' + (ch.owned && ch.owned.length ? 'Your Trenchie: ' + ch.owned[0].token_id + '.' : ch.offer && ch.offer.kind === 'claim' ? 'A free Trenchie is waiting for you (' + ch.offer.held + ' left).' : 'A new Trenchie is a paid mint: ' + yoctoNear(ch.offer && ch.offer.cost_yocto) + ' NEAR, signed in your wallet when you enter the arena.');
     var fighter = !CHAIN ? '' : ch && ch.offer && ch.offer.kind === 'claim' ? 'Use this preset to claim its premint for free (one per wallet, first come); a fighter you build is a paid mint.' : 'Every free premint is claimed: a new Trenchie is a paid mint your wallet signs when you enter the arena.';
-    return { on: !!CHAIN, network: NETWORK, signed: signed, fighter: fighter };
+    return { known: !!(root.SnapIdentity && root.SnapIdentity.state().modeKnown), retrying: !!V.modeRetrying, on: !!CHAIN, network: NETWORK, signed: signed, fighter: fighter };
   }
   // board 1: Snap in lands on the trenchie panel in the arena (SPEC state 'fight'), when the session can cross pages (its
   // key kept in this browser's storage); a browser that cannot keep it stays here, where the trenchie is safe while this
@@ -654,6 +713,7 @@
     if (!CHAIN) return root.SnapProviders.snap.requestCode(args);
     var ch = P.wallet && P.wallet.chain;
     if (!ch) throw new Error('Sign in with your wallet first (step 1).');
+    await bindOwnedPersona();
     var sh = buildSheet();
     if (!sh || sh.error) throw new Error((sh && sh.error) || 'the persona sheet could not be built');
     say(ch.owned && ch.owned.length ? 'Checking ' + ch.owned[0].token_id + ' is still yours…' : ch.offer && ch.offer.kind === 'claim' && claimIntact() ? 'Claiming your free Trenchie on ' + NETWORK + '…' : 'Approve the paid mint in your wallet (' + yoctoNear(ch.offer && ch.offer.cost_yocto) + ' NEAR)…');
@@ -667,6 +727,7 @@
     } finally { say(''); }
   }
   var guideHost = { P: P, V: V, go: function (s) { go(s); }, save: function () { save(); }, render: function () { render(); }, say: function (m, e) { say(m, e); }, backToArena: function () { backToArena(); },
+    fixedPersona: fixedPersona,
     devWallet: function () { devWallet(); }, connectWallet: function (id) { connectWallet(id); }, setPreset: function (n) { setPreset(n); }, claim: function () { return claimOption(); },
     requestCode: requestPlanCode,
     ringNames: ringNames, loadTerms: function () { loadTerms(); }, chain: chainInfo, loadPremint: function () { return loadPremint(); }, shortAcct: function (a) { return shortAcct(a); }, snapIn: function () { snapIn(); }, returning: returningLine };
@@ -685,7 +746,7 @@
         say('Sign the sign-in message in ' + (r.walletName || 'your wallet') + ' (a message, not a transaction: no cost)…');
         try {
           var si = await root.SnapIdentity.signIn();
-          P.wallet = { id: r.walletId, name: r.walletName, accountId: si.account, network: si.network, chain: { owned: si.owned, offer: si.offer } }; P.timing = { wallet: Date.now() }; go('presets');
+          P.wallet = { id: r.walletId, name: r.walletName, accountId: si.account, network: si.network, chain: { owned: si.owned, offer: si.offer } }; P.timing = { wallet: Date.now() }; await bindOwnedPersona(); go('presets');
         } catch (e2) { P.wallet = null; say('Not signed in: ' + e2.message + '. Try again, or keep watching.', true); }
       }
       else if (r && (r.ok !== false) && (r.accountId || r.account)) { P.wallet = { id: r.walletId, name: r.walletName, accountId: r.accountId || r.account, network: r.network || NETWORK }; P.timing = { wallet: Date.now() }; go('presets'); }
@@ -824,7 +885,25 @@
       }, function () { V.checking = false; render(); });   // the worker looks in IndexedDB itself; nothing saved answers 'none'
     }
     if (V.mode === 'flow' && V.step === 'agree') loadTerms();
-    if (root.SnapIdentity) root.SnapIdentity.mode().then(function (m) { CHAIN = m; if (m) { NETWORK = m.identity_network; if (P.wallet) { P.wallet = null; save(); if (V.mode === 'flow' && V.step !== 'wallet') go('wallet'); } } render(); });   // chain mode: a page's sign-in lives in its memory, so a fresh page signs in again (a DEV wallet never carries over)
+    if (root.SnapIdentity) {
+      // Retry serially after 1, 2, 4, 8 seconds, then every 15 seconds until the host mode is known.
+      var modeRetryMs = 1000;
+      function loadIdentityMode() {
+        root.SnapIdentity.mode().then(function (m) {
+          if (!root.SnapIdentity.state().modeKnown) {
+            if (!V.modeRetrying) { V.modeRetrying = true; render(); }
+            root.setTimeout(loadIdentityMode, modeRetryMs);
+            modeRetryMs = Math.min(modeRetryMs * 2, 15000);
+            return;
+          }
+          V.modeRetrying = false;
+          // A fresh page signs in again; a DEV wallet never carries over into chain mode.
+          CHAIN = m; if (m) { NETWORK = m.identity_network; if (P.wallet) { P.wallet = null; save(); if (V.mode === 'flow' && V.step !== 'wallet') go('wallet'); } }
+          render();
+        });
+      }
+      loadIdentityMode();
+    }
     render();
     if (boardMode()) root.SnapGuide.enter(V.step, guideHost);
     if (V.mode === 'workshop' && V.tab === 'respawn') startCorner();

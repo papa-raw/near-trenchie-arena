@@ -5,6 +5,7 @@
 const assert = require('node:assert/strict'), crypto = require('node:crypto');
 const { chromium } = require('playwright');
 const HOSTS = require('./hosts.cjs');
+const PREMINT = require('../premint/meta/options.json')['brawler-swing'];
 const DEFAULTS = ['https://raw.githubusercontent.com/hot-dao/near-selector/refs/heads/main/repository/manifest.json', 'https://cdn.jsdelivr.net/gh/azbang/hot-connector/repository/manifest.json'];
 (async () => {
   let browser, pageKey, claimCount = 0;
@@ -37,8 +38,8 @@ const DEFAULTS = ['https://raw.githubusercontent.com/hot-dao/near-selector/refs/
       if (e.op === 'signin') return r.fulfill({ json: { signin: 'case-signed-in', account_id: 'case-owner.near', trenchies: [], offer: { kind: 'claim', held: 1, cost_yocto: '0' } } });
       const payload = opened(e.op, e); assert.ok(payload);
       if (e.op === 'claim') { claimCount++; return r.fulfill({ json: { token_id: 'brawler-swing-case', account_id: 'case-owner.near', claim_tx: 'case-claim' } }); }
-      assert.equal(e.op, 'confirm'); assert.equal(payload.token_id, 'brawler-swing-case');
-      return r.fulfill({ json: { token_id: payload.token_id, account_id: 'case-owner.near' } });
+      assert.ok(['confirm', 'inspect'].includes(e.op)); assert.equal(payload.token_id, 'brawler-swing-case');
+      return r.fulfill({ json: { token_id: payload.token_id, account_id: 'case-owner.near', persona_digest: PREMINT.digest, preset_id: 'brawler-swing' } });
     });
     await context.route(base + '/snap/code', (r) => {
       const e = r.request().postDataJSON(), payload = opened('code', e); codes.push({ env: e, payload });

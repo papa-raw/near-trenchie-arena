@@ -21,6 +21,26 @@ if (!SPEC || !fs.existsSync(SPEC)) { console.log('FAIL give the path to SPEC.md 
 // ---- the SPEC's copy blocks: ### `state` ... ``` lines ```
 const COPY = {};
 fs.readFileSync(SPEC, 'utf8').split(/\n### `/).slice(1).forEach((sec) => { const id = sec.slice(0, sec.indexOf('`')), m = sec.match(/```\n([\s\S]*?)\n```/); if (m) COPY[id] = m[1].split('\n').map((l) => l.trim()).filter(Boolean); });
+// Approved 2026-11-13 updates supersede the historical drawing: 12:56 stock chooser, 13:39 Codex lead removal,
+// 14:05 network access, 14:49 current-client download, and integer-17's 30 s floor lifetime. Keep exact line checks.
+function replaceCopy(id, from, to) {
+  const lines = COPY[id], at = lines?.findIndex((_, i) => from.every((line, j) => lines[i + j] === line));
+  if (at == null || at < 0) throw new Error('Missing historical copy block in ' + id);
+  lines.splice(at, from.length, ...to);
+}
+for (const [id, network] of [['wallet', 'TESTNET'], ['wallet-mainnet', 'MAINNET']]) {
+  replaceCopy(id, ['Meteor', network, 'Intear', network, 'Nightly', network, 'Ethereum wallets', network], ['Connect wallet', network]);
+  replaceCopy(id, ['No wallet yet? Get Meteor ↗'], ['No wallet yet? Find a wallet ↗']);
+}
+replaceCopy('plan-codex', ['Your own Codex session plays your trenchie. It uses your ChatGPT plan, not a key.'], []);
+replaceCopy('plan-codex', ['codex "Join Trenchie Arena. Read https://neartrenchies.xyz/SNAP.md and follow it. Code K7QF-2M9D, trenchie Barnacle Bertie of the Low Tide."'], [
+  'codex -c sandbox_workspace_write.network_access=true "Join Trenchie Arena. Read https://neartrenchies.xyz/SNAP.md and follow it. Download the current client from the same site’s /snap-client.zip into a fresh folder first; do not use a local checkout. Code K7QF-2M9D, trenchie Barnacle Bertie of the Low Tide."',
+  'This lets Codex reach the internet so it can play. Run it in an empty folder.'
+]);
+for (const lines of Object.values(COPY)) {
+  const at = lines.indexOf('A KO drops one item. A rival can grab it; ungrabbed for 60 s, it is gone.');
+  if (at >= 0) lines[at] = 'A KO drops one item. A rival can grab it; ungrabbed for 30 s, it is gone.';
+}
 const TMP = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'board1-guide-'));
 (async () => {
   const port = 20000 + Math.floor(Math.random() * 20000), arenaUrl = 'http://127.0.0.1:' + port;
@@ -47,12 +67,12 @@ const TMP = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'board1-
     const lines = async () => (await cur.evaluate(() => document.querySelector('#app').innerText)).replace(/\u00a0/g, ' ').split('\n').map((l) => l.trim()).filter(Boolean);
     const S = {};   // this run's values for the SPEC's sample ones
     const swap = (l) => {
-      // Pat's verdict (2026-11-13 08:55): "Trenchie" is capitalised in all user-facing text; SPEC.md still writes "trenchie"
+      // Approved 2026-11-13 08:55: "Trenchie" is capitalised; the historical drawing uses lowercase.
       l = l.replace(/(?<![\w.\-/])trenchie(s?)(?![\w\-/]|\.\w)/g, 'Trenchie$1');   // not inside a key or a URL (trenchie.snapin, near-trenchie)
       if (S.wallet) l = l.split('tidepool42.testnet').join(S.wallet);
       if (S.name) l = l.split('Barnacle Bertie of the Low Tide').join(S.name);
       l = l.replace('Lantern Lou is in the ring', 'Barnacle Bertie is in the ring');
-      if (S.code && /^(claude|codex) "Join Trenchie Arena/.test(l)) l = l.replace('https://neartrenchies.xyz/SNAP.md', S.snap).replace('K7QF-2M9D', S.code);
+      if (S.code && /^(claude|codex)(?: -c sandbox_workspace_write.network_access=true)? "Join Trenchie Arena/.test(l)) l = l.replace('https://neartrenchies.xyz/SNAP.md', S.snap).replace('K7QF-2M9D', S.code);
       return l;
     };
     const same = (want, got) => { if (want === got) return true;

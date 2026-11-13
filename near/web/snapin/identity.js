@@ -7,7 +7,8 @@
  *                  for a challenge that names that key, and the wallet signs it (NEP-413, no transaction, no cost).
  *                  The host gives a sign-in id that is useless without this page's key: every later step is signed
  *                  by it (an envelope: op, sign-in id, time, the payload as text), and each is accepted once.
- *   getTrenchie()  confirms a trenchie the wallet owns; else a free claim of the chosen premint (only when the player
+ *   inspectOwned() reads an owned token's immutable persona without creating its inventory record.
+ *   getTrenchie()  confirms a trenchie whose minted digest matches the supplied sheet; else a free claim of the chosen premint (only when the player
  *                  plays that premint's persona); else a paid mint the wallet signs itself with the host's permit for the
  *                  sheet the host checked. A mint the wallet sent is confirmed again on retry, never sent twice.
  *   ticket(token)  a signed one-use ticket for the room join (room.js sends it with the registration)
@@ -35,7 +36,7 @@
     deps = deps || {};
     var fetchFn = deps.fetch || (root.fetch && root.fetch.bind(root));
     var W = function () { return deps.wallet || root.SnapWallet; };
-    var state = { mode: null, signin: null, account: null, owned: [], offer: null, pending: null };
+    var state = { mode: null, modeKnown: false, signin: null, account: null, owned: [], offer: null, pending: null };
     var pageKey = null;   // {privateKey, pub}: only its public half leaves this browser
     async function authorization(write) {
       if (!root.indexedDB) return;
@@ -76,10 +77,16 @@
     async function step(op, payload) { return post(fetchFn, await envelope(op, payload)); }
 
     async function mode() {
+      state.modeKnown = false;
+      // Give a health read ten seconds, so a stalled request can retry after a restart.
+      var abort = root.AbortController ? new root.AbortController() : null;
+      var timeout = abort ? root.setTimeout(function () { abort.abort(); }, 10000) : null;
       try {
-        var r = await fetchFn('/dev/health', { cache: 'no-store' }); var h = await r.json();
-        state.mode = h && h.chain_mode ? h.chain_mode : null;
-      } catch (e) { state.mode = null; }
+        var r = await fetchFn('/dev/health', { cache: 'no-store', signal: abort ? abort.signal : undefined }); var h = await r.json();
+        state.modeKnown = !!(r.ok && h && typeof h === 'object' && !Array.isArray(h) && !h.error);
+        state.mode = state.modeKnown && h.chain_mode ? h.chain_mode : null;
+      } catch (e) { state.mode = null; }   // unknown mode keeps wallet actions disabled until a retry succeeds
+      finally { if (timeout !== null) root.clearTimeout(timeout); }
       return state.mode;
     }
 
@@ -106,8 +113,17 @@
         var was = state.pending; state.pending = null; state.owned = [{ token_id: cp.token_id }];
         return Object.assign({ how: 'paid', tx: was.tx }, cp);
       }
-      var pick = o.tokenId || (state.owned[0] && state.owned[0].token_id);
-      if (pick) return Object.assign({ how: 'owned' }, await step('confirm', { token_id: pick }));
+      var owned = o.tokenId ? [{ token_id: o.tokenId }] : state.owned;
+      if (owned.length) {
+        var sheets = root.SnapSheet || (typeof require === 'function' && require('./sheet.js'));
+        if (!o.sheet || !sheets) throw new Error('Send the original persona sheet for your owned Trenchie.');
+        var digest = await sheets.digest(o.sheet);
+        for (var i = 0; i < owned.length; i++) {
+          var found = await step('inspect', { token_id: owned[i].token_id });
+          if (found.persona_digest === digest) return Object.assign({ how: 'owned' }, await step('confirm', { token_id: found.token_id }));
+        }
+        throw new Error('Your owned Trenchie has a fixed personality. Restore its original persona before snapping in.');
+      }
       if (state.offer && state.offer.kind === 'claim' && o.claim) {
         var c1 = await step('claim', { preset: o.preset });
         state.owned = [{ token_id: c1.token_id }];
@@ -135,6 +151,7 @@
     async function codeRequest(args, tokenId) { return envelope('code', Object.assign({}, args, { nft_token_id: tokenId })); }
 
     return { mode: mode, signIn: signIn, getTrenchie: getTrenchie, ticket: ticket, codeRequest: codeRequest,
+             inspectOwned: function (tokenId) { return step('inspect', { token_id: tokenId }); },
              state: function () { return state; } };
   }
 

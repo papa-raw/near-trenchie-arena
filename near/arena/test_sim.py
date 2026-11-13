@@ -8,6 +8,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sim
+import replay
 
 
 class Determinism(unittest.TestCase):
@@ -328,7 +329,8 @@ class Combat(unittest.TestCase):
         a["rivals"] = ["b"]
         game._policy()
         self.assertEqual(a["target"], "b")
-        rules = sim.rules_dict(game.rules)
+        # Pin loot seeding independently of integer-17's shorter floor_ticks=600 lifetime.
+        rules = sim.rules_dict(replay.load_rules("852a82695da097598170e8dd4ab514a82010e68d483e544d434d9ea8e199d20e"))
         rules["combat_enabled"] = False
         game = sim.Sim(77, rules)
         game.run(1201)

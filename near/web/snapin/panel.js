@@ -40,8 +40,8 @@
   function phone() { return (root.innerWidth || 1440) <= 600; }
   function draft() { try { return JSON.parse(ls.get(SAVE) || '{}') || {}; } catch (e) { return {}; } }
 
-  var S = { open: ls.get(OPEN_STORE) !== '0', capEdit: false, capPick: null, raisePick: null, corner: null, codeLog: null, brain: null, draft: '', sending: false,
-            note: '', turns: [], visit: Date.now(), timer: null, el: null, room: null, swapMsg: '' };
+  var S = { open: ls.get(OPEN_STORE) !== '0', tab: 'chat', capEdit: false, capPick: null, raisePick: null, corner: null, codeLog: null, brain: null, draft: '', sending: false,
+            note: '', turns: [], visit: Date.now(), timer: null, el: null, room: null, swapMsg: '', leaving: false, leaveMsg: '' };
 
   // ------------------------------------------------------------------ who is mine, from which source
   function mine() {
@@ -49,7 +49,7 @@
     if (door.route === 'plan' && P.planCode && S.codeLog && S.codeLog.joined) {
       var L = S.codeLog; return { id: L.fighter_id, name: P.name || L.name, preset: P.preset, life: L.life, agent: door.identity === 'Codex' ? 'Codex' : 'Claude Code', plan: true };
     }
-    if (st && st.fighter && /^(in|joining|offline)$/.test(st.phase)) {
+    if (st && st.fighter && /^(in|joining|offline|leaving)$/.test(st.phase)) {
       // the host's bench.next_life is the coming life (on the bench, life_id already names it): the header shows the life just
       // ended while the trenchie is down or held, the current one in the ring
       var c = S.corner, bn = c && c.bench, life = bn && bn.next_life ? ((bn.down || bn.held) ? bn.next_life - 1 : bn.next_life) : (st.fighter.lives || 1);
@@ -73,9 +73,11 @@
     var st = stateOf(m), hp = m.plan ? S.codeLog && S.codeLog.hp : S.corner && S.corner.hp, max = m.plan ? S.codeLog && S.codeLog.max_hp : S.corner && S.corner.max_hp;
     var hpRow = hp != null && max ? '<div class="hprow"><span class="hpl">' + C.hp + '</span><div class="hp grow" role="img" id="pn-hpbar" aria-label="HP ' + hp + ' of ' + max + '"><i style="width:' + Math.max(0, Math.min(100, Math.round(100 * hp / max))) + '%"></i></div><span class="hpn" id="pn-hpn">' + hp + '/' + max + '</span><span class="state' + st[1] + '">' + C.states[st[0]] + '</span></div>' : '';
     var source = m.plan ? F(C.session, { agent: m.agent }) : m.door;
-    var fol = root.ArenaView && root.ArenaView.follow ? '<button type="button" class="plate fol" data-pn="follow">' + C.follow + '</button>' : '';
+    var room = root.SnapRoom, rs = room && room.status(), remote = m.plan && !(rs && rs.fighter && rs.fighter.id === m.id);
+    var busy = S.leaving || (rs && /^(joining|leaving)$/.test(rs.phase));
+    var leave = '<button type="button" class="plate leave" data-pn="leave"' + (busy || remote || !room || !room.leave ? ' disabled' : '') + (remote ? ' title="' + C.leaveAgent + '"' : '') + '>' + C.leave + '</button>';
     return '<div class="ph"><img src="' + avatar(m) + '" alt=""><div class="ph-mid"><h2>' + esc(m.name) + '</h2><div class="sub">' + esc(F(C.life, { life: m.life || 1, source: source }).replace(/ · $/, ''))   /* no AI door: no source after the dot */ + '</div>' + hpRow + '</div>' +
-      '<div class="ph-r"><div class="icons">' + fol + '<button type="button" class="ib plate" data-pn="close" aria-label="' + C.close + '">×</button></div></div></div>';
+      '<div class="ph-r"><div class="icons">' + leave + '<button type="button" class="ib plate" data-pn="close" aria-label="' + C.close + '">×</button></div></div></div>';
   }
   function equipped() { var b = S.corner && S.corner.bench; return b && Array.isArray(b.equipped) ? SLOTS.map(function (k) { return b.equipped.filter(function (x) { return x.slot === k; })[0]; }).filter(Boolean) : []; }
   function bag() { var b = S.corner && S.corner.bench; return b && Array.isArray(b.bag) ? b.bag : []; }
@@ -156,7 +158,6 @@
   function orderBox(m) {
     var O = C.order, short = shortOf(m.name);
     if (m.plan) return '<div class="order"><div class="readonly">' + esc(F(C.agent.box, { agent: m.agent })) + '</div></div>';
-    if (onBench()) return '<div class="order"><div class="spread"><span></span>' + (S.corner.bench.held ? '<button type="button" class="gold" data-pn="sendback">' + C.bench.send + '</button>' : '') + '</div></div>';
     // no AI door: no box that invites an order nothing can carry; where orders come from instead (chat.js's rule)
     if (!m.door) return '<div class="order"><div class="readonly">' + F(O.noDoor, { link: '<a class="link nodoor" href="' + esc(AI_STEP) + '">' + O.pickDoor + '</a>' }) + '</div></div>';
     if (capped()) {
@@ -180,8 +181,14 @@
   function html(m) {
     if (!S.open) return closedTab(m);
     var bench = !m.plan && onBench(), g = phone() ? 'left:0;right:0;top:290px;bottom:0' : 'right:12px;top:12px;bottom:12px;width:460px';
+    var chat = S.tab === 'chat', gear = bench ? benchBlock(m) + (S.corner.bench.held ? '<div class="order"><button type="button" class="gold" data-pn="sendback">' + C.bench.send + '</button></div>' : '') : gearRow(m);
+    var tabs = '<div class="pn-tabs" role="tablist" aria-label="Your Trenchie">' +
+      '<button type="button" class="plate" id="pn-tab-chat" role="tab" aria-controls="pn-chat" aria-selected="' + chat + '" tabindex="' + (chat ? '0' : '-1') + '" data-pn="tab:chat">Chat</button>' +
+      '<button type="button" class="plate" id="pn-tab-gear" role="tab" aria-controls="pn-gear" aria-selected="' + !chat + '" tabindex="' + (chat ? '-1' : '0') + '" data-pn="tab:gear"' + (bench ? ' aria-label="Gear: gear can be changed now"' : '') + '>Gear' + (bench ? ' <span class="gear-ready" aria-hidden="true">●</span>' : '') + '</button></div>';
     // data-arena-panel: the arena HUD keeps clear of this box while it is open (agreed with board 2's HUD); closed, it is not drawn
-    return '<div class="sign pnl' + (bench ? ' onbench' : '') + '" data-arena-panel data-material="wood" style="' + g + '"><div class="face">' + head(m) + gearRow(m) + money(m) + (bench ? benchBlock(m) : '') + logEntries(m) + orderBox(m) + '</div></div>';
+    return '<div class="sign pnl' + (bench ? ' onbench' : '') + '" data-arena-panel data-material="wood" style="' + g + '"><div class="face">' + head(m) + (S.leaveMsg ? '<div class="leave-msg" role="status">' + esc(S.leaveMsg) + '</div>' : '') + money(m) + tabs +
+      '<div class="pn-pane chat-pane" id="pn-chat" role="tabpanel" aria-labelledby="pn-tab-chat"' + (chat ? '' : ' hidden') + '>' + logEntries(m) + orderBox(m) + '</div>' +
+      '<div class="pn-pane gear-pane" id="pn-gear" role="tabpanel" aria-labelledby="pn-tab-gear" tabindex="0"' + (chat ? ' hidden' : '') + '>' + (gear || '<div class="readonly">Gear will appear here when the arena reports it.</div>') + '</div></div></div>';
   }
 
   // ------------------------------------------------------------------ draw, paint, keep focus and the log's place
@@ -190,10 +197,13 @@
     if (!m) { if (el) { el.innerHTML = ''; el.hidden = true; } root.dispatchEvent(new root.CustomEvent('snappanel', { detail: { shown: false } })); return; }
     if (!el) { el = S.el = doc.createElement('div'); el.id = 'b1-panel'; doc.body.appendChild(el); }
     el.hidden = false; el.className = 'b1p ' + (phone() ? 'w390' : 'w1440') + ' final';
-    var f = doc.activeElement, keep = f && f.id === 'pn-order' ? [f.selectionStart, f.selectionEnd] : null, log = el.querySelector('#pn-log'), atEnd = !log || log.scrollTop + log.clientHeight >= log.scrollHeight - 8, top = log ? log.scrollTop : 0;
+    var f = doc.activeElement, keep = f && f.id === 'pn-order' ? [f.selectionStart, f.selectionEnd] : null, log = el.querySelector('#pn-log');
+    if (log && log.clientHeight) { S.logAtEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 8; S.logTop = log.scrollTop; }
+    var gear = el.querySelector('#pn-gear'); if (gear && gear.clientHeight) S.gearTop = gear.scrollTop;
     el.innerHTML = html(m); S.lastShape = shape(); S.lastLog = logShape();
-    var nl = el.querySelector('#pn-log'); if (nl) nl.scrollTop = atEnd ? nl.scrollHeight : top;
-    if (keep) { var t = el.querySelector('#pn-order'); if (t) { t.focus({ preventScroll: true }); try { t.setSelectionRange(keep[0], keep[1]); } catch (e) { /* none */ } } }
+    var nl = el.querySelector('#pn-log'); if (nl) nl.scrollTop = S.logAtEnd !== false ? nl.scrollHeight : S.logTop || 0;
+    var ng = el.querySelector('#pn-gear'); if (ng) ng.scrollTop = S.gearTop || 0;
+    if (keep && S.tab === 'chat') { var t = el.querySelector('#pn-order'); if (t) { t.focus({ preventScroll: true }); try { t.setSelectionRange(keep[0], keep[1]); } catch (e) { /* none */ } } }
     root.requestAnimationFrame(function () { paint(el); });
     root.dispatchEvent(new root.CustomEvent('snappanel', { detail: { shown: true, open: S.open } }));
   }
@@ -205,7 +215,7 @@
       var r = el.getBoundingClientRect(), w = Math.round(r.width), hh = Math.round(r.height); if (!w || !hh) return;
       var art, gold = el.classList.contains('gold'), offd = el.disabled;
       if (el.dataset.material === 'wood') art = SKA.plank({ x: 0, y: 0, w: w, h: hh, text: '', cords: false, cordLen: 12, color: '#c9966a' }).svg;
-      else { var fill = offd ? '#eee3c6' : gold ? '#f7cf6b' : '#fff8ea'; art = SKA.plate({ x: 0, y: 0, w: w, h: hh, r: 8, fill: fill, rim: offd ? '#c9bb9c' : '#a08252', screws: false, cast: 'sk-cast-sm' }) + '<rect x="5" y="5" width="' + Math.max(0, w - 10) + '" height="' + Math.max(0, hh - 10) + '" rx="4" fill="' + fill + '"/>'; }
+      else { var fill = offd ? '#eee3c6' : gold ? '#f7cf6b' : el.classList.contains('leave') ? '#f9e5dc' : el.getAttribute('aria-selected') === 'true' ? '#9fdcc5' : '#fff8ea'; art = SKA.plate({ x: 0, y: 0, w: w, h: hh, r: 8, fill: fill, rim: offd ? '#c9bb9c' : '#a08252', screws: false, cast: 'sk-cast-sm' }) + '<rect x="5" y="5" width="' + Math.max(0, w - 10) + '" height="' + Math.max(0, hh - 10) + '" rx="4" fill="' + fill + '"/>'; }
       el.insertAdjacentHTML('afterbegin', SKA.svg(w, hh, art, ' class="material" aria-hidden="true"'));
     });
   }
@@ -251,7 +261,7 @@
     var c = S.corner ? Object.assign({}, S.corner, { events: null, hp: S.corner.hp == null ? null : 1, bench: S.corner.bench ? Object.assign({}, S.corner.bench, { respawn_in_ms: S.corner.bench.respawn_in_ms == null ? null : 1, remaining_ms: null }) : null, respawn_at_ms: null }) : null;
     var b = S.brain || {};
     var L = S.codeLog ? Object.assign({}, S.codeLog, { log: null, hp: S.codeLog.hp == null ? null : 1 }) : null;
-    return JSON.stringify([c, L, b.state, !!b.thinking, b.spendHourUsd, b.capUsd, cap(), capped(), (b.conversation || []).length, b.lastOrderTiming, S.turns, S.open, S.capEdit, S.capPick, S.raisePick, S.sending, S.note, S.swapMsg, phone(), !!(root.ArenaView && root.ArenaView.follow)]);
+    return JSON.stringify([c, L, b.state, !!b.thinking, b.spendHourUsd, b.capUsd, cap(), capped(), (b.conversation || []).length, b.lastOrderTiming, S.turns, S.open, S.tab, S.capEdit, S.capPick, S.raisePick, S.sending, S.note, S.swapMsg, S.leaving, S.leaveMsg, phone()]);
   }
 
   // ------------------------------------------------------------------ actions
@@ -272,13 +282,31 @@
     render();
   }
   function setCap(v) { if (v > 0) ls.set(CAP_STORE, String(v)); }
+  async function leave() {
+    var R = root.SnapRoom, rs = R && R.status(), m = mine();
+    if (!m || !R || !R.leave || !rs || !rs.fighter || rs.fighter.id !== m.id || S.leaving || /^(joining|leaving)$/.test(rs.phase)) return;
+    S.leaving = true; S.leaveMsg = F(C.leaving, { name: m.name }); render();
+    try {
+      await R.leave();
+      var P = draft(); P.left = Date.now(); ls.set(SAVE, JSON.stringify(P));
+      S.codeLog = null;
+      var guide = new URL(AI_STEP, root.location.href); guide.searchParams.set('step', 'ring');
+      root.location.href = guide.pathname + guide.search;
+    } catch (e) { S.leaveMsg = F(C.leaveFailed, { why: e && e.message || 'the arena did not answer' }); }
+    S.leaving = false; render();
+  }
+  function selectTab(tab) {
+    S.tab = tab; render();
+    var button = S.el.querySelector('#pn-tab-' + tab); if (button) button.focus({ preventScroll: true });
+  }
   doc.addEventListener('click', function (e) {
     var b = e.target.closest('[data-pn]'); if (!b || !S.el || !S.el.contains(b) || b.disabled) return;
     if (b.tagName === 'A') e.preventDefault();
-    var a = b.dataset.pn, m = mine();
+    var a = b.dataset.pn;
     if (a === 'close') { S.open = false; ls.set(OPEN_STORE, '0'); render(); }
-    else if (a === 'open') { S.open = true; ls.set(OPEN_STORE, '1'); render(); }
-    else if (a === 'follow' && m && root.ArenaView) root.ArenaView.follow(m.id);
+    else if (a === 'open') { S.open = true; S.tab = 'chat'; ls.set(OPEN_STORE, '1'); render(); }
+    else if (a === 'tab:chat' || a === 'tab:gear') selectTab(a.slice(4));
+    else if (a === 'leave') leave();
     else if (a === 'capedit') { S.capEdit = true; S.capPick = null; render(); }
     else if (a.indexOf('cap:') === 0) { S.capPick = Number(a.slice(4)); render(); }
     else if (a === 'setcap') { if (S.capPick != null) setCap(S.capPick); S.capEdit = false; render(); }
@@ -290,7 +318,12 @@
     else if (a.indexOf('equip:') === 0) { var p = a.split(':'); bench({ equip: { slot: p[1], item_id: p.slice(2).join(':') } }); }
   });
   doc.addEventListener('input', function (e) { if (e.target && e.target.id === 'pn-order') S.draft = e.target.value; });
-  doc.addEventListener('keydown', function (e) { if (e.target && e.target.id === 'pn-order' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  doc.addEventListener('keydown', function (e) {
+    if (e.target && e.target.id === 'pn-order' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    else if (e.target && /^(pn-tab-chat|pn-tab-gear)$/.test(e.target.id) && /^(ArrowLeft|ArrowRight|Home|End)$/.test(e.key)) {
+      e.preventDefault(); selectTab(e.key === 'Home' ? 'chat' : e.key === 'End' ? 'gear' : S.tab === 'chat' ? 'gear' : 'chat');
+    }
+  });
   root.addEventListener('resize', function () { render(); });
 
   function start() {

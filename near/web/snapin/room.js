@@ -274,6 +274,8 @@
     var life = n.reservation.life_id;
     if (S.life !== life) { S.lives = (S.lives || 0) + 1; S.life = life; S.lifeAt = Date.now(); }
     persist();
+    // Re-authentication can announce this life again. Ready edits the following life, so keep this one's decision.
+    if (S.lastPick && S.lastPick.life === life && /^(none|accepted|queued)$/.test(S.lastPick.state)) { emit(); return null; }
     if (now() >= Number(n.reservation.prediction_deadline)) { note('The pick for ' + life + ' closed before this page could send it; the room used its default.'); return null; }
     // the player's AI may choose to file no prediction for a life (F75's explicit marker): nothing is sent and the room locks "none"
     if (S.order && S.order.prediction === false) { S.lastPick = { life: life, state: 'none', order: clone(S.order), at: Date.now() }; persist(); emit(); return null; }
@@ -555,9 +557,9 @@
     e = String(e || 'no answer');
     if (/seated right now/.test(e)) return 'A fighter with that name is in the ring right now.';
     if (/name needs letters/.test(e)) return 'The name needs at least one letter or digit.';
-    if (/preset must be one of|unknown preset/.test(e)) return 'The DEV arena does not know this battle option yet (' + e + ').';
-    if (/result its player has not read/.test(e)) return 'The DEV arena is still finishing the last round. Snap in again in a minute.';   // never the agent's command
-    return 'The DEV arena refused the fighter: ' + e;
+    if (/preset must be one of|unknown preset/.test(e)) return 'The arena does not know this battle option yet (' + e + ').';
+    if (/result its player has not read/.test(e)) return 'The arena is still finishing the last round. Snap in again in a minute.';   // never the agent's command
+    return 'The arena refused the fighter: ' + e;
   }
 
   // ------------------------------------------------------------------ where it runs

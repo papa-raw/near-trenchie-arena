@@ -42,7 +42,7 @@ async function stop(host) {
       args: ['--single-process', '--no-zygote', '--proxy-bypass-list=<-loopback>'], proxy: { server: process.env.HTTPS_PROXY }
     } : {});
     const context = await browser.newContext();
-    await context.route('**/case.html', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><script src="/web/snapin/identity.js"></script><script src="/web/snapin/room.js"></script><script src="/web/snapin/brain.js"></script>' }));
+    await context.route('**/case.html', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><script src="/web/snapin/sheet.js"></script><script src="/web/snapin/identity.js"></script><script src="/web/snapin/room.js"></script><script src="/web/snapin/brain.js"></script>' }));
     await context.route('**/web/snapin/*.js', route => {
       const file = path.basename(new URL(route.request().url()).pathname);
       return route.fulfill({ contentType: 'text/javascript', body: fs.readFileSync(path.join(ROOT, 'near/web/snapin', file)) });
@@ -64,11 +64,12 @@ async function stop(host) {
       await until(() => p.evaluate(async () => { try { return !!(await (await fetch('/dev/health', { cache: 'no-store' })).json()).chain_mode; } catch { return false; } }), 20000);
     }
     await ready();
+    assert(await p.evaluate(() => !!window.SnapSheet), 'sheet.js loaded for owned-persona digest checks: ' + errors.join('; '));
     const sheet = JSON.parse(fs.readFileSync(path.join(ROOT, 'near/web/snapin/premint/pike-pennywhistle.json')));
     await p.evaluate(async sheet => {
       window.id = SnapIdentity.make({ wallet: { signMessage: args => window.signWallet(args) } });
       if (!(await id.mode())) throw new Error('fixture has no chain mode: ' + (await (await fetch('/dev/health', { cache: 'no-store' })).text()).slice(0,300)); await id.signIn();
-      const token = await id.getTrenchie({ preset: 'hunter-lunge', tokenId: 'preset-2-00' });
+      const token = await id.getTrenchie({ preset: 'hunter-lunge', tokenId: 'preset-2-00', sheet: sheet });
       const key = await SnapRoom.sessionKey();
       localStorage.setItem('trenchie.snapin.v1', JSON.stringify({ name: 'Pike', sheet, door: { door: 'NEAR AI Cloud', route: 'key' } }));
       localStorage.setItem('trenchie.snapin.cap', '7.5');
@@ -109,7 +110,7 @@ async function stop(host) {
     assert(await p.evaluate(async () => !(await SnapRoom.observe()).fighters.some(f => f.nft_token_id === 'preset-2-00')), 'left fighter stays out');
     // Set up a fresh seat explicitly only to test the independent Stay on the bench choice.
     await p.evaluate(async sheet => {
-      await id.getTrenchie({ preset: 'hunter-lunge', tokenId: 'preset-2-00' });
+      await id.getTrenchie({ preset: 'hunter-lunge', tokenId: 'preset-2-00', sheet: sheet });
       const key = await SnapRoom.sessionKey();
       await SnapRoom.join({ name: 'Pike', preset: 'hunter-lunge', sheet, termsVersion: '1', order: { preset: 'hunter-lunge', prediction: false },
         chain: { nft_token_id: 'preset-2-00', network: 'testnet', session_public_key: key,

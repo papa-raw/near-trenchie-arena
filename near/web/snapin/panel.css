@@ -105,8 +105,9 @@
 .b1p .hpl,.b1p .hpn{font:700 13px 'Space Mono'}
 .b1p .hprow .hp{margin:0;height:9px}
 .b1p .ph-r{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.b1p .leave{min-height:36px;padding:6px 10px;font-size:13px;color:var(--danger)}
+.b1p .leave-msg{padding:0 16px 8px;font-size:13px}
 .b1p .state{font-size:13px;letter-spacing:.02em}
-.b1p .fol{min-height:36px;padding:6px 10px;font-size:13px}
 .b1p .ib{width:38px;min-height:36px}
 .b1p .gearrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 16px;border-top:1px dashed var(--rule);font-size:13px}
 .b1p .gearrow .gh{font:700 13px 'Space Mono';color:#5a4528}
@@ -154,7 +155,7 @@
 .b1p .slip .h span+span{font-weight:400}
 .b1p .mny .link{white-space:nowrap}
 .b1p .pnl .face{min-height:0}
-.b1p .pnl .face>:not(.log){flex-shrink:0}
+.b1p .pnl .face>:not(.pn-pane){flex-shrink:0}
 .b1p .benchb{flex:0 1 auto;overflow:auto;min-height:0}
 .b1p .pnl .log{min-height:0;container-type:size}
 .b1p.w390 .slip,.b1p.w390 .reply,.b1p.w390 .you,.b1p.w390 .ev,.b1p.w390 .gi,.b1p.w390 .mny,.b1p.w390 .slip .h{font-size:13px}
@@ -166,7 +167,7 @@
 .b1p.w390 .ph img{width:40px;height:44px}
 .b1p.w390 .ph h2{font-size:17px}
 .b1p.w390 .ph .sub{margin-top:1px}
-.b1p.w390 .fol{min-height:32px;padding:4px 8px}
+.b1p.w390 .leave{min-height:32px;padding:4px 8px}
 .b1p.w390 .gearrow{display:grid;grid-template-columns:repeat(4,1fr) auto;gap:4px;align-items:end;padding:6px 12px}
 .b1p.w390 .gearrow .gh{display:none}
 .b1p.w390 .gi{flex-direction:column;gap:1px;text-align:center;line-height:1.15}
@@ -194,3 +195,14 @@
 .b1p .log{display:flex;flex-direction:column}
 body.has-panel #snapin-cta,body.has-panel #order-mini{display:none!important}
 .b1p .readonly a.nodoor{display:inline-block;line-height:20px;padding:12px 2px;margin:-12px 0}   /* a 44 px tap target, as chat.js's door link, that keeps the sentence's line */
+/* The conversation and bench share the remaining panel height, each with its own scroll area. */
+.b1p .pn-tabs{display:flex;gap:8px;padding:8px 16px;border-bottom:1px dashed var(--rule)}
+.b1p .pn-tabs button{flex:1}
+.b1p .pn-tabs [aria-selected="true"]{color:var(--green);text-decoration:underline;text-underline-offset:4px}
+.b1p .gear-ready{color:var(--green);font-size:11px}
+.b1p .pn-pane{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
+.b1p .pn-pane[hidden]{display:none}
+.b1p .chat-pane{display:flex;flex-direction:column}
+.b1p .chat-pane .order{flex-shrink:0}
+.b1p .gear-pane .gearrow{border-top:0}
+.b1p.w390 .pn-tabs{padding:6px 12px}

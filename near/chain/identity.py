@@ -15,6 +15,7 @@ The steps, each one call on the host (POST /dev/identity with an "op" field; hos
              chosen battle option (the minter key can't attach a deposit and needs none)
   permit     a short-lived mint permit for `paid_mint`, signed by the host's permit key, bound to this account, the
              name, the persona digest, the preset and a fresh nonce; the wallet sends the call with the mint cost
+  inspect    read an owned token's immutable persona for the guide; no inventory write
   confirm    the token's owner is read on the identity NFT (it must be the signed-in account), and the testnet
              inventory gets the token's shadow (minted to a mirror account, never traded) if it has none, so the
              writer's batches can file the token's gear and record
@@ -76,7 +77,7 @@ SIGNIN_PERMISSION_TTL_S = 60   # only sign-in permission is cached; life owner r
 SIGNIN_BAD_KEY_COOL_OFF_S = 600
 PER_ADDRESS_INFLIGHT = 2        # identity steps one client address may have running at once
 # Per client address, per step: at most N calls in a sliding window of W seconds (the host's own limits; nginx adds its own).
-LIMITS = {"challenge": (20, 60), "signin": (10, 60), "claim": (3, 3600), "permit": (10, 3600), "confirm": (30, 60),
+LIMITS = {"challenge": (20, 60), "signin": (10, 60), "claim": (3, 3600), "permit": (10, 3600), "confirm": (30, 60), "inspect": (30, 60),
           "register": (20, 60), "code": (10, 60), "rejoin": (20, 60)}
 TX_HASH = __import__("re").compile(r"[1-9A-HJ-NP-Za-km-z]{43,44}")
 URL = __import__("re").compile(r"(?:https?|wss?)://\S+")
@@ -384,8 +385,8 @@ class IdentityDesk:
         self.used = {k: v for k, v in self.used.items() if v > now}
 
     def _load_sessions(self) -> None:
-        """Reload only unexpired authorizations; corrupt or public state refuses startup."""
-        if self.sessions_path is None or not self.sessions_path.exists():
+        """Reload trusted, unexpired authorizations; an unusable cache requires fresh sign-ins."""
+        if self.sessions_path is None:
             return
         try:
             if self.sessions_path.stat().st_mode & 0o077:
@@ -401,9 +402,14 @@ class IdentityDesk:
                 if not chaincfg_account_ok(rec["account_id"], self.s.identity_network):
                     raise ValueError("account")
             self._prune_sessions()
+            self._save_sessions()
+        except FileNotFoundError:
+            return
         except (OSError, ValueError, TypeError, KeyError, AttributeError):
-            raise chaincfg.ConfigError("cannot load identity session state; restore its owner-only backup or remove it to require fresh sign-ins") from None
-        self._save_sessions()
+            # Reject the entire cache, including anything assigned before a later record failed validation.
+            # Retain its bytes for the operator; a successful new sign-in replaces it atomically, owner-only.
+            self.signins, self.confirmed, self.used = {}, {}, {}
+            self.log("session_state_skipped", file="identity-sessions.json", fresh_signin_required=True)
 
     def _save_sessions(self) -> None:
         """Under self.lock: durable owner-only replacement before acknowledging a signed step.
@@ -670,6 +676,16 @@ class IdentityDesk:
                 "network": self.s.identity_network}
 
     # ---- confirm and the inventory record
+    def inspect(self, account: str, args: dict) -> dict:
+        """Read an owned token's immutable persona before the guide offers edits; no inventory write."""
+        token = str(args.get("token_id", ""))[:64]
+        owner = self.owner(token)
+        if owner != account:
+            raise IdentityError(f"{token} is owned by {owner or 'nobody'} on the identity NFT, not by {account}")
+        persona = self.view("trenchie", {"token_id": token})
+        return {"account_id": account, "token_id": token, "persona_digest": persona["persona_digest"],
+                "preset_id": persona["preset_id"]}
+
     def confirm(self, account: str, args: dict) -> dict:
         token = str(args.get("token_id", ""))[:64]
         owner = self.owner(token)
@@ -803,18 +819,18 @@ class IdentityDesk:
             return self.challenge(args, address)
         if op == "signin":
             return self.signin(args)
-        if op in ("claim", "permit", "confirm"):
+        if op in ("claim", "permit", "confirm", "inspect"):
             account, payload = self.opened(op, args)
             with self.lock:
                 if account in self.busy:
                     raise IdentityError("a step for this account is still running; wait for it")
                 self.busy.add(account)
             try:
-                return {"claim": self.claim, "permit": self.permit, "confirm": self.confirm}[op](account, payload)
+                return {"claim": self.claim, "permit": self.permit, "confirm": self.confirm, "inspect": self.inspect}[op](account, payload)
             finally:
                 with self.lock:
                     self.busy.discard(account)
-        raise IdentityError(f"unknown op {op!r}; one of challenge, signin, claim, permit, confirm")
+        raise IdentityError(f"unknown op {op!r}; one of challenge, signin, claim, permit, confirm, inspect")
 
 
 def chaincfg_account_ok(account: str, network: str) -> bool:

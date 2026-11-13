@@ -34,6 +34,8 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
   const base = 'http://127.0.0.1:' + web.m;
   const b = await chromium.launch({ args: ['--single-process', '--no-zygote'] });
   const p = await (await b.newContext()).newPage(); const errs = [];
+  // This case has no arena behind it; declare DEV so its Throwaway wallet is available.
+  await p.route('**/dev/health', (r) => r.fulfill({ json: { dev: true } }));
   p.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
   p.on('response', (r) => { if (r.status() >= 400) errs.push('http ' + r.status() + ' ' + r.url().replace(base, '')); });
   const ready = () => p.waitForFunction(() => window.__SNAPIN_READY === true, null, { timeout: 60000 });

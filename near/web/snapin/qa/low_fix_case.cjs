@@ -28,7 +28,8 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
     await p.setViewportSize({ width: 390, height: 844 });
     await p.goto(base + '/web/snapin/index.html?step=wallet'); await ready();
     await p.evaluate(() => { const P = JSON.parse(localStorage.getItem('trenchie.snapin.v1') || '{}'); P.wallet = { id: 'dev-throwaway', accountId: 'a'.repeat(64), network: 'testnet' }; localStorage.setItem('trenchie.snapin.v1', JSON.stringify(P)); });
-    await p.goto(base + '/web/snapin/index.html?step=agree'); await ready();
+    // The current five-step guide has its own check page; the three consent boxes live in Workshop > Agree.
+    await p.goto(base + '/web/snapin/index.html?mode=workshop&tab=agree'); await ready();
     await p.waitForFunction(() => document.querySelectorAll('.checks input').length === 3, null, { timeout: 20000 });
     const boxes = await p.$$eval('.checks input', (els) => els.map((e) => Math.round(e.getBoundingClientRect().width * 10) / 10));
     ok(boxes.every((w) => w >= 24), `at 390 every Agree tick box is at least 24 px wide (${boxes.join(', ')})`);

@@ -121,7 +121,8 @@
     var GAP = 10, last = '', forceSpot = /^[0-4]$/.test(q.get('ctaspot') || '') ? +q.get('ctaspot') : null;
     function rects() {
       var host = document.getElementById('world'), out = [];
-      var add = function (el) { var r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden') out.push(r); };
+      // HP bars follow bodies; panel metadata in their art never reserves fixed CTA space.
+      var add = function (el) { if (el.closest('.ha-candle')) return; var r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden') out.push(r); };
       if (host) host.querySelectorAll('[data-panel]:not([data-kind="world"]), .collabel').forEach(add);
       // the feed grows with each KO, up to three lines (two on a phone): reserve its full size from the start, so the button never jumps
       var feed = host && host.querySelector('[data-panel="feed"]');
