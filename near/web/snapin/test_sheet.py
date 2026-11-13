@@ -232,7 +232,7 @@ check("mutant: a file name that is not identity.role is refused by the checker (
 # ---------------------------------------------------------------- 5: the guard
 g = js("guard", names=["Pip Shoals", "", " Pip", "Pip  Shoals", "x" * 33, "Laser Sailor", "satrenchi", "best.com", "aaaaaa", "Rug Pull", "No scam", "Zed_1", "123", "Café Ünal", "Mo-Mo's Bay"])
 ok = [x["ok"] for x in g]
-check("guard: good names pass, structure and house-name rules refuse the rest", ok == [True, False, False, False, False, False, False, False, False, False, False, False, False, True, True], ok)
+check("guard: ASCII names pass, structure and house-name rules refuse the rest", ok == [True, False, False, False, False, False, False, False, False, False, False, False, False, False, True], ok)
 gl = js("guard", names=["Zorp Lord", "Z0rp", "zorp"], setter=["zorp"])
 check("guard: a configured block list refuses a name, a look-alike spelling and a bare word", [x["ok"] for x in gl] == [False, False, False])
 gg = js("guard", names=["Zorp Lord", "Pip"], global_=None, **{"global": ["zorp"]})

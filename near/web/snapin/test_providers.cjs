@@ -172,7 +172,7 @@ const sameShape = (r) => r && typeof r.ok === 'boolean' && (r.ok || ('kind' in r
     // item 18: the copied line, split by a real shell, is exactly [claude, prompt]; no option comes before the prompt
     const argv = require('child_process').execFileSync('sh', ['-c', 'set -- ' + r.command + '; printf "%s\\0" "$@"']).toString().split('\0').slice(0, -1);
     ok('claude command: the shell splits it into exactly claude and the prompt (item 18)', argv.length === 2 && argv[0] === 'claude' && argv[1] === r.prompt && !argv.slice(1).some((x) => /^-/.test(x)), JSON.stringify(argv));
-    ok('prompt in board 1\'s words', r.prompt === 'Join Trenchie Arena. Read http://127.0.0.1:8777/SNAP.md and follow it. Code CORAL-482, trenchie Pebble.', r.prompt);
+    ok('prompt in board 1\'s words', r.prompt === 'Join Trenchie Arena. Read http://127.0.0.1:8777/SNAP.md and follow it. Code CORAL-482, Trenchie Pebble.', r.prompt);
     const x = await P.snap.requestCode({ agent: 'codex' }, opts);
     ok('codex link: codex://new?prompt=<text>', x.ok && x.link.startsWith('codex://new?prompt=') && decodeURIComponent(x.link.slice(19)) === x.prompt && x.command.startsWith('codex "'), JSON.stringify(x));
     const bad = await P.snap.requestCode({ agent: 'gemini' }, opts);

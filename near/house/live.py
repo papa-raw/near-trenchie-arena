@@ -170,11 +170,13 @@ class LiveHouse:
         run = getattr(arena, "record_run", None)
         return (run if run is not None else self.context.get("deployment_id", "")) + "/"
 
-    def _log_behaviour(self, name, trigger, sent, ack):
-        """Every behaviour order and the arena's answer, one JSON line each, under the data directory (no prompt, no key)."""
+    def _log_behaviour(self, name, trigger, sent, ack, fixed=()):
+        """Every behaviour order and the arena's answer, one JSON line each, under the data directory (no prompt, no key);
+        `house_fixed` lists what the house's engage check changed in the model's plan before sending it."""
         import json
         ack = ack or {}
         row = {"t": round(self.clock(), 3), "persona": name, "trigger": trigger, "status": ack.get("status") or ack.get("code"),
+               "house_fixed": list(fixed),
                "summary": ack.get("summary"), "applied": ack.get("behaviour"), "sent": sent,
                "clipped": ack.get("clipped"), "refused": ack.get("refused")}
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -249,6 +251,7 @@ class LiveHouse:
         out["cap_period"] = getattr(self.budget, "mode", None)                  # building | soak | judging | after
         out["period_source"] = getattr(self.budget, "source", None)             # "calendar", or "override" (--budget)
         out["notes"] = self.notes()                  # every fallback said out loud, each with its UTC time: slug, call kind, the error and its message
+        out["engage_notes"] = [self.runtime.engage_notes[n] for n in sorted(self.runtime.engage_notes)] if self.runtime else []
         return out
 
     def notes(self):

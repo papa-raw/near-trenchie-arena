@@ -70,7 +70,7 @@ const STUB = (ACKS) => {
     await p.waitForFunction(() => SnapRoom.status().phase === 'in', null, { timeout: 90000 }); await sleep(800);
     // ---- 1. no player AI on this page: the box is off and says why
     const off = await p.evaluate(() => ({ disabled: document.querySelector('#order').disabled, text: document.querySelector('[data-chat]').innerText }));
-    ok(off.disabled && /can’t take orders on this page: its AI is not loaded here/.test(off.text), `with no player AI loaded, the box is off and says why: "${(off.text.match(/Your trenchie can’t[^\n]*/) || [''])[0]}"`);
+    ok(off.disabled && /can’t take orders on this page: its AI is not loaded here/.test(off.text), `with no player AI loaded, the box is off and says why: "${(off.text.match(/Your Trenchie can’t[^\n]*/) || [''])[0]}"`);
     await p.screenshot({ path: path.join(OUT, 'chat-off-1440.png'), fullPage: true });
     // ---- 2. with a player AI that takes orders (the case's stand-in)
     for (const W of [1440, 390]) {

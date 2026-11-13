@@ -254,7 +254,7 @@
     this.lastHp = null; this.lowSaid = false; this.events = []; this.unspoken = 0; this.lastAck = null;
     this.listeners = []; this.timer = null; this.busy = false; this.fighter = null;
     this.failure = null;
-    this.state = { state: 'off', chip: 'Your trenchie is ' + TACTICS + '.', spendHourUsd: 0, capUsd: null, lastIntent: null, lastSay: null, lastPrediction: null,
+    this.state = { state: 'off', chip: 'Your Trenchie is ' + TACTICS + '.', spendHourUsd: 0, capUsd: null, lastIntent: null, lastSay: null, lastPrediction: null,
                    conversation: [], lastAck: null, goal: null, battle: false };
   }
 
@@ -298,18 +298,18 @@
 
   /* Why the model is not driving right now, or null when it may call. Also sets the cadence. */
   Brain.prototype.gate = function (c) {
-    if (!c.door) return { state: 'no-door', chip: 'No AI picked at the door: your trenchie is ' + TACTICS + '.' };
-    if (!c.provider) return { state: 'agent-door', chip: 'Your ' + (c.door.identity || c.door.door) + ' agent drives this trenchie through SNAP.md; until it does, it is ' + TACTICS + '.' };
-    if (!c.key) return { state: 'no-key', chip: 'No key in this browser for ' + c.door.door + ': your trenchie is ' + TACTICS + '.' };
-    if (c.cap === null) return { state: 'no-cap', chip: 'Set an hourly cap at the AI door to let your AI drive; until then your trenchie is ' + TACTICS + '.' };
-    if (!this.storageOk()) return { state: 'no-storage', chip: 'This browser cannot keep the hourly spend (private window or blocked storage), so the cap could not hold: your AI is off and your trenchie is ' + TACTICS + '.' };
+    if (!c.door) return { state: 'no-door', chip: 'No AI picked at the door: your Trenchie is ' + TACTICS + '.' };
+    if (!c.provider) return { state: 'agent-door', chip: 'Your ' + (c.door.identity || c.door.door) + ' agent drives this Trenchie through SNAP.md; until it does, it is ' + TACTICS + '.' };
+    if (!c.key) return { state: 'no-key', chip: 'No key in this browser for ' + c.door.door + ': your Trenchie is ' + TACTICS + '.' };
+    if (c.cap === null) return { state: 'no-cap', chip: 'Set an hourly cap at the AI door to let your AI drive; until then your Trenchie is ' + TACTICS + '.' };
+    if (!this.storageOk()) return { state: 'no-storage', chip: 'This browser cannot keep the hourly spend (private window or blocked storage), so the cap could not hold: your AI is off and your Trenchie is ' + TACTICS + '.' };
     if (!this.locksOk()) return { state: 'no-locks', chip: NO_LOCKS };
     if (this.failure && this.failure.permanent && this.failure.key !== c.key) this.failure = null;   // a new key: try again
     if (this.failure && this.failure.permanent) return { state: 'failed', chip: this.failure.chip };
     var spend = this.hourSpend();
     if (spend >= c.cap) {
       var rows = this.spentRows(), oldest = rows.length ? rows[0].at : this.now(), back = Math.max(1, Math.ceil((oldest + WINDOW_MS - this.now()) / 60000));
-      return { state: 'capped', chip: 'Hourly cap reached ($' + spend.toFixed(3) + ' of $' + c.cap.toFixed(2) + '): your AI is paused and your trenchie is ' + TACTICS + ' for about ' + back + ' min.' };
+      return { state: 'capped', chip: 'Hourly cap reached ($' + spend.toFixed(3) + ' of $' + c.cap.toFixed(2) + '): your AI is paused and your Trenchie is ' + TACTICS + ' for about ' + back + ' min.' };
     }
     return null;
   };
@@ -330,7 +330,7 @@
      tab reads the window only after this call's reservation has been written and settled, a full provider round trip
      later, so a tab whose storage view lags can only see a reservation not yet settled down (over-counting, never under).
      The lock is held at most the call's own timeout. A browser without Web Locks sends no call at all (gate, NO_LOCKS). */
-  var NO_LOCKS = 'This browser cannot share the hourly cap between its tabs (no Web Locks), so a second tab could pass it: your AI is off and your trenchie is ' + TACTICS + '.';
+  var NO_LOCKS = 'This browser cannot share the hourly cap between its tabs (no Web Locks), so a second tab could pass it: your AI is off and your Trenchie is ' + TACTICS + '.';
   Brain.prototype.locksOk = function () { return !!(this.locks && typeof this.locks.request === 'function'); };
   Brain.prototype.ask = function (c, user, maxTokens) {
     var self = this, run = function () {
@@ -356,7 +356,7 @@
       this.settle(id, 0);
       var permanent = r.kind === 'bad-key' || r.kind === 'no-credits';
       var why = { 'bad-key': 'the key was refused', 'no-credits': 'the account has no credits', rate: 'the provider is rate-limiting', timeout: 'it timed out', network: 'the network failed' }[r.kind] || 'it returned an error';
-      this.failure = { permanent: permanent, key: c.key, chip: 'Your AI did not answer (' + why + '): your trenchie is ' + TACTICS + (permanent ? ' until you fix it at the AI door.' : '; trying again.') };
+      this.failure = { permanent: permanent, key: c.key, chip: 'Your AI did not answer (' + why + '): your Trenchie is ' + TACTICS + (permanent ? ' until you fix it at the AI door.' : '; trying again.') };
       throw Object.assign(new Error(this.failure.chip), { kind: r.kind });
     }
     this.failure = null;
@@ -369,7 +369,7 @@
     var c, stop;
     try { c = this.choices(); stop = this.gate(c); }
     catch (e) {                                     // a storage read that throws (a private window): fail closed, keep the loop
-      this.emit({ state: 'no-storage', chip: 'This browser cannot keep the hourly spend (private window or blocked storage), so the cap could not hold: your AI is off and your trenchie is ' + TACTICS + '.' });
+      this.emit({ state: 'no-storage', chip: 'This browser cannot keep the hourly spend (private window or blocked storage), so the cap could not hold: your AI is off and your Trenchie is ' + TACTICS + '.' });
       return BASE_MS;
     }
     this.emit({ capUsd: c.cap });
@@ -395,7 +395,7 @@
       this.emit({ state: slow ? 'slow' : 'driving', lastIntent: { focus: o.focus, avoid: o.avoid, loot: o.loot, sig: o.sig, accepted: accepted, at: t },
                   lastSay: accepted && o.say ? o.say : this.state.lastSay, chip: this.chip(c, slow ? 'near the hourly cap, one order every 30 s' : null) });
     } catch (e) {
-      this.emit({ state: 'failed', chip: this.failure ? this.failure.chip : 'Your AI’s order did not reach the arena (' + scrub(e.message, c.key) + '): your trenchie is ' + TACTICS + '.' });
+      this.emit({ state: 'failed', chip: this.failure ? this.failure.chip : 'Your AI’s order did not reach the arena (' + scrub(e.message, c.key) + '): your Trenchie is ' + TACTICS + '.' });
     }
     return this.interval(c);
   };
@@ -478,11 +478,11 @@
   /* The owner's goal box: one model call -> a behaviour + an in-character reply; the host's receipt shown verbatim. */
   Brain.prototype.tell = async function (text) {
     var said = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
-    if (!said || said.length > GOAL_MAX) return { reply: null, receipt: null, chip: 'Write what you want your trenchie to do (1–' + GOAL_MAX + ' characters).' };
+    if (!said || said.length > GOAL_MAX) return { reply: null, receipt: null, chip: 'Write what you want your Trenchie to do (1–' + GOAL_MAX + ' characters).' };
     var c, stop;
     try { c = this.choices(); stop = this.gate(c); } catch (e) { stop = { chip: 'This browser cannot keep the hourly spend, so your AI is off.' }; }
     if (stop) return { reply: null, receipt: null, chip: stop.chip };
-    if (!this.battleOn()) return { reply: null, receipt: null, chip: 'This arena has no battle mode yet: your trenchie takes single orders only.' };
+    if (!this.battleOn()) return { reply: null, receipt: null, chip: 'This arena has no battle mode yet: your Trenchie takes single orders only.' };
     this.setGoal(said);
     this.say('owner', said);
     // While the model call is out the page can say the trenchie is thinking; each order then reports how long the
@@ -502,8 +502,8 @@
       return { reply: reply || null, receipt: ack || null };
     } catch (e) {
       this.emit({ thinking: null });
-      var chip = e && e.kind === 'capped' ? 'Hourly cap reached: your AI is paused and your trenchie keeps its last plan, on the arena’s own tactics.'
-        : this.failure ? this.failure.chip : 'Your AI could not answer (' + scrub(e.message, c.key) + '): your trenchie keeps its last plan.';
+      var chip = e && e.kind === 'capped' ? 'Hourly cap reached: your AI is paused and your Trenchie keeps its last plan, on the arena’s own tactics.'
+        : this.failure ? this.failure.chip : 'Your AI could not answer (' + scrub(e.message, c.key) + '): your Trenchie keeps its last plan.';
       this.say('host', chip);
       return { reply: null, receipt: null, chip: chip };
     }
@@ -545,7 +545,7 @@
     if (this.fighter && this.fighter.life !== this.life) this.life = this.fighter.life;
     this.emit({ battle: this.battleOn(), goal: this.goal() });
     if (s && s.phase === 'in') { this.gateNow(); this.run(); }
-    else { this.halt(); this.emit({ state: 'off', chip: 'Your trenchie is not in the ring.' }); }
+    else { this.halt(); this.emit({ state: 'off', chip: 'Your Trenchie is not in the ring.' }); }
   };
 
   /* The gate's verdict at once, in the same task as the room's "in" (the loop's first step runs a timer later): a page that
@@ -553,7 +553,7 @@
   Brain.prototype.gateNow = function () {
     var stop;
     try { stop = this.gate(this.choices()); }
-    catch (e) { stop = { state: 'no-storage', chip: 'This browser cannot keep the hourly spend (private window or blocked storage), so the cap could not hold: your AI is off and your trenchie is ' + TACTICS + '.' }; }
+    catch (e) { stop = { state: 'no-storage', chip: 'This browser cannot keep the hourly spend (private window or blocked storage), so the cap could not hold: your AI is off and your Trenchie is ' + TACTICS + '.' }; }
     if (stop) this.emit(stop);
   };
   Brain.prototype.run = function () {

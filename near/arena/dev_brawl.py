@@ -76,6 +76,8 @@ async def read_frame(reader):
         size = struct.unpack("!H", await reader.readexactly(2))[0]
     elif size == 127:
         size = struct.unpack("!Q", await reader.readexactly(8))[0]
+    if b1 & 0x08 and (size > 125 or not b1 & 0x80):
+        raise ValueError("control frames must be final and at most 125 bytes")
     if size > 4096:
         raise ValueError("client frame too large")
     mask = await reader.readexactly(4) if b2 & 0x80 else b"\0\0\0\0"
@@ -186,7 +188,7 @@ def main(argv):
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--ticks", type=int, default=None, help="stop after N ticks (default: run forever)")
-    parser.add_argument("--crowd", type=int, default=0, help="fighters in all: newcomers join the 14 house trenchies up to N")
+    parser.add_argument("--crowd", type=int, default=0, help="fighters in all: newcomers join the 14 house Trenchies up to N")
     args = parser.parse_args(argv)
     brawl = Brawl(args.seed, ticks=args.ticks, crowd=args.crowd)
     print("brawl: %d fighters (%d house), rules %s, ws://127.0.0.1:%d (spectator only, 20 Hz)"

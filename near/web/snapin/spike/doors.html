@@ -95,8 +95,8 @@ th{background:#eee} .ok{color:#0a6b2d} .bad{color:#a11}
 
     var wl = window.SnapWallet;
     var chk = wl.importCheck();
-    document.getElementById('extra').textContent = 'SnapWallet.list(): ' + JSON.stringify(wl.list()) + '\nSnapWallet.importCheck(): ' + JSON.stringify(chk);
-    window.__RESULTS = { origin: location.origin, rows: rows, wallet: { list: wl.list(), importCheck: chk }, userAgent: navigator.userAgent };
+    document.getElementById('extra').textContent = 'Wallet choices: NEAR Connect\nSnapWallet.importCheck(): ' + JSON.stringify(chk);
+    window.__RESULTS = { origin: location.origin, rows: rows, wallet: { selector: 'NEAR Connect', importCheck: chk }, userAgent: navigator.userAgent };
     window.__DONE = true;
   }
   run().catch(function (e) { window.__RESULTS = { error: String(e && e.stack || e) }; window.__DONE = true; });

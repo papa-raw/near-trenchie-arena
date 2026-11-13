@@ -53,7 +53,7 @@ const row = (id, i, actual, score, base) => ({ actual, base_score: base, batch_t
         await click('g:other');
       }
       for (const door of ['Claude Code', 'Codex']) { await click('g:door:plan:' + door); await sleep(800); doorCost[door] = await sweep(`${W} ${door} plan`); await click('g:other'); }
-      ok(/About \$0\.10 an hour in a busy fight\. At the cap, your trenchie fights on its own tactics until the hour ends\./.test(doorCost['NEAR AI Cloud']),
+      ok(/About \$0\.10 an hour in a busy fight\. At the cap, your Trenchie fights on its own tactics until the hour ends\./.test(doorCost['NEAR AI Cloud']),
         `${W}: NEAR AI Cloud's key screen shows the measured estimate in board 1's words ("About $0.10 an hour in a busy fight.")`);
       ok(['Claude', 'OpenRouter'].every((d) => /Not measured yet for this AI\. Start with a low cap\./.test(doorCost[d])),
         `${W}: Claude and OpenRouter say "Not measured yet for this AI. Start with a low cap." (no unmeasured number shown)`);

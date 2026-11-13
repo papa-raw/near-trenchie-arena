@@ -1,4 +1,4 @@
-# Field map: the trenchie persona sheet
+# Field map: the Trenchie persona sheet
 
 A persona is one JSON file in the format [persona.schema.json](persona.schema.json) describes: ten core elements and one optional, versioned `game` block. The sheet is the package. A harness renders it and never writes it. Any agent harness can read the same format; none is required.
 
@@ -17,7 +17,7 @@ Edit the generators, never the generated files. Each generator says so in its he
 
 ## The ten core elements
 
-| Element | What it holds for a trenchie | Who reads it |
+| Element | What it holds for a Trenchie | Who reads it |
 |---|---|---|
 | `identity` | role id, the brief (lore, myth, beef, arena rules), personality, mark, assessor, the clause against text that gives it goals, coordination role, handoff | the house runtime builds the prompt prefix from it |
 | `tools` | the six arena intents: `intent-focus`, `intent-avoid`, `intent-loot`, `intent-sig`, `intent-leave`, `intent-say`. The model never moves the body. | the runtime offers exactly these |
@@ -40,7 +40,7 @@ Version 2: the arena's own game block. A sheet that says version 1 is refused. P
 | `emoji` | 5 to 8 single emoji its AI picks from when it speaks, one per line; the picked one floats over its fighter for about 3 s and leads its line in the ticker. They fit its temperament and its running joke. Required on the 14 house sheets. A creator's sheet may leave it out: it then uses its temperament's default set (`emoji_defaults.json`), and its lines say so. Rules: `emoji.py`. |
 | `voice` | three sample lines, at most 60 characters each |
 | `tics`, `banned_registers`, `never_hooks` | habits, registers it never uses, topics it never raises |
-| `belief` | `{myth, line}`: which off-island myth it blames for the Great Rug (`silent_dev`, `faceless_whale`, `rogue_bot`). Never a trenchie. |
+| `belief` | `{myth, line}`: which off-island myth it blames for the Great Rug (`silent_dev`, `faceless_whale`, `rogue_bot`). Never a Trenchie. |
 | `rivalries` | seeded rivals and allies, equal to the pairs in `kits.json` |
 | `fight_style`, `preset` | one of brawler, hunter, looter, guardian, survivor; the preset equals it at version 2 |
 | `cosmetics` | palette ids, the named legendary (`id`, `name`, `reskin_of`, `serial`), the starter kit, the signature piece. A declaration, never an inventory grant: the chain owns the real bag. |

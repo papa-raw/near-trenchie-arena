@@ -893,8 +893,11 @@ class Arena:
 
     def health(self) -> dict:
         """The transport exposes this projection at its health route."""
-        free = shutil.disk_usage(self.store.root).free
-        return {"status": "red" if free < 2_000_000_000 else "amber" if free < 5_000_000_000 else "green",
+        try:
+            free = shutil.disk_usage(self.store.root).free
+        except OSError:
+            free = None
+        return {"status": "unknown" if free is None else "red" if free < 2_000_000_000 else "amber" if free < 5_000_000_000 else "green",
                 "free_disk_bytes": free, "tick": self.sim.state["tick"], "failed": self.failed,
                 "dev_host": self.dev_host, "dev_prefix_refusals": len(self.refusals),
                 **({"chain": self.chain.health()} if self.chain is not None else {})}
@@ -1157,7 +1160,7 @@ class ArenaBridge:
         if m is None or m["released"]:
             return ack("refused", "Bench refused: rejoin with the current grant first.")
         if m["profile"]["house"]:
-            return ack("refused", "Bench refused: house trenchies keep their own kit.")
+            return ack("refused", "Bench refused: house Trenchies keep their own kit.")
         down = self._bench_down(m, f)
         if "hold" in payload:
             if payload["hold"]:

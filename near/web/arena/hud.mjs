@@ -1,28 +1,30 @@
 // The arena HUD, approved board 2 (direction C, "Wall sign", sheet r5-sheet2): the wall sign with its two boards, the
 // one merged feed of paper slips, the corner buttons and "How it works", every trenchie's name tag with its prediction
-// circles, the crowd card, the legendary floor sign and the pre-jump card. The HP candles under each body are still the
+// circles, the legendary floor sign and the pre-jump card. The HP candles under each body are still the
 // approved panel art's (hud-art/hud-art.js, frozen), cloned per body. Everything that follows a body is placed every frame
 // from the projected feet, so it never lags a moving trenchie; the rest is DOM that changes only when its data does.
 import * as THREE from 'three';
 import { placeQuirkPanel } from './hover.mjs';
 import { isDev, shortName } from './names.mjs';
-import { layoutTags, TIER } from './tag-layout.mjs';
 import { placeBanner, placeReplayStatus } from './layout.mjs';
 import { HudPanelCache } from './hud-cache.mjs';
 import { rosterLabels } from './roster.mjs';
 import { quirkText } from './quirks.mjs';
 import { styleWord } from './style.mjs';
-import { circlesModel, circlesNode, circlesKey, crowdGroups, cardSpot, reachFor } from './pips.mjs';
+import { circlesModel, circlesNode, circlesKey } from './pips.mjs';
 import { Feed, nameColour } from './feed.mjs';
 import { Corner } from './corner.mjs';
-import { Prejump } from './prejump.mjs';
+import { Prejump, DROP_DELAY_MS } from './prejump.mjs';
 import { Lives } from './lives.mjs';
 import { itemStill, houseFace, playerFace } from './stills.mjs';
 import { hudLayout, panelBoxes, cornerHidden } from './hud-layout.mjs';
 import { placeLegendSigns, bodyBox } from './legend-place.mjs';
 
 const LEG_FADE_MS = 300;
-const LEG_OPEN_MS = 3000;   // a tapped picture shows the full sign this long
+const LEG_OPEN_MS = 3000;   // the complete floor announcement shows this long, then fades and leaves the DOM
+const LEG_SCALE = 0.7;   // The whole floor sign (box, picture and lettering) is 30% smaller
+const BANNER_SCALE = 0.8;   // Shrink the complete existing KOs/predictions stack by another 20%
+const scaleBannerRects = (rects) => rects.map((r) => ({ ...r, x: r.x * BANNER_SCALE, y: r.y * BANNER_SCALE, w: r.w * BANNER_SCALE, h: r.h * BANNER_SCALE }));
 const REMOUNT_MS = 600;   // the top-left KO banner (as at ebb97a0): redrawn when its content changes, at most this often
 const BANNER_MS = 4200;   // the lead banner shows this long after the leader changes
 
@@ -35,7 +37,7 @@ export class Hud {
     if (!document.querySelector('link[data-b2]')) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = new URL('./board2.css', import.meta.url).href; l.dataset.b2 = '1'; document.head.appendChild(l); }
     // name tags (Q18) with their circles, and the crowd cards
     this.tagLayer = document.createElement('div'); this.tagLayer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:1;'; root.appendChild(this.tagLayer);
-    this.tags = new Map(); this.cards = new Map(); this.styles = new Map(); this.bounties = new Set(); this.tagPrev = new Map(); this.tagRects = []; this.cardRects = [];
+    this.tags = new Map(); this.styles = new Map(); this.bounties = new Set(); this.tagRects = []; this.cardRects = [];
     // HP candles: drawn once per level by the panel art, then cloned per body every frame
     this.barLayer = document.createElement('div'); this.barLayer.className = 'ha-layer ha-candle'; this.barLayer.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:2;'; root.insertBefore(this.barLayer, this.tagLayer);
     this.barHtml = null; this.barSize = null; this.bars = new Map(); this.building = false; this.barNarrow = null;
@@ -47,7 +49,7 @@ export class Hud {
     this.lives = new Lives();
     // the top-left KO banner, as at ebb97a0: the panel art's hanging tags (House, and Players when any), their labels, the lead banner
     this.layerHost = document.createElement('div'); this.layerHost.style.cssText = 'position:absolute;left:0;top:0;z-index:3;'; root.appendChild(this.layerHost);
-    this.cardLayer = document.createElement('div'); this.cardLayer.className = 'ha-layer ha-candle'; this.cardLayer.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:3;'; root.appendChild(this.cardLayer);
+    this.cardLayer = document.createElement('div'); this.cardLayer.className = 'ha-layer ha-candle'; this.cardLayer.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:3;transform-origin:0 0;transform:scale(' + BANNER_SCALE + ');'; root.appendChild(this.cardLayer);
     this.artCache = null; this.artRects = {}; this.cardList = []; this.cardRects = []; this.mounting = false; this.lastMount = 0; this.sig = ''; this.bannerLead = null; this.leadAt = 0; this.board = null; this.roster = null;
     this.feed = new Feed(document, this.ui, { name: (id) => this.nameOf(id), colour: (id) => this.colourOf(id), dev: isDev });
     this.feed.list.classList.add('arena-say-feed');
@@ -58,7 +60,7 @@ export class Hud {
     this.idle(performance.now());   // the sign, the feed and the buttons are in place with their words before any arena answers
   }
   /** No snapshot to draw (no arena yet, or between reconnects): keep the fixed HUD laid out and worded. */
-  idle(nowMs) { this.corner.setSound(this.soundState); this.layoutHud(nowMs); this.placeStatus(); }
+  idle(nowMs) { this.corner.setSound(this.soundState); this.layoutHud(nowMs); this.placeLegends(null, nowMs); this.placeStatus(); }
 
   // ---- names, colours and faces ------------------------------------------------------------------------------------
   nameRoster() { return [...this.KITS.roster, ...(this.KITS.players || [])]; }
@@ -99,37 +101,39 @@ export class Hud {
     else if (m.kind === 'legendary_steal') this.feed.push({ kind: 'leg', steal: true, who: m.fighter, from: m.other, item: m.item, moment: m.kind });
     else if (m.kind === 'near_death') this.feed.push({ kind: 'escape', who: m.fighter, hp: Number(/(\d+) HP/.exec(m.text || '')?.[1] || 0), moment: m.kind });
   }
-  // a life starts: its prediction line and, if it predicts, the pre-jump card. Returns how long the body's drop waits (ms).
+  // A life starts: its prediction line and stationary fading card. Returns the fade duration (ms).
   onRespawn(ev, nowMs) {
     const v = this.lives.get(ev.fighter), level = v && v.life === ev.life_id ? v.level : null;
     if (!Number.isInteger(level)) return 0;
     this.feed.push({ kind: 'pred', who: ev.fighter, level });
-    return this.prejump.start(ev.fighter, this.tagOf(ev.fighter), level, nowMs) ? 250 : 0;
+    return this.prejump.start(ev.fighter, this.tagOf(ev.fighter), level, nowMs) ? DROP_DELAY_MS : 0;
   }
   // a legendary on the floor: its sign, anchored to the item
-  onLegendDrop(d) {
+  onLegendDrop(d, nowMs = performance.now()) {
     const it = this.ITEMS[d.item]; if (!it || it.tier !== 'legendary' || this.legends.has(d.key)) return;
     const sign = document.createElement('div'); sign.className = 'legsign'; sign.dataset.drop = d.key;
     const pic = this.itemRenderer ? itemStill(this.itemRenderer, this.LOOK3, d.item) : null;
-    if (pic) { const img = document.createElement('img'); img.src = pic; img.alt = ''; sign.appendChild(img); } else { const s = document.createElement('span'); s.className = 'noimg'; sign.appendChild(s); }
-    const t = document.createElement('span'), b = document.createElement('b'); b.textContent = 'LEGENDARY:'; t.className = 'legtext'; t.append(b, document.createTextNode(' ' + String(it.name).toUpperCase())); sign.appendChild(t);
-    sign.title = 'LEGENDARY: ' + String(it.name).toUpperCase(); sign.setAttribute('aria-label', sign.title);   // the shorter forms keep their words here
+    if (pic) { const img = document.createElement('img'); img.className = 'legend-glow'; img.src = pic; img.alt = ''; sign.appendChild(img); } else { const s = document.createElement('span'); s.className = 'noimg legend-glow'; sign.appendChild(s); }
+    const t = document.createElement('span'), name = document.createElement('span');
+    name.className = 'legname'; name.textContent = String(it.name).toUpperCase();
+    t.className = 'legtext'; t.appendChild(name); sign.appendChild(t);
+    sign.title = String(it.name).toUpperCase(); sign.setAttribute('aria-label', sign.title);   // the shorter forms keep their words here
     const pin = document.createElement('i'); pin.className = 'legpin';
     this.legLayer.append(sign, pin);
     const lg = { sign, pin, x: d.x / 1000, z: d.y / 1000, gone: null, w: 0, h: 0 };
-    this.wireLegend(lg); this.legends.set(d.key, lg);
+    this.wireLegend(lg, nowMs); this.legends.set(d.key, lg);
   }
-  // the picture alone opens the full sign: a tap (phone) for LEG_OPEN_MS, or while a mouse hovers it (desktop)
-  wireLegend(lg) {
-    lg.openUntil = 0; lg.hover = false;
-    lg.sign.addEventListener('click', (e) => { if (lg.form !== 'picture') return; e.stopPropagation(); lg.openUntil = lg.sign.classList.contains('open') ? 0 : performance.now() + LEG_OPEN_MS; });   // a tap on the open sign closes it
+  // During the announcement, tap or hover opens a collision-shortened picture; neither extends its deadline.
+  wireLegend(lg, nowMs = performance.now()) {
+    lg.showUntil = nowMs + LEG_OPEN_MS; lg.openUntil = 0; lg.hover = false;
+    lg.sign.addEventListener('click', (e) => { if (lg.form !== 'picture') return; e.stopPropagation(); lg.openUntil = lg.sign.classList.contains('open') ? 0 : lg.showUntil; });   // a tap on the open sign closes it
     lg.sign.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') lg.hover = true; });
-    lg.sign.addEventListener('pointerleave', () => { lg.hover = false; });
+    lg.sign.addEventListener('pointerleave', () => { if (lg.hover) { lg.hover = false; lg.openUntil = performance.now(); } });
   }
-  // each drawn snapshot's drops: a new legendary gets its sign; one that left the floor (grabbed, or gone after 60 s) fades
+  // each drawn snapshot's drops: a new legendary gets its sign; one that left the floor (grabbed or expired) fades
   syncDrops(drops, nowMs) {
     const here = new Set();
-    for (const d of drops) { here.add(d.key); this.onLegendDrop(d); }
+    for (const d of drops) { here.add(d.key); this.onLegendDrop(d, nowMs); }
     for (const [key, lg] of this.legends) if (!here.has(key) && lg.gone == null) lg.gone = nowMs;
   }
 
@@ -186,14 +190,13 @@ export class Hud {
     this.cardRects = (this.bannerRects || []).slice();   // the quirk panel keeps off the banner's cards (hover.mjs)
   }
 
-  // ---- name tags, circles and crowd cards -----------------------------------------------------------------------------
-  // (the tag fixtures in the quirk and agent-review cases build a bare Hud: lives, cards and rects are optional here)
+  // ---- individual name tags and circles -----------------------------------------------------------------------------
+  // (the tag fixtures in the quirk and agent-review cases build a bare Hud: lives and rects are optional here)
   placeTags(pos, lead, nowMs = 0) {
     const narrow = this.w < 600, seen = new Set(), items = [], lives = this.lives, rects = this.rects || {};
     const focusTargets = new Set([...pos].filter(([id, q]) => isDev(id) && q.f.status === 0 && q.f.target).map(([, q]) => q.f.target));
     const mine = this.followed != null ? pos.get(this.followed) : null, myTarget = mine && mine.f.status === 0 ? mine.f.target : null;
     if (myTarget) focusTargets.add(myTarget);
-    const must = new Set([this.followed, myTarget].filter((id) => id != null));
     for (const [id, q] of pos) {
       if (q.f.status === 2 || q.state === 'ko') continue;
       const head = (q.state === 'bench' ? 1.45 : 1.6) + (q.lift || 0), sp = this.toScreen(q.x, head, q.z);
@@ -224,35 +227,20 @@ export class Hud {
       quirk.textContent = text ? shortName(this.nameRoster(), id) + ' · ' + text : '';
       style.textContent = word ? ' · ' + word : ''; el.tabIndex = 0; el.style.pointerEvents = 'auto';
       el.title = (row ? row.name : this.nameOf(id)) + (word ? ' · ' + word : ''); el.setAttribute('aria-label', el.title + (m ? ' · predicts ' + m.n + '+ KOs, ' + (m.filled + m.extra) + ' so far' : '') + (text ? ' · ' + text : ''));
-      seen.add(id); items.push({ id, el, q, m, x: sp.x, y: sp.y, depth: q.x + q.z, landing: !!this.prejump && this.prejump.active(id, nowMs) });
+      seen.add(id); items.push({ id, el, q, m, x: sp.x, y: sp.y, landing: !!this.prejump && this.prejump.active(id, nowMs) });
     }
     for (const [id, el] of this.tags) if (!seen.has(id)) { el.remove(); this.tags.delete(id); }
-    // the crowd rule: three or more alive fighters within reach share one card; your own fighter keeps its own tag
-    const alive = items.filter((it) => it.q.state === 'alive' && !it.landing && it.id !== this.followed);
-    const groups = crowdGroups(alive.map((it) => ({ id: it.id, x: it.x, y: it.y })), reachFor(this.w));
-    const grouped = new Set(groups.flat());
-    const prevLayout = this.tagPrev || new Map();
-    const solo = items.filter((it) => !grouped.has(it.id) && !it.landing);
-    for (const it of items) {
-      it.base = 'atag' + (it.id === lead ? ' lead' : '') + (it.id === this.followed ? ' followed' : '') + (it.q.state === 'bench' ? ' bench' : '') + (narrow ? ' narrow' : '') + (this.bounties.has(it.id) ? ' bounty' : '') + (focusTargets.has(it.id) ? ' focus-target' : '');
-      if (!grouped.has(it.id) && !it.landing) it.el.className = it.base + (prevLayout.get(it.id)?.shown === false ? ' tag-hidden' : '');
-    }
-    const layout = layoutTags(solo.map((it) => ({ id: it.id, ax: it.x, ay: it.y, w: it.el.offsetWidth || 50, h: it.el.offsetHeight || 16, depth: it.depth,
-      tier: must.has(it.id) ? TIER.must : it.id === lead || this.bounties.has(it.id) ? TIER.notable : TIER.other })), { w: this.w, h: this.h, prev: prevLayout, obstacles: [...(this.barRects || []), ...(rects.board ? [rects.board] : [])] });
-    // a fighter in a crowd card counts as shown: when the crowd breaks up its own tag comes back at once, not after
-    // the newly-shown wait (tag-layout SHOW_AFTER), so a tag never blinks out between the card and its own place
-    for (const id of grouped) layout.set(id, { x: 0, y: 0, w: 0, h: 0, shown: true, slot: 0, streak: Math.max(1, prevLayout.get(id)?.streak || 0) });
-    this.tagPrev = layout;
+    // Every fighter keeps its own tag directly above its head; overlap never hides or merges tags.
     const placed = [];
     for (const it of items) {
-      if (grouped.has(it.id) || it.landing) { const cls = it.base + ' tag-hidden'; if (it.el.className !== cls) it.el.className = cls; continue; }   // in a card, or still landing
-      const r = layout.get(it.id);
-      if (r.shown) placed.push({ id: it.id, x: r.x, y: r.y, w: r.w, h: r.h });
-      const cls = it.base + (r.shown ? '' : ' tag-hidden');
+      const cls = 'atag' + (it.id === lead ? ' lead' : '') + (it.id === this.followed ? ' followed' : '') + (it.q.state === 'bench' ? ' bench' : '') + (narrow ? ' narrow' : '') + (this.bounties.has(it.id) ? ' bounty' : '') + (focusTargets.has(it.id) ? ' focus-target' : '') + (it.landing ? ' tag-hidden' : '');
       if (it.el.className !== cls) it.el.className = cls;
+      if (it.landing) continue;
+      const w = it.el.offsetWidth || 50, h = it.el.offsetHeight || 16;
+      const r = { id: it.id, x: it.x - w / 2, y: it.y - h - 2, w, h };
+      placed.push(r);
       it.el.style.transform = 'translate(' + r.x.toFixed(1) + 'px,' + r.y.toFixed(1) + 'px)';
     }
-    if (groups.length || (this.cards && this.cards.size)) this.placeCards(groups, items, alive, lead, placed);
     this.tagRects = placed;
     for (const it of items) {
       const panel = it.el.querySelector('.quirk-line');
@@ -262,76 +250,48 @@ export class Hud {
       panel.style.left = (box.x - anchor.x) + 'px'; panel.style.top = (box.y - anchor.y) + 'px';
     }
   }
-  placeCards(groups, items, alive, lead, placed) {
-    const byId = new Map(items.map((it) => [it.id, it])), keep = new Set();
-    const rects = this.rects || {}, sign = rects.board, top = sign ? sign.y + sign.h + 8 : 8;
-    this.cards = this.cards || new Map();
-    const lows = [rects.feed, rects.btn0, rects.btn1].filter(Boolean).map((r) => r.y);
-    const view = { w: this.w, h: this.h, top, bottom: (lows.length ? Math.min(...lows) : this.h) - 8 };
-    for (const ids of groups) {
-      const key = ids.join('|'); keep.add(key);
-      let c = this.cards.get(key);
-      if (!c) { const el = document.createElement('div'); el.className = 'gcard'; el.dataset.fighters = key; this.tagLayer.appendChild(el); c = { el, sig: '' }; this.cards.set(key, c); }
-      const rows = ids.map((id) => { const life = this.lives ? this.lives.get(id) : null; return { id, m: life ? circlesModel(life.level, life.kos) : null }; });
-      const sig = rows.map((r) => r.id + (r.id === lead ? '*' : '') + circlesKey(r.m)).join(',');
-      if (sig !== c.sig) {
-        c.sig = sig;
-        const h = document.createElement('div'); h.className = 'gh'; h.textContent = ids.length + ' here';
-        c.el.replaceChildren(h, ...rows.map((r) => {
-          const row = document.createElement('div'); row.className = 'gr' + (r.id === lead ? ' lead' : ''); row.dataset.fighterId = r.id;
-          const nm = document.createElement('span'); nm.className = 'nm2'; nm.textContent = shortName(this.nameRoster(), r.id);
-          if (isDev(r.id)) { const d = document.createElement('span'); d.className = 'dev'; d.textContent = 'DEV'; nm.appendChild(d); }
-          row.appendChild(nm); if (r.m) row.appendChild(circlesNode(document, r.m));
-          return row;
-        }));
-        c.el.setAttribute('aria-label', ids.length + ' here: ' + ids.map((id) => this.nameOf(id)).join(', '));
-      }
-      const w = c.el.offsetWidth || 140, hgt = c.el.offsetHeight || 22 + 16 * ids.length;
-      const members = ids.map((id) => ({ id, x: byId.get(id).x, y: byId.get(id).y }));
-      const others = alive.filter((it) => !ids.includes(it.id)).map((it) => ({ id: it.id, x: it.x, y: it.y }));
-      const spot = cardSpot(members, others, { w, h: hgt }, view);
-      const bx = Math.max(8, Math.min(this.w - w - 8, spot.box.x)), by = Math.max(8, Math.min(this.h - hgt - 8, spot.box.y));
-      c.el.dataset.pos = spot.pos; c.el.style.transform = 'translate(' + bx.toFixed(1) + 'px,' + by.toFixed(1) + 'px)';
-      placed.push({ id: key, x: bx, y: by, w, h: hgt });
-    }
-    for (const [key, c] of this.cards) if (!keep.has(key)) { c.el.remove(); this.cards.delete(key); }
-  }
-
   // ---- the legendary floor signs ------------------------------------------------------------------------------------
   // Each sign keeps its pin on the item and takes the first clear spot around it (legend-place.mjs): clear of the bodies,
-  // the tags and crowd cards, the fixed HUD and the other signs; with no clear spot, its short form (the picture alone).
+  // the individual tags, the fixed HUD and the other signs; with no clear spot, its short form (the picture alone).
   placeLegends(pos, nowMs) {
     const phone = this.w <= 600, live = [];
     for (const [key, lg] of this.legends) {
       const fade = lg.gone == null ? 1 : 1 - (nowMs - lg.gone) / LEG_FADE_MS;
       if (fade <= 0) { lg.sign.remove(); lg.pin.remove(); this.legends.delete(key); continue; }
+      if (nowMs >= lg.showUntil + LEG_FADE_MS) {
+        // Keep only the record until the floor item departs: repeated snapshots must not create a new announcement.
+        lg.sign.remove(); lg.pin.remove(); continue;
+      }
       if (lg.phone !== phone) { lg.phone = phone; lg.sign.classList.toggle('phone', phone); lg.w = 0; }
       if (!lg.w) {   // measure each form once: the full sign, the picture and the name, the picture alone (a square)
         const c = lg.sign.classList; c.remove('short', 'nameonly', 'open');
-        lg.w = lg.sign.offsetWidth; lg.h = lg.sign.offsetHeight;
-        c.add('nameonly'); lg.nw = lg.sign.offsetWidth; lg.nh = lg.sign.offsetHeight; c.remove('nameonly');
-        lg.cw = lg.ch = lg.h; lg.form = null;
+        lg.w = lg.sign.offsetWidth * LEG_SCALE; lg.h = lg.sign.offsetHeight * LEG_SCALE;
+        c.add('nameonly'); lg.nw = lg.sign.offsetWidth * LEG_SCALE; lg.nh = lg.sign.offsetHeight * LEG_SCALE; c.remove('nameonly');
+        c.add('short'); lg.cw = lg.sign.offsetWidth * LEG_SCALE; lg.ch = lg.sign.offsetHeight * LEG_SCALE; c.remove('short'); lg.form = null;
       }
       const at = this.toScreen(lg.x, 0.05, lg.z);
-      live.push({ key, lg, fade, at, ax: at.x, ay: at.y, w: lg.w, h: lg.h, nw: lg.nw, nh: lg.nh, cw: lg.cw, ch: lg.ch });
+      // The item can outlast its announcement; every part of the announcement shares this fixed deadline.
+      const labelFade = Math.max(0, Math.min(1, (lg.showUntil + LEG_FADE_MS - nowMs) / LEG_FADE_MS));
+      live.push({ key, lg, fade, labelFade, at, ax: at.x, ay: at.y, w: lg.w, h: lg.h, nw: lg.nw, nh: lg.nh, cw: lg.cw, ch: lg.ch });
     }
-    if (!live.length) return;
+    if (!live.length) { this.legendRects = []; return; }
     const bodies = [...(pos || new Map())].filter(([, q]) => q.state === 'alive' && q.f.status !== 2)
       .map(([, q]) => bodyBox(this.toScreen(q.x, 0, q.z), this.toScreen(q.x, 1.5 + (q.lift || 0), q.z)));
     const r = this.rects || {}, fixed = [r.board, r.feed, r.btn0, r.btn1, r.cta].filter(Boolean);
     const spots = placeLegendSigns(live, [...bodies, ...(this.tagRects || []), ...fixed], { w: this.w, h: this.h }, fixed);
     for (const s of live) {
       const p = spots.get(s.key), lg = s.lg;
-      lg.pin.style.transform = 'translate(' + s.at.x.toFixed(1) + 'px,' + s.at.y.toFixed(1) + 'px)'; lg.pin.style.opacity = s.fade.toFixed(3);
+      lg.pin.style.transform = 'translate(' + s.at.x.toFixed(1) + 'px,' + s.at.y.toFixed(1) + 'px)'; lg.pin.style.opacity = (s.fade * s.labelFade).toFixed(3);
       lg.sign.style.visibility = p.hidden ? 'hidden' : '';   // off screen, or no room even for the picture: the pin alone
       if (p.hidden) { lg.sign.dataset.pos = 'hidden: ' + p.hidden; continue; }
       if (lg.form !== p.form) { lg.form = p.form; lg.sign.classList.toggle('nameonly', p.form === 'name'); lg.sign.classList.toggle('short', p.form === 'picture'); lg.sign.dataset.form = p.form; }
       // the picture, opened (tap or hover): the full sign over the picture's spot, kept on screen, above the rest
-      const open = p.form === 'picture' && (lg.hover || nowMs < lg.openUntil);
+      const open = p.form === 'picture' && (lg.hover || (lg.openUntil > 0 && nowMs < lg.openUntil + LEG_FADE_MS));
       if (lg.sign.classList.contains('open') !== open) lg.sign.classList.toggle('open', open);
       const x = open ? Math.max(6, Math.min(this.w - 6 - lg.w, p.x)) : p.x;
       lg.sign.dataset.pos = p.pos;
-      lg.sign.style.transform = 'translate(' + x.toFixed(1) + 'px,' + p.y.toFixed(1) + 'px)'; lg.sign.style.opacity = s.fade.toFixed(3);
+      lg.sign.style.transform = 'translate(' + x.toFixed(1) + 'px,' + p.y.toFixed(1) + 'px) scale(' + LEG_SCALE + ')';
+      lg.sign.style.opacity = (s.fade * s.labelFade).toFixed(3);
     }
     this.legendRects = live.map((s) => spots.get(s.key)).filter((p) => !p.hidden);   // read by the review tooling
   }
@@ -426,17 +386,17 @@ export class Hud {
     const banner = this.layerHost.querySelector('[data-panel="banner"]'), N = this.artRects.banner; if (!banner || !N) return;
     const p = placeBanner(N, this.bannerRects || [], this.w); if (p) banner.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
   }
-  // The banner at 80% (Pat, 2026-11-12: ropes, tags, faces and counts 20% smaller), with a small wood label over each rope
+  // The internal layout keeps Nov 12's 80% ropes and wooden labels; BANNER_SCALE shrinks the complete stack together.
   // ("KOs", "Predictions") in place of the old text labels. Screen layout, top down: the KOs label, the house rope, the
   // players' rope when any, then the Predictions label and its rope.
   bannerLayout(B) { const narrow = this.w < 600; return { S: 0.8, LH: narrow ? 14 : 17, gap: narrow ? 4 : 6, kc: narrow ? 0.72 : 1 }; }
   // before the other ropes exist, what the banner will cover (for the lead banner's place)
   estimateCards(B, withPlayers, withPredictions = false) {
-    const { S, LH, gap, kc } = this.bannerLayout(B), x = B.x * S, rects = [{ x, y: B.y * S, w: 60, h: LH }, { x, y: B.y * S + LH, w: B.w * S, h: B.h * S }];
+    const { S, LH, gap } = this.bannerLayout(B), x = B.x * S, rects = [{ x, y: B.y * S, w: 60, h: LH }, { x, y: B.y * S + LH, w: B.w * S, h: B.h * S }];
     let y = B.y * S + LH + B.h * S + gap;
-    if (withPlayers) { rects.push({ x, y, w: Math.max(90, B.w * 0.5) * S * kc, h: B.h * S * kc }); y += B.h * S * kc + gap; }
-    if (withPredictions) rects.push({ x, y, w: 110, h: LH }, { x, y: y + LH, w: B.w * S * kc, h: B.h * S * kc });
-    return rects;
+    if (withPlayers) { rects.push({ x, y, w: Math.max(90, B.w * 0.5) * S, h: B.h * S }); y += B.h * S + gap; }
+    if (withPredictions) rects.push({ x, y, w: 110, h: LH }, { x, y: y + LH, w: B.w * S, h: B.h * S });
+    return scaleBannerRects(rects);
   }
   ropeLabel(text, x, y) {
     const el = document.createElement('div'); el.className = 'ropelabel' + (this.w < 600 ? ' narrow' : ''); el.textContent = text;
@@ -466,9 +426,9 @@ export class Hud {
       if (node && r) made.push({ node, w: r.w, h: r.h, label: 'Predictions' });
     }
     for (const c of this.cardList) { if (c.label) c.label.remove(); if (c.node) c.node.remove(); } this.cardList = [];
-    // the house rope, drawn where the art put it, scaled to 80% about the page's corner and moved down under its label
+    // the house rope lives outside cardLayer: apply the same whole-stack scale to it and its label offset
     const house = this.layerHost.querySelector('[data-panel="board"]'), x = B.x * S, rects = [];
-    if (house) { house.style.transformOrigin = '0 0'; house.style.scale = String(S); house.style.translate = '0 ' + LH + 'px'; }
+    if (house) { house.style.transformOrigin = '0 0'; house.style.scale = String(S * BANNER_SCALE); house.style.translate = '0 ' + (LH * BANNER_SCALE) + 'px'; }
     const top = B.y * S, ko = this.ropeLabel('KOs', x + 10, top);
     this.cardList.push({ node: null, label: ko }); rects.push({ x: x + 10, y: top, w: ko.offsetWidth || 40, h: ko.offsetHeight || LH }, { x, y: top + LH, w: B.w * S, h: B.h * S });
     let y = top + LH + B.h * S + gap;
@@ -477,10 +437,11 @@ export class Hud {
       if (m.label) { label = this.ropeLabel(m.label, x + 10, y); rects.push({ x: x + 10, y, w: label.offsetWidth || 90, h: label.offsetHeight || LH }); y += LH; }
       m.node.style.position = 'absolute'; m.node.style.left = '0'; m.node.style.top = '0'; m.node.style.transformOrigin = '0 0';
       m.node.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) scale(' + (kc * S).toFixed(3) + ')'; this.cardLayer.appendChild(m.node);
-      rects.push({ x, y, w: m.w * kc * S, h: m.h * kc * S }); y += m.h * kc * S + gap;
+      // The art's measured w/h already include its phone scale kc; apply only the remaining rope scale here.
+      rects.push({ x, y, w: m.w * S, h: m.h * S }); y += m.h * S + gap;
       this.cardList.push({ node: m.node, label });
     }
-    this.bannerRects = rects; this.applyBanner();
+    this.bannerRects = scaleBannerRects(rects); this.applyBanner();
   }
 
 }

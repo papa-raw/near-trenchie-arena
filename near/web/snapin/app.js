@@ -21,7 +21,6 @@
   ];
   var PRESET_WEAPON = ['Bonk', 'Spear', 'Trout', 'Lob', 'Zap'];
   var ATTACK = { Swing: 'Hit nearby foes in an arc.', Lunge: 'Dash to the target; hit on arrival.', Beam: 'Wind up, then hit along a line.', Lob: 'Drop a burst into a marked circle.', Zap: 'Hit one foe, then jump to others.' };
-  var WALLETS = [['meteor', 'Meteor'], ['intear', 'Intear'], ['nightly', 'Nightly'], ['ethereum-wallets', 'Ethereum Wallets']];
   var NETWORK = 'testnet';   // the hackathon build is testnet only; mainnet waits on Pat's yes
   var CHAIN = null;          // a chain-mode host's chain_mode (near/chain/hosted_live.py): NETWORK becomes its identity network
   var STEP_BACK = { personality: ['personality', 'Change the name'], presets: ['presets', 'Pick another battle option'], agree: ['agree', 'Back to the arena rules'] };
@@ -78,7 +77,7 @@
   }
   function mineDriven() { var st = root.SnapRoom && root.SnapRoom.status(); return st && st.fighter && /^(in|joining|offline)$/.test(st.phase) ? st : null; }
   function hasDraft() { return !!(P.name || P.claim || P.fighter || P.ended || mineDriven()); }
-  function draftName() { var st = mineDriven(); return st ? st.fighter.name : P.name || (P.fighter && P.fighter.name) || (P.ended && P.ended.name) || (P.claim && P.claim.name) || 'your trenchie'; }
+  function draftName() { var st = mineDriven(); return st ? st.fighter.name : P.name || (P.fighter && P.fighter.name) || (P.ended && P.ended.name) || (P.claim && P.claim.name) || 'your Trenchie'; }
   // what a fresh start keeps, said only for what this browser actually holds
   function keptWords() {
     var k = [], door = P.door && P.door.door;
@@ -89,19 +88,19 @@
   }
   // the control asks once, in place: what it forgets, what happens to a trenchie in the ring, what it keeps
   function newButton(cls) {
-    if (!V.confirmNew) return btn('Make a new trenchie', 'new-trenchie', cls || 'textlink');
+    if (!V.confirmNew) return btn('Make a new Trenchie', 'new-trenchie', cls || 'textlink');
     var nm = draftName(), kept = keptWords();
-    return '<div class="confirm-new" role="group" aria-label="Make a new trenchie"><div class="sub"><b>' + esc('This forgets ' + nm + ': its name, look, temperament, quirks and voice' + (P.claim ? ', and its premint claim' : '') + '. Keep it or start fresh?') + '</b></div>' +
-      (mineDriven() ? '<div class="sub">' + esc(nm + ' swims home first: this browser drives one trenchie at a time.') + '</div>' : '') + (kept ? '<div class="sub">' + esc(kept) + '</div>' : '') +
+    return '<div class="confirm-new" role="group" aria-label="Make a new Trenchie"><div class="sub"><b>' + esc('This forgets ' + nm + ': its name, look, temperament, quirks and voice' + (P.claim ? ', and its premint claim' : '') + '. Keep it or start fresh?') + '</b></div>' +
+      (mineDriven() ? '<div class="sub">' + esc(nm + ' swims home first: this browser drives one Trenchie at a time.') + '</div>' : '') + (kept ? '<div class="sub">' + esc(kept) + '</div>' : '') +
       '<div class="row">' + btn('Start fresh', 'new-trenchie-yes', 'secondary') + btn('Keep ' + esc(nm), 'new-trenchie-no', 'textlink') + '</div></div>';
   }
   async function newTrenchie() {
     var st = mineDriven(), nm = draftName(), swim = null; V.confirmNew = false;
-    if (st && st.phase === 'joining') return say('Wait for the snap-in to finish, then make a new trenchie.', true);
+    if (st && st.phase === 'joining') return say('Wait for the snap-in to finish, then make a new Trenchie.', true);
     if (st) { V.flash = nm + ' is swimming home…'; render(); swim = { id: st.fighter.id, at: Date.now() }; try { await root.SnapRoom.leave(); } catch (e) { /* the lease sends it home */ } }
     freshDraft(); if (swim) { P.swimming = swim; save(); }   // kept across a reload: the next join waits for that swim home
     go(P.wallet ? 'presets' : 'wallet');
-    V.flash = 'A new trenchie: ' + nm + ' is forgotten. ' + keptWords(); render();
+    V.flash = 'A new Trenchie: ' + nm + ' is forgotten. ' + keptWords(); render();
     try { root.scrollTo(0, 0); } catch (e) { /* no window */ }
   }
   // the trenchie this browser put in the ring is out of it (the arena restarted, every page was closed until the seat ran
@@ -110,7 +109,7 @@
   function seatEnded(f, code) { P.ended = { name: f.name, why: ENDED[code] || 'no page was open to keep it', at: Date.now() }; P.fighter = null; save(); render(); }
   function endedLine() {
     if (!P.ended || V.mode !== 'flow' || V.step === 'ring' || mineDriven()) return '';
-    return '<div class="in-banner" role="status">' + esc('DEV ' + P.ended.name + ' is out of the arena (' + P.ended.why + '). Your trenchie is kept.') + ' ' +
+    return '<div class="in-banner" role="status">' + esc('DEV ' + P.ended.name + ' is out of the arena (' + P.ended.why + '). Your Trenchie is kept.') + ' ' +
       btn('Snap ' + esc(P.ended.name) + ' back in', 'rejoin', 'textlink') + newButton() + '</div>';
   }
 
@@ -247,7 +246,7 @@
   }
   function yoctoNear(y) { var s = String(y || '0').replace(/^0+/, '') || '0'; while (s.length < 25) s = '0' + s; var w = s.slice(0, -24).replace(/^0+/, '') || '0', f = s.slice(-24).replace(/0+$/, ''); return f ? w + '.' + f : w; }
   function chainSupply() { var o = P.wallet && P.wallet.chain && P.wallet.chain.offer; if (!o) return 'sign in to see'; return o.kind === 'claim' ? 'free claim · ' + o.held + ' left' : 'paid mint · ' + yoctoNear(o.cost_yocto) + ' NEAR'; }
-  function walletName(id) { if (id === 'dev-throwaway') return 'Throwaway account (DEV)'; var w = WALLETS.filter(function (x) { return x[0] === id; })[0]; return w ? w[1] : id; }
+  function walletName(id) { if (id === 'dev-throwaway') return 'Throwaway account (DEV)'; return P.wallet && P.wallet.id === id && P.wallet.name ? P.wallet.name : 'your wallet'; }
   function loadTerms() {
     if (!root.SnapRoom) { V.terms = { error: 'The arena client did not load. Reload the page.' }; return render(); }
     V.terms = null; render();
@@ -260,7 +259,7 @@
     // this battle option already claimed (the player came Back): show the player's own trenchie, never the preset's default
     if (claimedHere()) {
       var SS = root.SnapSheet, t = SS && SS.TEMPERAMENTS.filter(function (x) { return x.id === P.temper; })[0], c = P.claim;
-      return receipt('<div class="eyebrow">Your trenchie · ' + esc(P.preset) + '</div><h3>' + esc(P.name || c.name) + '</h3>' + U.line('Temperament', esc(t ? t.name : P.temper)) +
+      return receipt('<div class="eyebrow">Your Trenchie · ' + esc(P.preset) + '</div><h3>' + esc(P.name || c.name) + '</h3>' + U.line('Temperament', esc(t ? t.name : P.temper)) +
         (claimIntact() ? U.line('Persona digest', '<span class="acct" title="' + esc(c.digest) + '">' + esc(short(c.digest)) + '</span>') : '<div class="sub">' + esc('Your own edits, made from ' + c.name + '’s premint persona.') + '</div>'));
     }
     loadPremint();
@@ -273,7 +272,7 @@
   function elapsed(ms) { var sec = Math.max(0, Math.round(ms / 1000)); return (sec >= 60 ? Math.floor(sec / 60) + ' min ' : '') + (sec % 60) + ' s'; }
   // the player's AI (brain.js, another lane's file): its own status chip when it is loaded; until then, say plainly what drives the fighter
   var brainState = null;
-  function brainLine() { return brainState && brainState.chip ? brainState.chip : 'Your trenchie fights on the arena’s own tactics: orders from your AI are not wired in yet.'; }
+  function brainLine() { return brainState && brainState.chip ? brainState.chip : 'Your Trenchie fights on the arena’s own tactics: orders from your AI are not wired in yet.'; }
   function ringView() {
     var st = root.SnapRoom ? root.SnapRoom.status() : { phase: 'error', message: 'The arena client did not load. Reload the page.' }, f = st.fighter, name = P.name || 'Newcomer';
     if (V.checking) return { head: 'Checking', content: receipt('<div class="sub" role="status">Checking that ' + esc(draftName()) + ' is still in the arena…</div>') };
@@ -288,9 +287,9 @@
         (CHAIN && P.wallet && P.wallet.chain && P.wallet.chain.token ? U.line('Trenchie', esc(P.wallet.chain.token) + ' · owned by ' + esc(shortAcct(P.wallet.accountId)) + ' on ' + esc(NETWORK)) + (P.wallet.chain.tx ? U.line('Mint', esc(String(P.wallet.chain.tx).slice(0, 10)) + '…') : '') : '') +
         U.line('Battle option', esc(P.preset)) + U.line('Persona', claimIntact() ? esc(P.claim.name) + ' (premint, ' + esc(P.claim.digest.slice(0, 8)) + '…)' : 'your own') + U.line('Prediction for this life', esc(U.pickLine(lp))) +
         U.line('AI', esc(P.door ? P.door.identity + (brainOn() ? '' : ' (saved, not driving yet)') : 'none yet')) + (took ? U.line('Wallet to the ring', esc(took)) : '') +
-        '<div class="sub" id="brain-chip">' + esc(brainLine()) + '</div><div class="sub">' + (st.keyPersisted === false ? 'This browser keeps your trenchie only on this page (it cannot store the key): closing this page sends your trenchie home.' : 'Keep this page or the arena page open: closing every tab sends your trenchie home.') + '</div>' +
+        '<div class="sub" id="brain-chip">' + esc(brainLine()) + '</div><div class="sub">' + (st.keyPersisted === false ? 'This browser keeps your Trenchie only on this page (it cannot store the key): closing this page sends your Trenchie home.' : 'Keep this page or the arena page open: closing every tab sends your Trenchie home.') + '</div>' +
         (st.message ? '<div class="sub" role="status">' + esc(st.message) + '</div>' : '')) +
-        '</div><div>' + (root.SnapChat ? receipt(root.SnapChat.html({ name: (CHAIN ? '' : 'DEV ') + f.name, card: true })) : '') + '</div></div>' + (st.keyPersisted === false ? '' : btn('Watch your trenchie', 'watch-mine', 'main-action')) + '<div class="row">' + btn('Change next life', 'corner', 'textlink') + btn('Leave the arena', 'leave', 'textlink') + '</div>' + newButton() };
+        '</div><div>' + (root.SnapChat ? receipt(root.SnapChat.html({ name: (CHAIN ? '' : 'DEV ') + f.name, card: true })) : '') + '</div></div>' + (st.keyPersisted === false ? '' : btn('Watch your Trenchie', 'watch-mine', 'main-action')) + '<div class="row">' + btn('Change next life', 'corner', 'textlink') + btn('Leave the arena', 'leave', 'textlink') + '</div>' + newButton() };
     }
     if (st.phase === 'elsewhere') return { head: 'In the arena', content: receipt('<div class="sub" role="status">' + esc(st.message) + '</div>') + btn('Watch the arena', 'step:watch', 'main-action') };
     if (st.phase === 'error') {
@@ -301,14 +300,14 @@
         (fix ? btn(back[1], 'step:' + back[0], 'main-action') : btn('Try again', 'join', 'main-action')) +
         '<div class="row">' + (fix ? btn('Try again', 'join', 'textlink') : btn(back[1], 'step:' + back[0], 'textlink')) + btn('Keep watching', 'step:watch', 'textlink') + '</div>' + newButton() };
     }
-    if (st.phase === 'offline') return { head: 'Reconnecting', content: receipt('<h2>' + esc(name) + ' is waiting</h2><div class="sub" role="alert">' + esc(st.message) + '</div><div class="sub">Your trenchie keeps its seat while its lease lasts (about 30 s).</div>') +
+    if (st.phase === 'offline') return { head: 'Reconnecting', content: receipt('<h2>' + esc(name) + ' is waiting</h2><div class="sub" role="alert">' + esc(st.message) + '</div><div class="sub">Your Trenchie keeps its seat while its lease lasts (about 30 s).</div>') +
         btn('Try again', 'resume', 'main-action') + btn('Keep watching', 'step:watch', 'textlink') + newButton() };
     if (st.phase === 'leaving') return { head: 'Leaving', content: receipt('<h2>' + esc(name) + '</h2><div class="sub" role="status">' + esc(st.message) + '</div>') };
-    if (P.ended) return { head: 'Seat ended', content: hero() + receipt('<h2>' + esc('DEV ' + P.ended.name + ' is out of the arena') + '</h2><div class="sub" role="status">' + esc('Its seat ended: ' + P.ended.why + '. Your trenchie is kept in this browser: its name, look, voice and battle option.') + '</div>') +
+    if (P.ended) return { head: 'Seat ended', content: hero() + receipt('<h2>' + esc('DEV ' + P.ended.name + ' is out of the arena') + '</h2><div class="sub" role="status">' + esc('Its seat ended: ' + P.ended.why + '. Your Trenchie is kept in this browser: its name, look, voice and battle option.') + '</div>') +
         btn('Snap ' + esc(P.ended.name) + ' back in', 'rejoin', 'main-action') + btn('Keep watching', 'step:watch', 'textlink') + newButton() };
     if (st.phase === 'ended') return { head: 'Swam home', content: receipt('<h2>' + esc(name) + ' left the ring</h2><div class="sub" role="status">' + esc(st.message) + '</div>') +
         btn('Snap in again', 'join', 'main-action') + btn('Keep watching', 'step:watch', 'textlink') + newButton() };
-    return { head: P.left ? 'Swam home' : 'Ready', content: hero() + receipt('<h2>' + esc(name) + (P.left ? ' swam home' : '') + '</h2><div class="sub">' + (P.left ? 'Your trenchie left the ring. ' : '') + 'Your choices are saved in this browser. Snap in to put your trenchie in the ' + (CHAIN ? 'arena.' : 'DEV arena.') + '</div>') +
+    return { head: P.left ? 'Swam home' : 'Ready', content: hero() + receipt('<h2>' + esc(name) + (P.left ? ' swam home' : '') + '</h2><div class="sub">' + (P.left ? 'Your Trenchie left the ring. ' : '') + 'Your choices are saved in this browser. Snap in to put your Trenchie in the ' + (CHAIN ? 'arena.' : 'DEV arena.') + '</div>') +
       btn('Snap in', 'join', 'main-action') + btn('Back to the arena rules', 'step:agree', 'textlink') + (hasDraft() ? newButton() : '') };
   }
   var joining = false;
@@ -327,14 +326,14 @@
       var ch = P.wallet && P.wallet.chain;
       if (!ch) { joining = false; say('Sign in with your wallet first (step 1).', true); return; }
       try {
-        say(ch.owned && ch.owned.length ? 'Checking ' + ch.owned[0].token_id + ' is still yours…' : ch.offer && ch.offer.kind === 'claim' && claimIntact() ? 'Claiming your free trenchie on ' + NETWORK + '…' : 'Approve the paid mint in your wallet (' + yoctoNear(ch.offer && ch.offer.cost_yocto) + ' NEAR)…');
+        say(ch.owned && ch.owned.length ? 'Checking ' + ch.owned[0].token_id + ' is still yours…' : ch.offer && ch.offer.kind === 'claim' && claimIntact() ? 'Claiming your free Trenchie on ' + NETWORK + '…' : 'Approve the paid mint in your wallet (' + yoctoNear(ch.offer && ch.offer.cost_yocto) + ' NEAR)…');
         if (!sh || sh.error) throw new Error((sh && sh.error) || 'the persona sheet could not be built');
         var t = await root.SnapIdentity.getTrenchie({ preset: presetId(), sheet: sh, claim: claimIntact() });
         ch.token = t.token_id; ch.tx = t.tx || null; ch.owned = [{ token_id: t.token_id }]; save();
         var spk = await root.SnapRoom.sessionKey();   // the room's session key, made now so the ticket names it
         chain = { ticket: await root.SnapIdentity.ticket(t.token_id, { session_public_key: spk, name: P.name || 'Newcomer', preset: presetId() }),
                   nft_token_id: t.token_id, network: NETWORK, session_public_key: spk };
-      } catch (e) { joining = false; say('No trenchie yet: ' + e.message, true); render(); return; }
+      } catch (e) { joining = false; say('No Trenchie yet: ' + e.message, true); render(); return; }
     }
     try {
       // the trenchie a new one replaced may still be swimming home: the join waits for it (kept in the draft across a reload)
@@ -373,9 +372,9 @@
     try {
       var r = await root.fetch('/dev/corner?fighter=' + encodeURIComponent(id), { cache: 'no-store' }), j = null;
       try { j = await r.json(); } catch (e) { j = null; }
-      if (!r.ok || !j || j.error) { C.error = r.status === 502 || r.status === 404 ? 'Cannot reach the DEV arena, so the corner has no fresh data. It retries every few seconds.' : 'The arena did not give the corner: ' + ((j && j.error) || r.status) + '.'; }
+      if (!r.ok || !j || j.error) { C.error = r.status === 502 || r.status === 404 ? 'Cannot reach the arena, so the corner has no fresh data. It retries every few seconds.' : 'The arena did not give the corner: ' + ((j && j.error) || r.status) + '.'; }
       else { var same = C.data && JSON.stringify(C.data) === JSON.stringify(j) && !C.error; C.data = j; C.error = ''; C.now = Number(r.headers.get('X-Dev-Now')) || C.now; C.at = root.performance.now(); if (same) return; }
-    } catch (e) { if (C.error) return; C.error = 'Cannot reach the DEV arena, so the corner has no fresh data. It retries every few seconds.'; }
+    } catch (e) { if (C.error) return; C.error = 'Cannot reach the arena, so the corner has no fresh data. It retries every few seconds.'; }
     if (cornerOpen()) render();   // only when the room's answer changed: the countdowns tick in place, so typing is never interrupted
   }
   function cornerTick() {   // countdowns move every second without a re-render (focus stays put)
@@ -391,7 +390,7 @@
   }
   function corner() {
     var st = root.SnapRoom ? root.SnapRoom.status() : {}, f = st.fighter, d = C.data, html = '';
-    if (!myFighter()) return receipt('<h2>No trenchie in the arena</h2><div class="sub">The corner shows your last life and sets up your next one once your trenchie is in the ring.</div>') + btn('Snap in', 'mode:flow', 'main-action');
+    if (!myFighter()) return receipt('<h2>No Trenchie in the arena</h2><div class="sub">The corner shows your last life and sets up your next one once your Trenchie is in the ring.</div>') + btn('Snap in', 'mode:flow', 'main-action');
     // ---- the last life and the floor
     if (C.error && !d) html += receipt('<div class="sub" role="alert">' + esc(C.error) + '</div>');
     else if (!d) html += receipt('<div class="sub" role="status">Reading your corner from the arena…</div>');
@@ -415,7 +414,7 @@
         '<label class="field" for="zero-ko">Chance of zero KOs (%)</label><input id="zero-ko" type="number" inputmode="numeric" min="0" max="100" value="' + esc(P.zeroKo) + '"><div class="sub">Logged and scored; no NEAR can be added to it.</div>') + '</div></div>' +
       receipt('<h3>Add testnet NEAR, move, sale lock</h3><div class="row">' + btn('Add 0.01 testnet NEAR to the prediction', 'noop', '', 'disabled aria-disabled="true"') + btn('Move item', 'noop', '', 'disabled aria-disabled="true"') + btn('Sale lock', 'noop', '', 'disabled aria-disabled="true"') + '</div><div class="sub">These need the onchain market, which is not deployed yet. They are off in the DEV arena.</div>') +
       btn('Ready next life', 'ready', 'main-action') + '<div class="status" id="locked" aria-live="polite">' + esc(V.pickMsg || '') + '</div>' +
-      '<div class="row">' + btn('Back to your trenchie', 'back-ring', 'textlink') + btn('Watch your trenchie', 'watch-mine', 'textlink') + '</div>';
+      '<div class="row">' + btn('Back to your Trenchie', 'back-ring', 'textlink') + btn('Watch your Trenchie', 'watch-mine', 'textlink') + '</div>';
     return html;
   }
 
@@ -439,13 +438,13 @@
     return '<div class="split"><div>' + hero() + personality(true) + '</div><div>' + file + '</div></div>';
   }
   // ------------------------------------------------------------------ the card (F28) with the boldness gauge (W23), from real data
-  // Record and gauge: the public predictions log (/house/predictions.jsonl, one line per AI per life, scored after the life).
+  // Record and gauge: exact per-persona summary of the whole predictions log; the public row window may be tailed.
   // A line's `score` is how far the spread sat from what happened (ranked probability score, millionths, 0 = perfect) and
   // `base_score` the published base rate on the same life. The needle (INFERRED from W23's words): 0.5 + skill / 2, with
   // skill = (sum base - sum score) / sum base, so the base rate sits mid-dial, beating it leans careful, doing worse leans
   // reckless; no needle under quote.py's MIN_LIVES (10 scored lives). Bag and serials: what the fighter wears now
   // (/room/observe). Scars are read from item KOs, which the DEV arena does not keep: the card says so.
-  var MIN_LIVES = 10, CARD = { rows: null, error: '', equipped: null, loading: false, gen: 0 };
+  var MIN_LIVES = 10, CARD = { rows: null, summary: null, error: '', equipped: null, loading: false, gen: 0 };
   function mine(row, id) { return row && (row.persona === id || String(row.life || '').indexOf('/' + id + ':life:') >= 0); }
   async function loadCard() {
     var id = myFighter(); if (!id) return; var gen = ++CARD.gen; CARD.loading = true;   // a newer load always wins over one still in flight
@@ -453,10 +452,17 @@
       var r = await root.fetch('/house/predictions.jsonl', { cache: 'no-store' });
       if (!r.ok) throw new Error(r.status === 404 ? 'this arena serves no predictions log' : 'the predictions log answered ' + r.status);
       var rows = (await r.text()).split('\n').filter(Boolean).map(function (l) { try { return JSON.parse(l); } catch (e) { return null; } }).filter(function (x) { return mine(x, id); });
+      var summary = null;
+      if (r.headers.get('X-Log-Window') === 'tail') {
+        var totals = await root.fetch('/house/predictions/summary?persona=' + encodeURIComponent(id), { cache: 'no-store' });
+        if (!totals.ok) throw new Error('the complete prediction record answered ' + totals.status);
+        summary = await totals.json();
+        if (summary.scope !== 'all' || summary.persona !== id) throw new Error('the complete prediction record is unavailable');
+      }
       if (gen !== CARD.gen) return;
-      CARD.rows = rows; CARD.hash = r.headers.get('X-Log-Hash') || ''; CARD.error = ''; CARD.wait = 0;
+      CARD.rows = rows; CARD.summary = summary; CARD.hash = summary ? summary.log_hash : r.headers.get('X-Log-Hash') || ''; CARD.error = ''; CARD.wait = 0;
     } catch (e) {
-      if (gen !== CARD.gen) return; CARD.rows = null; CARD.error = e.message === 'Failed to fetch' ? 'cannot reach the arena' : e.message;
+      if (gen !== CARD.gen) return; CARD.rows = null; CARD.summary = null; CARD.error = e.message === 'Failed to fetch' ? 'cannot reach the arena' : e.message;
       // an unreadable record is tried again, never shown as zero; 4 s, then 8, 16, 32, capped at 60 s, so a log that is gone for good is not hammered
       CARD.wait = Math.min(60000, CARD.wait ? CARD.wait * 2 : 4000);
       root.setTimeout(function () { if (gen === CARD.gen && V.mode === 'workshop' && V.tab === 'card') loadCard(); }, CARD.wait);
@@ -468,6 +474,11 @@
   }
   function cardRecord() {
     var rows = CARD.rows; if (!rows) return null;
+    if (CARD.summary) {
+      var total = CARD.summary, count = total.scored, score = total.score_sum, baseline = total.base_score_sum;
+      return { lives: total.lives, kos: total.kos, scored: count, meanScore: count ? score / count / 1e6 : null,
+        calibration: count >= MIN_LIVES && baseline > 0 ? Math.max(0, Math.min(1, 0.5 + (baseline - score) / baseline / 2)) : null };
+    }
     var ended = rows.filter(function (x) { return x.actual != null; }), scored = ended.filter(function (x) { return x.prediction && x.score != null && x.base_score != null; });
     var sum = function (a, k) { return a.reduce(function (t, x) { return t + Number(x[k] || 0); }, 0); }, base = sum(scored, 'base_score'), ai = sum(scored, 'score');
     var cal = scored.length >= MIN_LIVES && base > 0 ? Math.max(0, Math.min(1, 0.5 + (base - ai) / base / 2)) : null;
@@ -499,16 +510,16 @@
     if (s === 'wallet') {
       head = 'Own your persona';
       // the first screen: a returning browser sees its saved trenchie and the way to a new one
-      if (hasDraft() && !P.ended && !mineDriven()) content += receipt('<div class="eyebrow">Your trenchie</div><h3>' + esc(draftName()) + '</h3><div class="sub">Saved in this browser. Continue goes on with it.</div>' + newButton());
+      if (hasDraft() && !P.ended && !mineDriven()) content += receipt('<div class="eyebrow">Your Trenchie</div><h3>' + esc(draftName()) + '</h3><div class="sub">Saved in this browser. Continue goes on with it.</div>' + newButton());
       if (P.wallet) {
         content += receipt('<div class="eyebrow">Connected · ' + esc(P.wallet.network) + '</div><h2 class="acct" title="' + esc(P.wallet.accountId) + '" aria-label="Account ' + esc(P.wallet.accountId) + '">' + esc(shortAcct(P.wallet.accountId)) + '</h2><div class="sub">' + esc(walletName(P.wallet.id)) +
           (P.wallet.id === 'dev-throwaway' ? ' · made in this browser, unfunded; nothing is created or signed onchain.' : '') + '</div>' +
-          (P.wallet.chain ? '<div class="sub">Signed in. ' + (P.wallet.chain.owned && P.wallet.chain.owned.length ? 'Your trenchie: ' + esc(P.wallet.chain.owned[0].token_id) + '.' : P.wallet.chain.offer && P.wallet.chain.offer.kind === 'claim' ? 'A free trenchie is waiting for you (' + esc(P.wallet.chain.offer.held) + ' left).' : 'A new trenchie is a paid mint: ' + esc(yoctoNear(P.wallet.chain.offer && P.wallet.chain.offer.cost_yocto)) + ' NEAR, signed in your wallet when you enter the arena.') + '</div>' : '') + '</div>') +
+          (P.wallet.chain ? '<div class="sub">Signed in. ' + (P.wallet.chain.owned && P.wallet.chain.owned.length ? 'Your Trenchie: ' + esc(P.wallet.chain.owned[0].token_id) + '.' : P.wallet.chain.offer && P.wallet.chain.offer.kind === 'claim' ? 'A free Trenchie is waiting for you (' + esc(P.wallet.chain.offer.held) + ' left).' : 'A new Trenchie is a paid mint: ' + esc(yoctoNear(P.wallet.chain.offer && P.wallet.chain.offer.cost_yocto)) + ' NEAR, signed in your wallet when you enter the arena.') + '</div>' : '') + '</div>') +
           btn('Continue', 'step:presets', 'main-action') + btn('Use another wallet', 'wallet-forget', 'textlink');
       } else {
-        content += receipt(CHAIN ? '<h2>' + (NETWORK === 'mainnet' ? 'NEAR wallet' : 'Testnet wallet') + '</h2><div class="notice" style="margin-top:12px">Your wallet signs in (a message, no cost) and owns your trenchie on ' + esc(NETWORK) + '. Its fights and gear are recorded on testnet under that trenchie.</div>'
+        content += receipt(CHAIN ? '<h2>' + (NETWORK === 'mainnet' ? 'NEAR wallet' : 'Testnet wallet') + '</h2><div class="notice" style="margin-top:12px">Your wallet signs in (a message, no cost) and owns your Trenchie on ' + esc(NETWORK) + '. Its fights and gear are recorded on testnet under that Trenchie.</div>'
                                  : '<h2>Testnet wallet</h2><div class="notice" style="margin-top:12px">Your wallet will own your persona. In the DEV arena nothing is minted, signed or charged.</div>') + '<div class="button-list" style="margin-top:20px">' +
-          WALLETS.map(function (w) { return btn('<span>' + w[1] + '</span><small>declares ' + esc(NETWORK) + '</small><span class="symbol">→</span>', 'wallet:' + w[0], 'door'); }).join('') +
+          btn('<span>Connect wallet</span><small>' + esc(NETWORK) + '</small><span class="symbol">→</span>', 'wallet:choose', 'door') +
           (CHAIN ? '</div>' : btn('<span>Throwaway account</span><small>DEV · no wallet needed</small><span class="symbol">→</span>', 'wallet-dev', 'door') + '</div>' +
           '<div class="sub">The throwaway account is an unfunded testnet account id made in this browser; nothing is created or signed onchain.</div>');
       }
@@ -517,7 +528,7 @@
       head = 'Fighter presets';
       content += '<div class="row"><span class="chip mint">5 battle options</span><span class="chip">' + (CHAIN ? esc(chainSupply()) : 'DEV · free to try') + '</span></div>' + presetGrid() + (inventoryNote()) +
         claimLine() +
-        '<div class="sub">' + (CHAIN ? (P.wallet && P.wallet.chain && P.wallet.chain.offer && P.wallet.chain.offer.kind === 'claim' ? 'Use this preset to claim its premint for free (one per wallet, first come); a fighter you build is a paid mint.' : 'Every free premint is claimed: a new trenchie is a paid mint your wallet signs when you enter the arena.') : 'The onchain premint (5 presets × 10 copies, first come) is not deployed yet; a DEV claim is kept in this browser only.') + '</div>' +
+        '<div class="sub">' + (CHAIN ? (P.wallet && P.wallet.chain && P.wallet.chain.offer && P.wallet.chain.offer.kind === 'claim' ? 'Use this preset to claim its premint for free (one per wallet, first come); a fighter you build is a paid mint.' : 'Every free premint is claimed: a new Trenchie is a paid mint your wallet signs when you enter the arena.') : 'The onchain premint (5 presets × 10 copies, first come) is not deployed yet; a DEV claim is kept in this browser only.') + '</div>' +
         btn(claimedHere() ? 'Next: personality' : 'Use this preset', 'claim', 'main-action') + btn('Build a fighter', 'step:build', 'textlink');
     } else if (s === 'claimed') {
       head = 'Preset supply';
@@ -553,7 +564,7 @@
     if (V.mode !== 'flow' || !live || !live.fighter || !/^(in|joining|offline)$/.test(live.phase)) return '';
     // on the first screen the banner also carries the way to a new trenchie (one place names the trenchie, not two)
     var first = V.step === 'wallet' ? newButton() : '';
-    return '<div class="in-banner" role="status">' + esc((CHAIN ? '' : 'DEV ') + live.fighter.name) + ' is in the arena now. ' + btn('Back to your trenchie', 'back-ring', 'textlink') + first + '</div>';
+    return '<div class="in-banner" role="status">' + esc((CHAIN ? '' : 'DEV ') + live.fighter.name) + ' is in the arena now. ' + btn('Back to your Trenchie', 'back-ring', 'textlink') + first + '</div>';
   }
   function viewLogin() {
     var v = D.view({ returning: !!root.SnapUI.store.get('trenchie.snapin.lastdoor'), walletChip: aiChip(), onContinue: V.mode === 'flow' ? 'Next: the arena rules' : 'Back to the arena' });
@@ -593,17 +604,17 @@
   function bl(act, label) { return '<a href="#" class="link" data-act="' + act + '">' + label + '</a>'; }
   // a returning player's own trenchie on the guide's screens: in the ring, out of it, or saved here (items 33 and 25)
   function newLink() {
-    if (!V.confirmNew) return bl('new-trenchie', 'Make a new trenchie');
+    if (!V.confirmNew) return bl('new-trenchie', 'Make a new Trenchie');
     var nm = draftName(), kept = keptWords();
     return '<b>' + esc('This forgets ' + nm + ': its name, look, temperament, quirks and voice' + (P.claim ? ', and its premint claim' : '') + '. Keep it or start fresh?') + '</b> ' +
-      (mineDriven() ? esc(nm + ' swims home first: this browser drives one trenchie at a time.') + ' ' : '') + (kept ? esc(kept) + ' ' : '') + bl('new-trenchie-yes', 'Start fresh') + ' · ' + bl('new-trenchie-no', 'Keep ' + esc(nm));
+      (mineDriven() ? esc(nm + ' swims home first: this browser drives one Trenchie at a time.') + ' ' : '') + (kept ? esc(kept) + ' ' : '') + bl('new-trenchie-yes', 'Start fresh') + ' · ' + bl('new-trenchie-no', 'Keep ' + esc(nm));
   }
   function returningLine() {
     if (V.flash) return esc(V.flash);
     var live = mineDriven();
-    if (live) return esc('DEV ' + live.fighter.name + ' is in the arena now.') + ' ' + bl('back-ring', 'Back to your trenchie') + ' · ' + newLink();
-    if (P.ended) return esc('DEV ' + P.ended.name + ' is out of the arena (' + P.ended.why + '). Your trenchie is kept.') + ' ' + bl('rejoin', 'Snap ' + esc(P.ended.name) + ' back in') + ' · ' + newLink();
-    if (V.step === 'wallet' && hasDraft()) return esc('Your trenchie: ' + draftName() + ', saved in this browser.') + ' ' + newLink();
+    if (live) return esc('DEV ' + live.fighter.name + ' is in the arena now.') + ' ' + bl('back-ring', 'Back to your Trenchie') + ' · ' + newLink();
+    if (P.ended) return esc('DEV ' + P.ended.name + ' is out of the arena (' + P.ended.why + '). Your Trenchie is kept.') + ' ' + bl('rejoin', 'Snap ' + esc(P.ended.name) + ' back in') + ' · ' + newLink();
+    if (V.step === 'wallet' && hasDraft()) return esc('Your Trenchie: ' + draftName() + ', saved in this browser.') + ' ' + newLink();
     return '';
   }
   async function ringNames() {   // the names in the ring now, squashed (an agent's fighter shows its id, "DEV lanternlou")
@@ -615,8 +626,8 @@
   // chain mode for board 1's views: the host's identity network, and what this wallet's sign-in found (main's own sentences)
   function chainInfo() {
     var ch = P.wallet && P.wallet.chain;
-    var signed = !CHAIN || !ch ? '' : 'Signed in. ' + (ch.owned && ch.owned.length ? 'Your trenchie: ' + ch.owned[0].token_id + '.' : ch.offer && ch.offer.kind === 'claim' ? 'A free trenchie is waiting for you (' + ch.offer.held + ' left).' : 'A new trenchie is a paid mint: ' + yoctoNear(ch.offer && ch.offer.cost_yocto) + ' NEAR, signed in your wallet when you enter the arena.');
-    var fighter = !CHAIN ? '' : ch && ch.offer && ch.offer.kind === 'claim' ? 'Use this preset to claim its premint for free (one per wallet, first come); a fighter you build is a paid mint.' : 'Every free premint is claimed: a new trenchie is a paid mint your wallet signs when you enter the arena.';
+    var signed = !CHAIN || !ch ? '' : 'Signed in. ' + (ch.owned && ch.owned.length ? 'Your Trenchie: ' + ch.owned[0].token_id + '.' : ch.offer && ch.offer.kind === 'claim' ? 'A free Trenchie is waiting for you (' + ch.offer.held + ' left).' : 'A new Trenchie is a paid mint: ' + yoctoNear(ch.offer && ch.offer.cost_yocto) + ' NEAR, signed in your wallet when you enter the arena.');
+    var fighter = !CHAIN ? '' : ch && ch.offer && ch.offer.kind === 'claim' ? 'Use this preset to claim its premint for free (one per wallet, first come); a fighter you build is a paid mint.' : 'Every free premint is claimed: a new Trenchie is a paid mint your wallet signs when you enter the arena.';
     return { on: !!CHAIN, network: NETWORK, signed: signed, fighter: fighter };
   }
   // board 1: Snap in lands on the trenchie panel in the arena (SPEC state 'fight'), when the session can cross pages (its
@@ -637,8 +648,27 @@
     var id = Array.prototype.map.call(raw, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
     P.wallet = { id: 'dev-throwaway', accountId: id, network: NETWORK }; P.timing = { wallet: Date.now() }; go('presets');
   }
+  // Agent codes carry the same page-key authority and confirmed token as a browser join. The sign-in id alone is
+  // never a bearer credential; the identity module signs this request without another wallet sign-in.
+  async function requestPlanCode(args) {
+    if (!CHAIN) return root.SnapProviders.snap.requestCode(args);
+    var ch = P.wallet && P.wallet.chain;
+    if (!ch) throw new Error('Sign in with your wallet first (step 1).');
+    var sh = buildSheet();
+    if (!sh || sh.error) throw new Error((sh && sh.error) || 'the persona sheet could not be built');
+    say(ch.owned && ch.owned.length ? 'Checking ' + ch.owned[0].token_id + ' is still yours…' : ch.offer && ch.offer.kind === 'claim' && claimIntact() ? 'Claiming your free Trenchie on ' + NETWORK + '…' : 'Approve the paid mint in your wallet (' + yoctoNear(ch.offer && ch.offer.cost_yocto) + ' NEAR)…');
+    try {
+      var token = await root.SnapIdentity.getTrenchie({ preset: presetId(), sheet: sh, claim: claimIntact() });
+      ch.token = token.token_id; ch.tx = token.tx || ch.tx || null; ch.owned = [{ token_id: token.token_id }]; P.sheet = sh; save();
+      var payload = { agent: args.agent, name: args.name || null, plan_stop_pct: args.planStop > 0 ? args.planStop : null,
+                      preset: presetId(), sheet: sh, look: root.SnapSheet.lookFile(sheetState()) };
+      var envelope = await root.SnapIdentity.codeRequest(payload, token.token_id);
+      return await root.SnapProviders.snap.requestCode(args, { envelope: envelope });
+    } finally { say(''); }
+  }
   var guideHost = { P: P, V: V, go: function (s) { go(s); }, save: function () { save(); }, render: function () { render(); }, say: function (m, e) { say(m, e); }, backToArena: function () { backToArena(); },
     devWallet: function () { devWallet(); }, connectWallet: function (id) { connectWallet(id); }, setPreset: function (n) { setPreset(n); }, claim: function () { return claimOption(); },
+    requestCode: requestPlanCode,
     ringNames: ringNames, loadTerms: function () { loadTerms(); }, chain: chainInfo, loadPremint: function () { return loadPremint(); }, shortAcct: function (a) { return shortAcct(a); }, snapIn: function () { snapIn(); }, returning: returningLine };
   function say(m, err) { V.msg = m; V.msgErr = !!err; var fb = doc.querySelector('#feedback'); if (fb) { fb.textContent = m; fb.classList.toggle('err', !!err); } else render(); }
 
@@ -648,17 +678,17 @@
   }
   async function connectWallet(id) {
     var W = root.SnapWallet; if (!W) return say('The wallet module did not load. Reload the page.', true);
-    V.busy = true; say('Opening ' + id + '…');
+    V.busy = true; say('Opening wallet chooser…');
     try {
-      var r = await W.connect(id, { network: NETWORK });
+      var r = await W.connect(id === 'choose' ? null : id, { network: NETWORK });
       if (r && (r.ok !== false) && (r.accountId || r.account) && CHAIN) {
-        say('Sign the sign-in message in ' + walletName(id) + ' (a message, not a transaction: no cost)…');
+        say('Sign the sign-in message in ' + (r.walletName || 'your wallet') + ' (a message, not a transaction: no cost)…');
         try {
           var si = await root.SnapIdentity.signIn();
-          P.wallet = { id: id, accountId: si.account, network: si.network, chain: { owned: si.owned, offer: si.offer } }; P.timing = { wallet: Date.now() }; go('presets');
+          P.wallet = { id: r.walletId, name: r.walletName, accountId: si.account, network: si.network, chain: { owned: si.owned, offer: si.offer } }; P.timing = { wallet: Date.now() }; go('presets');
         } catch (e2) { P.wallet = null; say('Not signed in: ' + e2.message + '. Try again, or keep watching.', true); }
       }
-      else if (r && (r.ok !== false) && (r.accountId || r.account)) { P.wallet = { id: id, accountId: r.accountId || r.account, network: r.network || NETWORK }; P.timing = { wallet: Date.now() }; go('presets'); }
+      else if (r && (r.ok !== false) && (r.accountId || r.account)) { P.wallet = { id: r.walletId, name: r.walletName, accountId: r.accountId || r.account, network: r.network || NETWORK }; P.timing = { wallet: Date.now() }; go('presets'); }
       else if (r && (r.kind === 'no-list' || r.kind === 'framed')) say(r.message, true);   // said whole: no wallet was tried
       else say('Wallet not connected: ' + ((r && (r.message || r.reason)) || 'no answer') + '. Keep watching, or try another wallet.', true);
     } catch (e) { say('Wallet not connected: ' + (e && e.message ? e.message : 'the wallet did not answer') + '. Keep watching, or try another wallet.', true); }

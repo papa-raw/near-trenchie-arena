@@ -69,7 +69,7 @@ const REC = () => {
       });
       console.log('  info', W, JSON.stringify({ wait: res.wait, ringNow: res.ringNow, final: res.final, firstVis: res.firstVis, lastVis: res.lastVis, panels: res.panels, cue: res.cue.slice(0, 120) }));
       if (W < 600) {
-        ok(drew && res.made && res.n > 20 && res.vis === 0 && /Give orders in Your trenchie/.test(res.cue),
+        ok(drew && res.made && res.n > 20 && res.vis === 0 && /Give orders in Your Trenchie/.test(res.cue),
           `390: in ${res.n} samples from first load until 3 s after the HUD drew the compact box is never visible (visible in ${res.vis}${res.firstVis ? ', first at ' + res.firstVis.t + ' ms' : ''}), and the cue says "${(res.cue.match(/Give orders[^.]*\./) || [res.cue.slice(0, 60)])[0]}"`);
       } else {
         ok(drew && decided && res.made && res.final && res.vis > 0 && res.earlyVis === 0 && res.over === 0 && res.moved === 0,

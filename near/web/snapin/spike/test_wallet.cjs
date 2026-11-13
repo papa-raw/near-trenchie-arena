@@ -7,8 +7,8 @@ const W = require('../wallet.js');
 let fails = 0;
 const ok = (n, c, d) => { if (!c) fails++; console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  -> ' + d)); };
 
-// the reviewed list's Meteor entry (wallets-manifest.json): wallet.js opens a wallet only by its manifest id and executor URL
-const METEOR = JSON.parse(fs.readFileSync(path.join(__dirname, '../wallets-manifest.json'), 'utf8')).wallets.find((w) => w.id === 'meteor-wallet');
+// The adapter's non-UI cases use a case-supplied connector; the full stock popup is qa/wallet_manifest_case.cjs.
+const METEOR = { id: 'meteor-wallet', name: 'Meteor Wallet', type: 'sandbox', features: { mainnet: true, testnet: true } };
 function fakeLib({ reject, noAccounts, mainnetOnly } = {}) {
   const sent = [];
   class SandboxWallet {   // the selector's own sandboxed wallet, built from a manifest entry
@@ -26,28 +26,24 @@ function fakeLib({ reject, noAccounts, mainnetOnly } = {}) {
       this.wallets = this.manifest.wallets.map((m) => new SandboxWallet(this, m));
       this.whenManifestLoaded = Promise.resolve();
     }
+    get availableWallets() { return this.wallets.filter((w) => this.network !== 'testnet' || w.manifest.features.testnet); }
     async wallet(id) { const w = this.wallets.find((x) => x.manifest.id === id); if (!w) throw new Error('Wallet not found'); return w; }
-    async connect({ walletId }) { return this.wallet(walletId); }
+    async connect({ walletId } = {}) { return this.wallet(walletId || this.availableWallets[0].manifest.id); }
   }
-  return { NearConnectLib: { NearConnector, SandboxWallet }, NearApi, sent, manifest: 'fake://reviewed-list' };   // wallet.js never runs without a list
+  return { NearConnectLib: { NearConnector, SandboxWallet }, NearApi, sent };   // connector supplies its own manifest and availableWallets
 }
 
 (async () => {
-  const l = W.list();
-  ok('list(): 4 wallets, all declares:testnet, none verified', l.length === 4 && l.map((w) => w.id).join() === 'meteor,intear,nightly,ethereum-wallets' && l.every((w) => w.declares === 'testnet' && w.verified === false), JSON.stringify(l));
-  ok('list(): the word "works" appears nowhere', !/works/i.test(JSON.stringify(l)), '');
   ok('importCheck on the vendored bundle', W.importCheck({ NearApi, NearConnectLib: { NearConnector() {} } }).nearApi.nearToYocto_0_25 === '250000000000000000000000', JSON.stringify(W.importCheck({ NearApi, NearConnectLib: {} })));
 
   let o = fakeLib();
-  let r = await W.connect('meteor', { network: 'testnet' }, o);
+  let r = await W.connect('meteor-wallet', { network: 'testnet' }, o);
   ok('connect meteor testnet -> account', r.ok && r.accountId === 'tester.testnet' && r.manifestId === 'meteor-wallet', JSON.stringify(r));
-  r = await W.connect('intear', { network: 'testnet' }, o);
-  ok('connect intear: not in the fake manifest -> unknown-wallet', !r.ok && r.kind === 'unknown-wallet', JSON.stringify(r));
-  r = await W.connect('mynearwallet', { network: 'testnet' }, o);
-  ok('connect off-shortlist id -> unknown-wallet', !r.ok && r.kind === 'unknown-wallet', JSON.stringify(r));
-  r = await W.connect('meteor', { network: 'testnet' }, fakeLib({ mainnetOnly: true }));
-  ok('connect a wallet that does not declare testnet -> wrong-network', !r.ok && r.kind === 'wrong-network', JSON.stringify(r));
-  r = await W.connect('meteor', { network: 'testnet' }, fakeLib({ noAccounts: true }));
+  r = await W.connect('intear-wallet', { network: 'testnet' }, o);
+  ok('connect intear: the connector refuses an absent wallet', !r.ok && r.kind === 'other', JSON.stringify(r));
+  r = await W.connect(null, { network: 'testnet' }, fakeLib({ mainnetOnly: true }));
+  ok('no compatible wallets from the connector -> no-list', !r.ok && r.kind === 'no-list', JSON.stringify(r));
+  r = await W.connect('meteor-wallet', { network: 'testnet' }, fakeLib({ noAccounts: true }));
   ok('connect with no account returned -> rejected', !r.ok && r.kind === 'rejected', JSON.stringify(r));
 
   W._reset();
@@ -55,7 +51,7 @@ function fakeLib({ reject, noAccounts, mainnetOnly } = {}) {
   ok('guestKey before connect -> no-session', !r.ok && r.kind === 'no-session', JSON.stringify(r));
 
   o = fakeLib();
-  await W.connect('meteor', { network: 'testnet' }, o);
+  await W.connect('meteor-wallet', { network: 'testnet' }, o);
   r = await W.guestKey({ accountId: 'tester.testnet', network: 'testnet', receiver: 'market', allowanceNear: '0.25' }, o);
   const a = o.sent[0] && o.sent[0].actions[0];
   const MARKET = require('../chain.js').marketAccount;
@@ -87,7 +83,7 @@ function fakeLib({ reject, noAccounts, mainnetOnly } = {}) {
   ok('invalid receiver id refused before any wallet call', !r.ok && r.kind === 'receiver', JSON.stringify(r));
 
   W._reset(); o = fakeLib({ reject: true });
-  await W.connect('meteor', { network: 'testnet' }, o);
+  await W.connect('meteor-wallet', { network: 'testnet' }, o);
   r = await W.guestKey({ network: 'testnet' }, o);
   ok('wallet rejects AddKey -> rejected, and no key kept', !r.ok && r.kind === 'rejected' && W.guestPublicKey() === null, JSON.stringify(r));
 

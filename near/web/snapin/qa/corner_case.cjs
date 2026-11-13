@@ -177,8 +177,8 @@ const KITS = JSON.parse(execFileSync('python3', ['-B', '-c', "import sys,json; s
     // ---- the arena gone: the corner says so
     await p.goto(base + '/web/snapin/index.html?mode=workshop&tab=respawn'); await ready();
     await fetch(arenaUrl + '/dev/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Dev-Admin': arena.m } }).catch(() => {});
-    await p.waitForFunction(() => /Cannot reach the DEV arena/.test(document.querySelector('main').innerText), null, { timeout: 20000 }).catch(() => {});
-    ok(/Cannot reach the DEV arena, so the corner has no fresh data/.test(await p.innerText('main')), 'with the arena stopped the corner says it has no fresh data and keeps retrying');
+    await p.waitForFunction(() => /Cannot reach the arena/.test(document.querySelector('main').innerText), null, { timeout: 20000 }).catch(() => {});
+    ok(/Cannot reach the arena, so the corner has no fresh data/.test(await p.innerText('main')), 'with the arena stopped the corner says it has no fresh data and keeps retrying');
     await shot('corner-arena-gone', 1440);
     const own = errs.filter((e) => !/GL Driver Message/.test(e) && !/status of 502/.test(e) && !/^http 502 /.test(e));
     ok(own.length === 0, 'console clean (set aside: headless GL notes, the 502s after the arena was stopped)' + (own.length ? ': ' + own.slice(0, 4).join(' | ') : ''));

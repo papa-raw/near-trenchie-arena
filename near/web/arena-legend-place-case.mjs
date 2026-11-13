@@ -150,7 +150,7 @@ class Element {
   for (const [k, x, z] of [['d1', 1.95, 5.0], ['d2', 2.15, 5.05]]) { const lg = { sign: new Element(), pin: new Element(), x, z, gone: null, w: 0, h: 0 }; hud.wireLegend(lg); hud.legends.set(k, lg); }
   const pos = new Map([['h1', { x: 1.5, z: 5.1, state: 'alive', f: { status: 0 } }], ['h2', { x: 2.6, z: 5.05, state: 'alive', f: { status: 0 } }]]);
   hud.placeLegends(pos, 0);
-  const rect = (lg) => { if (lg.sign.style.visibility === 'hidden') return null; const m = /translate\(([-\d.]+)px,([-\d.]+)px\)/.exec(lg.sign.style.transform); return { x: +m[1], y: +m[2], w: lg.sign.offsetWidth, h: 35 }; };
+  const rect = (lg) => { if (lg.sign.style.visibility === 'hidden') return null; const m = /translate\(([-\d.]+)px,([-\d.]+)px\)/.exec(lg.sign.style.transform); return { x: +m[1], y: +m[2], w: lg.sign.offsetWidth * 0.7, h: 35 * 0.7 }; };
   const [r1, r2] = [...hud.legends.values()].map(rect);
   const bodies = [...pos.values()].map((q) => bodyBox(hud.toScreen(q.x, 0, q.z), hud.toScreen(q.x, 1.5, q.z)));
   ok(r1 && r2, 'Hud: both signs shown');
@@ -165,29 +165,27 @@ class Element {
   ok(Array.isArray(hud.legendRects) && hud.legendRects.length === 2, 'Hud: the placed rects are exposed for review');
 }
 
-// 8. the real Hud: the picture alone opens the full sign on a tap (phone) for 3 s, or while a mouse hovers it (desktop)
+// 8. the real Hud: collision previews open during the announcement, then the sign and pin leave together
 {
   const hud = Object.create(Hud.prototype);
-  const walls = [{ x: 0, y: 0, w: 390, h: 455 }, { x: 0, y: 545, w: 390, h: 299 }, { x: 0, y: 455, w: 150, h: 90 }, { x: 250, y: 455, w: 140, h: 90 }];
+  const walls = [{ x: 0, y: 0, w: 390, h: 455 }, { x: 0, y: 545, w: 390, h: 299 }, { x: 0, y: 455, w: 170, h: 90 }, { x: 230, y: 455, w: 160, h: 90 }];
   Object.assign(hud, { w: 390, h: 844, legends: new Map(), tagRects: walls, rects: {}, toScreen: (x, y, z) => ({ x: x * 100, y: z * 100 - y * 33 }) });
   const lg = { sign: new Element(), pin: new Element(), x: 2.0, z: 5.0165, gone: null, w: 0, h: 0 }; hud.wireLegend(lg); hud.legends.set('d', lg);
-  const t0 = performance.now(), box = () => { const m = /translate\(([-\d.]+)px/.exec(lg.sign.style.transform); return { x: +m[1], w: lg.sign.offsetWidth }; };
+  const t0 = performance.now(), box = () => { const m = /translate\(([-\d.]+)px/.exec(lg.sign.style.transform); return { x: +m[1], w: lg.sign.offsetWidth * 0.7 }; };
   hud.placeLegends(new Map(), t0);
   ok(lg.sign.dataset.form === 'picture' && lg.sign.classList.contains('short') && !lg.sign.classList.contains('open'), 'boxed in on the page: the picture alone (' + lg.sign.dataset.form + ')');
   lg.sign.fire('pointerenter', { pointerType: 'touch' }); hud.placeLegends(new Map(), t0);
   ok(!lg.sign.classList.contains('open'), 'a touch passing over does not open it');
   lg.sign.fire('click'); hud.placeLegends(new Map(), performance.now());
   const b = box();
-  ok(lg.sign.classList.contains('open') && b.w === 190, 'a tap opens the full sign');
+  ok(lg.sign.classList.contains('open') && b.w === 190 * 0.7, 'a tap opens the full sign');
   ok(b.x >= 6 && b.x + b.w <= 384, 'the opened sign stays on screen (' + b.x.toFixed(1) + '..' + (b.x + b.w).toFixed(1) + ')');
-  hud.placeLegends(new Map(), performance.now() + 3100);
-  ok(!lg.sign.classList.contains('open'), 'it closes after 3 s');
-  lg.sign.fire('click'); hud.placeLegends(new Map(), performance.now()); lg.sign.fire('click'); hud.placeLegends(new Map(), performance.now());
-  ok(!lg.sign.classList.contains('open'), 'a second tap closes it');
-  lg.sign.fire('pointerenter', { pointerType: 'mouse' }); hud.placeLegends(new Map(), performance.now() + 60000);
-  ok(lg.sign.classList.contains('open'), 'hover (desktop) opens it for as long as the mouse stays');
-  lg.sign.fire('pointerleave'); hud.placeLegends(new Map(), performance.now());
-  ok(!lg.sign.classList.contains('open'), 'the mouse leaves: it closes');
+  lg.sign.fire('click'); hud.placeLegends(new Map(), performance.now());
+  ok(!lg.sign.classList.contains('open'), 'a second tap closes the active preview');
+  lg.sign.fire('pointerenter', { pointerType: 'mouse' }); hud.placeLegends(new Map(), performance.now());
+  ok(lg.sign.classList.contains('open'), 'hover opens the active collision preview');
+  hud.placeLegends(new Map(), lg.showUntil + 300);
+  ok(lg.sign.removed && lg.pin.removed, 'the automatic deadline removes the complete overlay, including its pin');
   const full = { sign: new Element(), pin: new Element(), x: 2.0, z: 3.0, gone: null, w: 0, h: 0 }; hud.wireLegend(full); hud.legends.set('e', full);
   hud.tagRects = []; hud.legends.delete('d'); hud.placeLegends(new Map(), performance.now());
   full.sign.fire('click'); hud.placeLegends(new Map(), performance.now());

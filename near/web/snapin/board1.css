@@ -199,6 +199,7 @@ label.f{display:block;font:700 12px 'Space Mono';margin:0 0 6px}
 .who{font:18px 'Lilita One';color:var(--coral);margin-right:6px}
 .door2{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;min-height:52px;padding:8px 4px;border-bottom:1px solid #e3d7bf;width:100%;text-align:left;font:700 15px 'Space Mono'}
 .door2 .r{font:700 12px 'Space Mono';letter-spacing:.1em;color:#5e6b55}
+.door2 .door-label{display:flex;align-items:center;gap:12px;min-width:0}
 .door2:hover{background:#f8eedb}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:28px}
 .how.plain li{font-size:14px}

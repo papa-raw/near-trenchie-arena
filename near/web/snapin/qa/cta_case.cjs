@@ -55,7 +55,7 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
           boxes, onTop: document.elementFromPoint((r.left + r.right) / 2, r.bottom - 8)?.closest('#snapin-cta') === a };
       });
       ok(g.r[0] >= 0 && g.r[1] >= 0 && g.r[2] <= g.vw && g.r[3] <= g.vh, `${W}: the call to action is fully on screen ${JSON.stringify(g.r)}`);
-      ok(/Snap in your trenchie/.test(g.text) && /Satrenchi/.test(g.text) && g.img, `${W}: button, Satrenchi's line and his still are there: "${g.text}"`);
+      ok(/Snap in your Trenchie/.test(g.text) && /Satrenchi/.test(g.text) && g.img, `${W}: button, Satrenchi's line and his still are there: "${g.text}"`);
       ok(g.hudCount > 0 && g.overlaps.length === 0, `${W}: clear of the fixed HUD, ${g.hudCount} pieces checked (${g.overlaps.join(', ') || 'no overlap'}); feed at ${JSON.stringify(g.feed)}`);
       // the worst case: the feed at its full size, drawn by the same HUD art offscreen at this width
       const worst = await p.evaluate(async () => {

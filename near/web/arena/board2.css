@@ -1,5 +1,5 @@
 /* The arena HUD, approved board 2 (direction C, "Wall sign"): the wall sign, the paper-slip feed, the corner buttons,
-   "How it works", the name-tag circles, the crowd card, the legendary floor sign and the pre-jump card.
+   "How it works", the name-tag circles, the legendary floor sign and the pre-jump card.
    Values follow the approved sheet's hud.css and final.css. Fonts are the HUD art's own (hud-art/fonts). */
 @font-face { font-family: 'Lilita One'; src: url(../hud-art/fonts/LilitaOne-400.woff2) format('woff2'); font-display: block; }
 @font-face { font-family: 'Space Mono'; src: url(../hud-art/fonts/SpaceMono-400.woff2) format('woff2'); font-weight: 400; font-display: block; }
@@ -18,18 +18,6 @@
 .pips.met i { box-shadow: 0 0 0 1.5px #bfe9d3; }
 .pips b { font: 700 9px Fredoka, system-ui, sans-serif; color: #2e8b6a; margin-left: 1px; }
 .pips.big i { width: 13px; height: 13px; border-width: 2px; }
-
-/* the crowd card: "N here", each name with its circles, left to right */
-.gcard { position: absolute; left: 0; top: 0; background: rgba(255,248,234,.96); border-radius: 6px; box-shadow: 0 0 0 1px rgba(59,47,37,.55), 0 3px 6px #3b2f2533; padding: 4px 8px 5px; font: 600 11px/1.3 Fredoka, system-ui, sans-serif; z-index: 3; min-width: 130px; will-change: transform; }
-.gcard .gh { font: 700 10px 'Space Mono', monospace; color: #6b5a43; letter-spacing: .04em; }
-.gcard .gr { display: flex; justify-content: space-between; gap: 10px; align-items: center; white-space: nowrap; }
-.gcard .gr.lead > span:first-child::before { content: '★ '; color: #8a6a12; }
-.gcard .gr .dev { margin-left: 4px; padding: 0 3px; border-radius: 3px; background: #3B2F25; color: #FFF8EA; font-size: 8px; font-weight: 700; letter-spacing: .06em; }
-.gcard::after { content: ''; position: absolute; border: 6px solid transparent; }
-.gcard[data-pos=up]::after { left: 50%; bottom: -6px; margin-left: -6px; border-bottom: 0; border-top-color: rgba(59,47,37,.55); }
-.gcard[data-pos=below]::after { left: 50%; top: -6px; margin-left: -6px; border-top: 0; border-bottom-color: rgba(59,47,37,.55); }
-.gcard[data-pos=right]::after { left: -6px; top: 50%; margin-top: -6px; border-left: 0; border-right-color: rgba(59,47,37,.55); }
-.gcard[data-pos=left]::after { right: -6px; top: 50%; margin-top: -6px; border-right: 0; border-left-color: rgba(59,47,37,.55); }
 
 /* the wall sign */
 .wallsign { position: absolute; top: 0; z-index: 4; pointer-events: none; }
@@ -90,7 +78,7 @@
 .wallsign.phone .cnt { min-width: 0; margin-left: 6px; }
 
 /* the feed: paper slips bottom-left, newest last, older fading */
-.b2-slips { position: absolute; left: 16px; bottom: 16px; max-width: 560px; z-index: 4; pointer-events: none; }
+.b2-slips { position: absolute; left: 16px; bottom: 16px; transform-origin: left bottom; transform: scale(var(--bottom-ui-scale, .8)); max-width: 560px; z-index: 4; pointer-events: none; }
 .b2-slips.hidden { visibility: hidden; }
 .feed.slipfeed { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .feed.slipfeed li { display: flex; align-items: baseline; gap: 6px; font-size: 13px; line-height: 1.35; background: #fbf3e2; padding: 5px 10px 6px; border-radius: 2px; box-shadow: 0 1px 0 #d8cdb8, 0 2px 6px #3b2f2522; width: max-content; max-width: 560px; border-left: 4px solid transparent; }
@@ -143,10 +131,13 @@
 /* the legendary floor sign: no rule line, no number, the item's picture */
 .legsign { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 6px; background: #fbf3e2; padding: 4px 10px 5px 4px; border-radius: 3px; box-shadow: 0 0 0 1.5px #c9a24a, 0 3px 6px #3b2f2533; font: 700 12px 'Space Mono', monospace; z-index: 2; white-space: nowrap; will-change: transform, opacity; }
 .legsign img, .legsign .noimg { width: 26px; height: 26px; border-radius: 50%; background: #f7cf6b; display: block; }
-.legsign b { color: #8a6a12; }
+.legsign { transform-origin: top left; }
+.legsign .legtext { max-width: min(320px, calc(100vw - 60px)); }
+.legsign .legend-glow { box-shadow: 0 0 0 2px #f7cf6b, 0 0 10px 5px #f7cf6b, 0 0 22px 10px #f7cf6bd9; }
+.legsign .legname { display: block; white-space: normal; }
 .legpin { position: absolute; left: 0; top: 0; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #c2453a; z-index: 2; will-change: transform, opacity; }
 .legsign.phone { font-size: 11px; }
-.legsign.nameonly b { display: none; }   /* the picture and the name alone: "LEGENDARY:" drops, the name stays whole */
+.legsign.phone .legtext { max-width: min(180px, calc(100vw - 60px)); }
 .legsign.short { padding: 4px; gap: 0; pointer-events: auto; cursor: pointer; } .legsign.short .legtext { display: none; }   /* the picture alone (the full text is its title and label) */
 .legsign.short.open { padding: 4px 10px 5px 4px; gap: 6px; z-index: 4; } .legsign.short.open .legtext { display: inline; }   /* tapped or hovered: the full sign */
 

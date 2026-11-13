@@ -699,10 +699,10 @@ def main(argv: list[str] | None = None) -> None:
         terms = call(args.url + "/dev/terms")
         print(json.dumps(terms))
         print(f"arena rules, version {terms['version']}: segments are {int(terms['segment_ms']) // 1000} s, one order every {int(terms['input_interval_ms']) / 1000:g} s, "
-              f"simulated at {terms['simulation_hz']} Hz. Joining as a DEV trenchie: no wallet, no chain, no NFT. Accept with: join --accept-terms {terms['version']}")
+              f"simulated at {terms['simulation_hz']} Hz. Joining as a DEV Trenchie: no wallet, no chain, no NFT. Accept with: join --accept-terms {terms['version']}")
     elif args.cmd == "join":
         if args.code:  # checked before the host is called, so the code stays unspent
-            raise SystemExit("snap: a door code starts a live battle session on the creator's trenchie: run "
+            raise SystemExit("snap: a door code starts a live battle session on the creator's Trenchie: run "
                              f"`snap.py --url {args.url} live --code {args.code} --preset {args.preset} --accept-terms {args.accept_terms} "
                              '--fifo "$PWD/orders.fifo"` (SNAP.md, "Pair a local AI door"). The code was not used.')
         standing_order(args.level, args.spread, args.zero)

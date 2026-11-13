@@ -166,8 +166,45 @@ Each telegraph is one shader quad plus one instanced candle mesh. The candles ca
 This supersedes the panel-paint sections above for the board, the feed, the buttons, the lead banner and the legendary
 receipt; they stay as the record of the earlier HUD. The approved board 2 (direction C, "Wall sign") draws those as plain
 DOM (`hud.mjs`, `sign.mjs`, `feed.mjs`, `corner.mjs`, `board2.css`): the sign and the feed change only when their data
-does, and the per-body pieces (tags with their circles, the crowd card, the floor sign, the pre-jump card) are moved by a
+does, and the per-body pieces (tags with their circles, the floor sign, the pre-jump card) are moved by a
 transform each frame. The panel cache (`hud-cache.mjs`), the client leaderboard and the roster chips went with it. The HP
 candles are still the frozen panel art's, drawn once per level and cloned per body. In a headless lane (single-process
 swiftshader, ~0.5 frames a second) `Hud.frame` measured 1.4 ms a frame (layoutHud 0.7, placeTags 0.7); the budget test
 itself is the critic's, in a real Chrome.
+
+## Legendary floor-label lifetime (2026-11-13)
+
+Each new floor drop shows its announcement for 3000 ms and fades all its parts over 300 ms. The sign, item-picture
+card and pin then leave the DOM completely; the floor item itself keeps its original lifetime. The display deadline
+uses the viewer's monotonic clock; repeated snapshots, layout changes, respawns and another drop do not restart it.
+The first frame after a hidden-tab gap, or an idle/reconnecting HUD, removes an overdue announcement.
+
+A tap or hover can expand a collision-shortened preview while the announcement is active, within the same deadline.
+Only the expired drop's tracking record remains, preventing repeated snapshots from announcing it again. Once the
+item is grabbed or leaves the floor, that record is released too. `arena-legend-no-square-case.mjs` pins complete DOM
+removal, independent deadlines, repeat/resize/respawn/gap paths and unchanged floor-item data; the existing fade and
+size cases follow the same expiry contract. The critic supplies the browser verdict.
+
+## Individual name tags (2026-11-13)
+
+Fighters never share a merged name card. Each keeps the same small tag with its name, prediction circles, DEV marker
+and leader/focus styling. Each tag stays directly above its own projected head; overlapping is allowed and never merges or hides the tags.
+Landing-card timing is unchanged.
+
+`arena-group-tags-off-case.cjs` uses the real HUD, CSS and fonts to pin three and five bunched fighters at desktop and
+phone widths, including a screen edge and a moving crowd. Tags stay separate, visible and anchored to their own heads;
+prediction updates, names, leader/DEV markers, separation and DOM cleanup remain intact.
+
+## Plain pre-jump fade (2026-11-13)
+
+A new life fades the fighter at its prior standing position over300ms, preserving its body and base-joint scale.
+It then appears at the authoritative ring position without a drop, squash or pop. Its prediction card also stays at
+its initial position and fades over300ms, with no scale transform. Original material alpha/transparency/depth state
+is restored when the fade ends; another fighter's materials are unaffected. Simulation and event timing are unchanged.
+
+## Bottom-left UI size (2026-11-13)
+
+The speech/KO feed and the snap-in cue/button/portrait render at80% of their previous size. The feed stays anchored
+at its lower-left origin; the call to action keeps its existing placement search. A shared bottom-UI scale controls
+both rendering and feed reservations, and the cue tail uses local coordinates so its border/face alignment scales
+with the cue. Text, speech italics and click/navigation behavior are unchanged.

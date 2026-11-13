@@ -27,7 +27,7 @@ def _stance(drives, gate, target):
 
 
 _RULES = {
-    "version": "integer-16",
+    "version": "integer-17",
     # integer-16: a prediction is one level, "L or more KOs"; a correct one earns (1 - margin) / P(>=L) times its amount
     # (capped), P from the house's own lives as `market` publishes them; arena/predict.py reads this block
     "predict": {"levels": [1, 2, 3, 4], "margin_bps": 1000, "cap_bps": 200000,
@@ -119,7 +119,7 @@ _RULES = {
     "surf_margin": 250,
     "grab_ticks": 6,
     "grab_radius": 500,
-    "floor_ticks": 1200,
+    "floor_ticks": 600,              # integer-17: ungrabbed drops expire after 30 seconds at 20 Hz
     "scatter_min": 3000,
     "scatter_max": 4000,
     "loot_interval": 200,

@@ -54,13 +54,14 @@ class Rpc:
     """`urls` take every call; `read_urls` (default: the same) also serve reads, so a rate-limited node
     (429) passes reads to the next one. A signed transaction goes only to `urls`."""
 
-    def __init__(self, urls, *, read_urls=None, post=None, timeout=90, sleep=time.sleep, rounds=3):
+    def __init__(self, urls, *, read_urls=None, post=None, timeout=90, sleep=time.sleep, rounds=3, attempts=2):
         self.urls = list(urls)
         self.read_urls = list(read_urls) if read_urls else list(urls)
         self.post = post or requests.post
         self.timeout = timeout
         self.sleep = sleep
         self.rounds = rounds
+        self.attempts = attempts
 
     def call(self, method, params, urls=None):
         last = None
@@ -73,7 +74,7 @@ class Rpc:
         raise RpcUnreachable(last)
 
     def _one(self, url, method, params, round_):
-        for attempt in range(2):
+        for attempt in range(self.attempts):
             try:
                 r = self.post(url, json={"jsonrpc": "2.0", "id": "chain", "method": method, "params": params},
                               timeout=self.timeout)

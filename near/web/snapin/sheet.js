@@ -200,7 +200,21 @@
     }
     return false;
   }
-  var URL_RE = /https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|io|xyz|near|eth|app|gg|me|co)\b/i;
+  // BEGIN GENERATED LINK POLICY
+  // Generated from near/house/link_policy.json; run near/tools/gen_link_policy.py.
+  var LINK_POLICY = {"speech_exceptions":["polka dot dress"],"address":"\\b[a-z][a-z0-9+.-]*\\s*://|\\bwww\\.|(?<![\\w])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+(?:xn--[a-z0-9-]+|[a-z]{2,})(?![\\w-])","spoken_dot":"\\s+dot\\s+","bracketed_dot":"\\[\\s*\\.\\s*\\]|\\(\\s*\\.\\s*\\)"};
+  // END GENERATED LINK POLICY
+  var URL_RE = new RegExp(LINK_POLICY.address, 'i');
+  var SPOKEN_DOT_RE = new RegExp(LINK_POLICY.spoken_dot, 'gi');
+  var BRACKETED_DOT_RE = new RegExp(LINK_POLICY.bracketed_dot, 'g');
+  function hasLink(text) {
+    var t = String(text).normalize('NFKC').replace(/[\u200b\u200c\u200d\u2060\ufeff\u00ad\u180e]/g, '').toLowerCase();
+    t = t.replace(BRACKETED_DOT_RE, '.');
+    if (LINK_POLICY.speech_exceptions.indexOf(t.trim().replace(/\s+/g, ' ')) < 0) t = t.replace(SPOKEN_DOT_RE, '.');
+    return URL_RE.test(t);
+  }
+  var WALLET_REQUEST_RE = /\b(?:connect|link|sync|verify|restore|unlock)\s+(?:(?:your|a|the)\s+)?wallet\b|\bwallet\s*connect\b/i;
+  var CREDENTIAL_REQUEST_RE = /\b(?:seed|recovery|secret)\s+phrases?\b|\bprivate\s+keys?\b/i;
 
   // guard(name) -> {ok, reason}. Structural rules always apply; the word list is whatever the page configured.
   function guard(name, opts) {
@@ -210,13 +224,14 @@
     var n = cpLen(name);
     if (n < 1) return bad('name', 'A name is needed.');
     if (n > NAME_MAX) return bad('name', 'At most ' + NAME_MAX + ' characters.');
-    if (!/^[\p{L}\p{N}][\p{L}\p{N}\p{M} .'’-]*$/u.test(name)) return bad('name', 'Letters, numbers, spaces and . \' - only.');
+    if (!/^[A-Za-z0-9][A-Za-z0-9 '-]*$/.test(name)) return bad('name', 'Letters A–Z, numbers, spaces, apostrophes and hyphens only.');
     if (!/\p{L}/u.test(name)) return bad('name', 'A name needs at least one letter.');
     if (/(.)\1{4,}/u.test(name)) return bad('name', 'Too many repeated characters.');
-    if (URL_RE.test(name)) return bad('name', 'A name is not a web address.');
+    if (hasLink(name)) return bad('name', 'A name is not a web address.');
     var nn = norm(name);
-    for (var i = 0; i < HOUSE_NAMES.length; i++) if (nn === norm(HOUSE_NAMES[i])) return bad('name', 'That name belongs to a house trenchie.');
-    for (var j = 0; j < HOUSE_TAGS.length; j++) if (nn === norm(HOUSE_TAGS[j])) return bad('name', 'That name belongs to a house trenchie.');
+    if (WALLET_REQUEST_RE.test(nn) || CREDENTIAL_REQUEST_RE.test(nn)) return bad('name', 'Wallet connection and credential requests are not names.');
+    for (var i = 0; i < HOUSE_NAMES.length; i++) if (nn === norm(HOUSE_NAMES[i])) return bad('name', 'That name belongs to a house Trenchie.');
+    for (var j = 0; j < HOUSE_TAGS.length; j++) if (nn === norm(HOUSE_TAGS[j])) return bad('name', 'That name belongs to a house Trenchie.');
     if (BLOCKED_RE.test(name) || /\b(rug|rugger|rugged|rugpull)\b/i.test(name) || /\brug pull\b/i.test(name)) return bad('name', 'That word is not allowed in a name.');
     if (blocklistHit(name, opts)) return bad('blocklist', 'That name is not allowed.');
     return { ok: true, reason: '' };
@@ -232,9 +247,9 @@
     var names = HOUSE_NAMES.map(function (n) { return n.toLowerCase(); });
     var named = names.some(function (n) { return lc.indexOf(n) >= 0; });
     if (/\brug/.test(lc) && (named || lc.indexOf('great rug') < 0)) return bad('line', "'rug' only as 'the Great Rug', never beside a name (B87)");
-    if (named) return bad('line', 'names a house trenchie');
+    if (named) return bad('line', 'names a house Trenchie');
     if (/\d+\s*%|\bp(50|60|70|80|90|95)\b|quantile|percentile/i.test(text)) return bad('bias-text', 'a number or quantile that could bias a prediction (B5)');
-    if (URL_RE.test(text)) return bad('url', 'a web address');
+    if (hasLink(text)) return bad('url', 'a web address');
     if (blocklistHit(text, opts)) return bad('blocklist', 'not allowed');
     return { ok: true, reason: '' };
   }
@@ -363,7 +378,12 @@
   function sameSet(a, b) { return Array.isArray(a) && a.length === b.length && b.every(function (x) { return a.indexOf(x) >= 0; }); }
   function scanNumbers(v, path, out) {
     if (typeof v === 'number') { if (path !== 'game.version') out.push(path + ' holds a number (' + v + '): a sheet carries none but game.version'); return; }
-    if (typeof v === 'string') { if (URL_RE.test(v)) out.push(path + ' holds a web address'); return; }
+    if (typeof v === 'string') {
+      // The generated local checker command contains filenames, with a closed command/slug grammar.
+      if (path === 'self_improvement.checks[0].command' && /^python3 -I near\/lore\/check_personas\.py [a-z][a-z0-9-]*\.json$/.test(v)) return;
+      if (URL_RE.test(v)) out.push(path + ' holds a web address');
+      return;
+    }
     if (Array.isArray(v)) { v.forEach(function (x, i) { scanNumbers(x, path + '[' + i + ']', out); }); return; }
     if (isObj(v)) Object.keys(v).forEach(function (k) { scanNumbers(v[k], path ? path + '.' + k : k, out); });
   }
@@ -389,7 +409,10 @@
       else {
         if (id.brief.slice(-ARENA_RULES.length) !== ARENA_RULES) fail('brief-rules', 'brief must end with the fixed arena rules');
         if (cpLen(id.brief) > BRIEF_MAX + cpLen(ARENA_RULES) + NAME_MAX + 80) fail('brief-length', 'the brief text is longer than ' + BRIEF_MAX + ' characters');
-        var gb = guardLine(id.brief.slice(0, id.brief.length - ARENA_RULES.length), opts); if (!gb.ok) fail('brief-' + gb.code, 'brief: ' + gb.reason);
+        var briefText = id.brief.slice(0, id.brief.length - ARENA_RULES.length);
+        // The name has its own guard below; do not reinterpret its approved spoken phrase inside the fixed biography.
+        if (isObj(g) && typeof g.name === 'string' && briefText.indexOf(g.name + ' is ') === 0) briefText = briefText.slice(g.name.length);
+        var gb = guardLine(briefText, opts); if (!gb.ok) fail('brief-' + gb.code, 'brief: ' + gb.reason);
       }
       var pe = id.personality;
       if (!(isObj(pe) && sameSet(Object.keys(pe), ['voice', 'temperament', 'values']) && pe.voice && isObj(g) && Array.isArray(g.voice) && pe.voice === g.voice[0] && T && pe.temperament === T.line && Array.isArray(pe.values) && pe.values.every(function (x) { return typeof x === 'string' && x; }))) fail('personality', 'personality must be its first voice line, its temperament card and short values');

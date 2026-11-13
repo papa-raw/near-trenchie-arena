@@ -20,7 +20,7 @@ const OUT = process.argv[2] || path.join(os.tmpdir(), 'snapin-chat-door'); fs.mk
 const SAVE = 'trenchie.snapin.v1', CAP = 'trenchie.snapin.cap';
 const NO_DOOR = 'Pick an AI door to give orders.', AGENT = 'Orders go to your agent: type them in its session.', NO_DOOR_ARENA = 'No AI door picked: Pick an AI door to give orders.';
 const KEY = 'trenchie.snapin.key.NEAR AI Cloud';
-const AGENT_ARENA = 'Your agent drives this trenchie (it joined through SNAP.md); type orders in its session.';
+const AGENT_ARENA = 'Your agent drives this Trenchie (it joined through SNAP.md); type orders in its session.';
 // the link's box (a 44 px target like every text link) and whether it is on screen
 const linkBox = (pg, sel) => pg.evaluate((q) => { const a = document.querySelector(q); if (!a) return null; a.scrollIntoView({ block: 'center' }); const r = a.getBoundingClientRect();
   return { h: Math.round(r.height * 10) / 10, w: Math.round(r.width), onScreen: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth }; }, sel);

@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
 <style>
-  :root { --ink: #3B2F25; --paper: #FFF8EA; --mint: #9FDCC5; --sea: #D9EEEC; --gold: #F7CF6B; --danger: #E84855; }
+  :root { --bottom-ui-scale: .8; --ink: #3B2F25; --paper: #FFF8EA; --mint: #9FDCC5; --sea: #D9EEEC; --gold: #F7CF6B; --danger: #E84855; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--sea); color: var(--ink); font: 14px/1.3 "Fredoka", ui-rounded, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
   #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; }
@@ -49,7 +49,7 @@
   /* The snap-in call to action (W18): always on screen in watch mode. The HUD owns three corners (board top-left, feed
      bottom-left, buttons bottom-right) and a follow view; the hook below puts the button in the first free spot.
      Satrenchi, the welcome guide, points his spear at it. */
-  #snapin-cta { position: fixed; left: 0; top: 0; transform: translate(var(--cta-x, -9999px), var(--cta-y, 0)); z-index: 6; display: flex; align-items: flex-end; gap: 4px; color: var(--ink); text-decoration: none; -webkit-tap-highlight-color: transparent; }
+  #snapin-cta { position: fixed; left: 0; top: 0; transform: translate(var(--cta-x, -9999px), var(--cta-y, 0)) scale(var(--bottom-ui-scale)); transform-origin: top left; z-index: 6; display: flex; align-items: flex-end; gap: 4px; color: var(--ink); text-decoration: none; -webkit-tap-highlight-color: transparent; }
   #snapin-cta img { width: 70px; height: auto; display: block; margin-bottom: -2px; filter: drop-shadow(0 3px 2px rgba(59,47,37,.25)); }
   #snapin-cta .say { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
   #snapin-cta .cue { position: relative; background: var(--paper); border: 2px solid var(--ink); border-radius: 12px; padding: 4px 10px 5px; font: 500 13px/1.25 "Fredoka", ui-rounded, system-ui, sans-serif; box-shadow: 0 2px 0 rgba(59,47,37,.25); white-space: nowrap; }
@@ -106,7 +106,7 @@
 <pre id="diag"></pre>
 <a id="snapin-cta" href="./snapin/index.html?step=wallet" aria-describedby="snapin-cue">
   <img src="./snapin/img/satrenchi.png" alt="" width="144" height="149">
-  <span class="say"><span class="cue-wrap"><span class="cue" id="snapin-cue"><b>Satrenchi:</b>Washed ashore? I’ll walk you in.</span></span><span class="go">Snap in your trenchie</span></span>
+  <span class="say"><span class="cue-wrap"><span class="cue" id="snapin-cue"><b>Satrenchi:</b>Washed ashore? I’ll walk you in.</span></span><span class="go">Snap in your Trenchie</span></span>
 </a>
 <script>
   // The guide talks to the same arena this page watches: carry its ?ws= along, and say where "Keep watching" returns.
@@ -117,6 +117,7 @@
     a.href = u.pathname + u.search;
     // Placement: the first spot in this list that touches none of the HUD's fixed pieces. Re-checked twice a second,
     // because the feed grows with each KO and the follow view comes and goes.
+    var UI_SCALE = parseFloat(getComputedStyle(a).getPropertyValue('--bottom-ui-scale')) || 1;
     var GAP = 10, last = '', forceSpot = /^[0-4]$/.test(q.get('ctaspot') || '') ? +q.get('ctaspot') : null;
     function rects() {
       var host = document.getElementById('world'), out = [];
@@ -124,7 +125,7 @@
       if (host) host.querySelectorAll('[data-panel]:not([data-kind="world"]), .collabel').forEach(add);
       // the feed grows with each KO, up to three lines (two on a phone): reserve its full size from the start, so the button never jumps
       var feed = host && host.querySelector('[data-panel="feed"]');
-      if (feed) { var f = feed.getBoundingClientRect(), nw = innerWidth < 600; out.push({ left: f.left, right: Math.max(f.right, f.left + (nw ? 300 : 440)), top: Math.min(f.top, f.bottom - feedReserve(feed, nw)), bottom: f.bottom }); }
+      if (feed) { var f = feed.getBoundingClientRect(), nw = innerWidth < 600; out.push({ left: f.left, right: Math.max(f.right, f.left + (nw ? 300 : 440) * UI_SCALE), top: Math.min(f.top, f.bottom - feedReserve(feed, nw)), bottom: f.bottom }); }
       // the speech ticker above it (Battle mode) grows to three lines (two on a phone), each wrapping: reserve its full size too
       var say = sayReserve(); if (say) out.push(say);
       // board 2's two leaderboards: the wall sign (data-panel="board", also caught above; named here so a change of host
@@ -152,16 +153,16 @@
     function drawTail() {
       var cue = a.querySelector('.cue'), img = a.querySelector('img'); if (!cue || !img) return;
       var c = cue.getBoundingClientRect(), im = img.getBoundingClientRect(); if (!c.width || !im.width) return;
-      var cs = getComputedStyle(cue), bw = parseFloat(cs.borderBottomWidth) || 2, H = c.height, R = Math.min(parseFloat(cs.borderBottomLeftRadius) || 12, H / 2);
+      var cs = getComputedStyle(cue), bw = parseFloat(cs.borderBottomWidth) || 2, H = c.height / UI_SCALE, R = Math.min(parseFloat(cs.borderBottomLeftRadius) || 12, H / 2);
       var cx = R, cy = H - R, at = function (deg, rad) { var t = deg * Math.PI / 180; return [cx + rad * Math.cos(t), cy + rad * Math.sin(t)]; };
       var mid = at((ARC[0] + ARC[1]) / 2, R - bw / 2);
-      var fx = im.left + im.width * FACE.x - c.left, fy = im.top + im.height * FACE.y - c.top;   // the face, in the bubble's own coordinates
+      var fx = (im.left + im.width * FACE.x - c.left) / UI_SCALE, fy = (im.top + im.height * FACE.y - c.top) / UI_SCALE;   // the face, in the bubble's own coordinates
       var dx = fx - mid[0], dy = fy - mid[1], d = Math.hypot(dx, dy) || 1, len = Math.max(9, Math.min(d - 4, 15));
       var tip = [mid[0] + dx / d * len, mid[1] + dy / d * len];
       var wrap = cue.parentNode, svg = wrap.querySelector('svg.tail');   // beside the bubble in .cue-wrap, never inside it
       if (!svg) { svg = document.createElementNS(NS, 'svg'); svg.setAttribute('class', 'tail'); svg.setAttribute('aria-hidden', 'true');
         var f = document.createElementNS(NS, 'path'), s2 = document.createElementNS(NS, 'path'); f.setAttribute('class', 'fill'); s2.setAttribute('class', 'edge'); svg.append(f, s2); wrap.appendChild(svg); }
-      svg.setAttribute('width', Math.ceil(c.width)); svg.setAttribute('height', Math.ceil(H));
+      svg.setAttribute('width', Math.ceil(c.width / UI_SCALE)); svg.setAttribute('height', Math.ceil(H));
       var r = function (v) { return Math.round(v * 10) / 10; }, pt = function (q) { return r(q[0]) + ',' + r(q[1]); };
       var ri = R - bw - 0.6, ro = R + 0.6, a0i = at(ARC[0], ri), a1i = at(ARC[1], ri), a0o = at(ARC[0], ro), a1o = at(ARC[1], ro);
       // paper: the border band along the arc between the two base points (the opening) and the wedge out to the tip
@@ -176,7 +177,7 @@
     }
     // the feed's full height: on a phone board 2's feed caps its own box (feed.mjs PHONE_MAX, given as data-reserve), so
     // the button reserves exactly that and never moves as slips wrap; elsewhere the old reserve
-    function feedReserve(feed, nw) { var r = parseFloat(feed.dataset.reserve); return r > 0 ? r : (nw ? 52 : 100); }
+    function feedReserve(feed, nw) { var r = parseFloat(feed.dataset.reserve); return (r > 0 ? r : (nw ? 52 : 100)) * UI_SCALE; }
     window.__ctaReserved = function () { return rects().map(function (r) { return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; }); };   // read by the review tooling
     function place() {
       var W = innerWidth, H = innerHeight, me = a.getBoundingClientRect(), w = me.width, h = me.height, m = W < 600 ? 10 : 16, hud = rects();
@@ -255,7 +256,7 @@
         (window.SKA ? window.SKA.init() : Promise.resolve()).then(function () { if (window.SnapPanel) window.SnapPanel.start(); });
       });
       var R = window.SnapRoom; if (!R) return;
-      mini = document.createElement('div'); mini.id = 'order-mini'; mini.hidden = true; mini.setAttribute('aria-label', 'Orders for your trenchie'); document.body.appendChild(mini);
+      mini = document.createElement('div'); mini.id = 'order-mini'; mini.hidden = true; mini.setAttribute('aria-label', 'Orders for your Trenchie'); document.body.appendChild(mini);
       var drawMini = function () {
         if (!window.SnapChat || !miniWanted) return;
         var f = document.activeElement, keep = f && f.id === 'order' ? [f.selectionStart, f.selectionEnd] : null;
@@ -274,13 +275,13 @@
       };
       var lastSt = null, handle = function (st) {
         lastSt = st;
-        var f = st.fighter, nm = f ? 'DEV ' + f.name : 'Your trenchie';
+        var f = st.fighter, nm = f ? 'DEV ' + f.name : 'Your Trenchie';
         mineName = st.phase === 'in' && f ? nm : '';
-        if (st.phase === 'in' && f) say(nm, nm + (miniWanted && miniFits === false ? ' is in the ring. Give orders in Your trenchie.' : ' is in the ring. Go get ’em.'), 'Your trenchie', 'ring');
-        else if (st.phase === 'joining') say(nm, 'Reconnecting ' + nm + '…', 'Your trenchie', 'ring');
-        else if (st.phase === 'elsewhere') say(nm, nm + ' is driven from another tab.', 'Your trenchie', 'ring');
-        else if (st.phase === 'offline') say(nm, 'Lost the arena for a moment. Retrying…', 'Your trenchie', 'ring');
-        else if (st.phase === 'ended' || st.phase === 'error') say(nm, 'Your trenchie swam home. Back in?', 'Snap in again', 'ring');
+        if (st.phase === 'in' && f) say(nm, nm + (miniWanted && miniFits === false ? ' is in the ring. Give orders in Your Trenchie.' : ' is in the ring. Go get ’em.'), 'Your Trenchie', 'ring');
+        else if (st.phase === 'joining') say(nm, 'Reconnecting ' + nm + '…', 'Your Trenchie', 'ring');
+        else if (st.phase === 'elsewhere') say(nm, nm + ' is driven from another tab.', 'Your Trenchie', 'ring');
+        else if (st.phase === 'offline') say(nm, 'Lost the arena for a moment. Retrying…', 'Your Trenchie', 'ring');
+        else if (st.phase === 'ended' || st.phase === 'error') say(nm, 'Your Trenchie swam home. Back in?', 'Snap in again', 'ring');
       };
       R.on(handle);
       onMiniFit = function () { if (lastSt) handle(lastSt); };

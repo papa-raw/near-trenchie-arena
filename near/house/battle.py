@@ -10,11 +10,14 @@ lines under the autopilot chip.
 
 This module is pure: it turns the arena's state and events into triggers, remembered events and prompts,
 and the model's answers into a behaviour, a line and an emoji. The runtime asks; the driver sends.
+Before a plan is sent, `engage` makes every house layer fight: open gates and chase, even at low HP.
+The model still chooses targets and voice; each change is logged with the order (house_fixed).
 Untrusted text (another fighter's name) reaches a prompt only as filtered data. Standard library only.
 """
 
 import json
 import re
+from collections.abc import Mapping
 
 TRIGGER_COOLDOWN_S = 20          # a trigger kind re-asks at most every 20 s per trenchie
 RIVAL_NEAR_MILLI = 6000          # 6 tiles
@@ -54,6 +57,127 @@ SCHEMA = (
 SCHEMA_V11 = (' Schema v1.1 also has: gate never true (attack no one); conditions always true, '
               'hit_by {"who": "any"|"rival"|<id>}, enemy_within {"radius": 1-12, "who": "any"|"rival"|"ally_attacker"|<id>}; '
               'and the action repeat true beside say (say it again every time your 10 s window opens while the reflex holds).')
+
+
+# House policy, on top of the arena's: every model-authored layer goes into a fight at any HP.
+ENGAGE_CHASE = 10                # the house causes fights; every base/reflex layer chases, never avoids or loots
+OPEN_TARGETS = ("auto", "nearest", "weakest")    # "attacker" and an id name no one at the start of a life
+
+
+def _num(value):
+    return value if type(value) is int else 0
+
+
+def _layer_view(layer, stances):
+    """A layer's own stance preset (or None) and its drives object (or None when it is not an object)."""
+    preset = stances.get(layer.get("stance")) if isinstance(layer.get("stance"), str) else None
+    drives = layer.get("drives", {})
+    return preset, (drives if isinstance(drives, dict) else None)
+
+
+def _open_up(layer, under, stances, where, notes, nearby_target=None):
+    """Keep one house layer in the fight; malformed fields still go to the arena for refusal."""
+    preset, drives = _layer_view(layer, stances)
+    gate = layer["gate"] if "gate" in layer else (preset["gate"] if preset else None)
+    if isinstance(gate, Mapping) and set(gate) - {"match"}:
+        layer["gate"] = {}
+        notes.append("%s attack gate opened: the house fights any enemy" % where)
+    target = layer["target"] if "target" in layer else (preset["target"] if preset else None)
+    if isinstance(target, str) and target not in OPEN_TARGETS and target != nearby_target:
+        layer["target"] = "nearest"
+        notes.append("%s target %s released: choose a nearby enemy" % (where, data_name(target)))
+    if drives is None:
+        return under
+    eff = {**under, **(preset["drives"] if preset else {}), **drives}
+    required = {"chase": ENGAGE_CHASE, "loot": 0, "keep_away": 0, "hold": 0, "protect": 0}
+    fixed = {key: value for key, value in required.items() if _num(eff.get(key)) != value}
+    if fixed:
+        layer["drives"] = dict(drives, **fixed)
+        notes.append("%s drives %s: the house goes to an enemy at any hp" % (where, ", ".join("%s %d" % kv for kv in sorted(fixed.items()))))
+    if layer.get("stance") in ("flee", "loot", "hold", "defend", "follow-ally"):
+        layer["stance"] = "berserk"
+        # Explicit drives must survive expansion from the replacement stance as well as the original one.
+        layer["drives"] = dict(drives, **required)
+        notes.append("%s stance changed to berserk: no house retreat or holding back" % where)
+    return dict(eff, **fixed)
+
+
+def engage(behaviour, game, rules):
+    """The house's own check on a plan its model wrote, before the arena sees it: (the plan to send, what changed).
+
+    Every base/reflex layer chases and attacks, with no loot, flee, hold or protect diversion. Target preferences
+    and voice remain the model's; named targets in reflexes require that exact enemy nearby. An ally is never
+    a named attack target. Malformed fields remain for the arena to refuse. Player plans never call this path."""
+    if not isinstance(behaviour, dict):
+        return behaviour, []
+    if "clear" in behaviour:
+        if behaviour != {"v": 1, "clear": True} or type(behaviour.get("v")) is not int:
+            return behaviour, []
+        engaged, notes = engage({"v": 1, "stance": "berserk"}, game, rules)
+        return engaged, ["house clear replaced by an engaging plan; the house keeps fighting"] + notes
+    b = json.loads(json.dumps(behaviour))
+    stances = ((rules or {}).get("behaviour") or {}).get("stances") or {}
+    defaults = ((rules or {}).get("behaviour") or {}).get("default_drives") or {}
+    _, allies = relations(game)
+    notes = []
+    base = _open_up(b, dict(defaults), stances, "base", notes)
+    rows = b.get("reflexes") if isinstance(b.get("reflexes"), list) else []
+    for i, row in enumerate(rows):
+        if isinstance(row, dict) and isinstance(row.get("then"), dict):
+            old_condition = row.get('if')
+            named = _nearby_target(row, allies)
+            _open_up(row["then"], base, stances, "reflex %d" % (i + 1), notes, named)
+            if named and old_condition != row['if']:
+                notes.append("reflex %d named target is used only while that same enemy is nearby" % (i + 1))
+    layers = [("base", b)] + [("reflex %d" % (i + 1), row["then"]) for i, row in enumerate(rows)
+                              if isinstance(row, dict) and isinstance(row.get("then"), dict)]
+    base_drives = b.get("drives", {}) if isinstance(b.get("drives", {}), dict) else None   # None: malformed, the arena's
+    for where, layer in layers:
+        _, drives = _layer_view(layer, stances)
+        if layer.get("target") in allies:
+            notes.append("%s targeted the ally %s: an ally is never the attack target" % (where, data_name(layer["target"])))
+            if layer is b:
+                layer["target"] = "auto"
+            else:
+                del layer["target"]
+        protects = layer.get("stance") == "follow-ally" or (drives is not None and _num(drives.get("protect")) > 0)
+        named = (base_drives or {}).get("protect_ally") or (drives or {}).get("protect_ally")
+        if not protects or named or base_drives is None:
+            continue
+        if allies:
+            b["drives"] = base_drives = dict(base_drives, protect_ally=allies[0])
+            notes.append("%s protects: named the ally %s in drives.protect_ally" % (where, allies[0]))
+            continue
+        notes.append("%s protects but this Trenchie has no ally: the protect part is dropped" % where)
+        if layer.get("stance") == "follow-ally":
+            del layer["stance"]
+        if drives is not None and "protect" in drives:
+            layer["drives"] = {k: v for k, v in drives.items() if k != "protect"} if layer is not b else dict(drives, protect=0)
+            if not layer["drives"]:
+                del layer["drives"]
+    if rows:
+        kept = [r for r in rows if not (isinstance(r, dict) and isinstance(r.get("then"), dict) and not set(r["then"]) - {"repeat"})]
+        dropped = len(rows) - len(kept)
+        if dropped:
+            notes.append("%d reflex%s left with no action: dropped" % (dropped, "" if dropped == 1 else "es"))
+            b["reflexes"] = kept
+    return b, notes
+
+
+def _nearby_target(row, allies):
+    """A model's named target is useful only while that same enemy satisfies the nearby condition."""
+    target = row['then'].get('target')
+    condition = row.get('if')
+    if not isinstance(target, str) or target in OPEN_TARGETS + ('attacker',) or target in allies:
+        return None
+    if not isinstance(condition, dict) or set(condition) != {'enemy_within'}:
+        return None
+    near = condition['enemy_within']
+    radius = near.get('radius') if isinstance(near, dict) else near
+    if type(radius) is not int:
+        return None
+    row['if'] = {'enemy_within': {'radius': radius, 'who': target}}
+    return target
 
 
 def schema_minor(rules):
@@ -193,6 +317,12 @@ def plan_ask(name, sheets, trigger, detail, view, current, ids_note=True, minor=
         parts.append('To answer a rival the moment it comes close, give yourself a reflex such as '
                      '{"if": {"enemy_within": {"radius": 6, "who": "rival"}}, "then": {"target": "<the rival id>"}} '
                      '(your choice of what to do).')
+    parts.append('How the house fights: cause chaos at any hp, including low hp. Every base and reflex layer has '
+                 '"gate": {} (any enemy), chase %d, loot 0, keep_away 0, hold 0 and protect 0. Never flee, hold back '
+                 'or run away for loot. You choose target auto, nearest or weakest, or name an enemy in an enemy_within '
+                 'reflex so you fight that enemy while it is close. Keep your voice and say what happened.'
+                 % ENGAGE_CHASE)
+    parts.append('Target is who you attack: never your ally. The house does not use protect or follow-ally.')
     parts += [
              "Your fight style: %s. Your rivals (ids): %s. Your allies (ids): %s." % (
                  game.get("fight_style", "?"), ", ".join(rivals) or "none", ", ".join(allies) or "none"),

@@ -174,8 +174,8 @@ async function main() {
             if (ev.source) { kos.set(ev.source, (kos.get(ev.source) || 0) + 1); board.onKo(ev.source, nowMs, ev.fighter); }
             hud.onKo(ev, ambushed.has(ev.fighter));
           } else if (ev.kind === 'respawn') {
-            // a life that predicts: its card stamps first and the body drops after it (prejump.mjs)
-            actors.onRespawn(ev, snap.tick, nowMs, hud.onRespawn(ev, nowMs)); sound.play(soundForEvent(ev), nowMs, pan(posOf(snap, ev.fighter)));
+            // A new life fades out in place, then appears in the ring (prejump.mjs).
+            hud.onRespawn(ev, nowMs); actors.onRespawn(ev, snap.tick, nowMs); sound.play(soundForEvent(ev), nowMs, pan(posOf(snap, ev.fighter)));
           }
           else if (ev.kind === 'attack') {
             const f = snap.fighters.find((q) => q.id === ev.fighter), p = f && milliToWorld(f.x, f.y);

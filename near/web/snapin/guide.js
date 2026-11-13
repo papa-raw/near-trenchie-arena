@@ -15,7 +15,7 @@
   // the four signatures the board does not draw, said the same way, from what the arena does (arena/sim.py)
   var SIG_LINE = { 'Blink Strike': 'Blink Strike: you vanish and reappear behind a foe with a hit.', 'Bubble': 'Bubble: a shield closes around you and soaks up hits.',
                    'Magnet': 'Magnet: a shield, and floor items pull toward you.', 'Chain Storm': 'Chain Storm: a strike that jumps from foe to foe.' };
-  var g = { keyText: '', keyStatus: '', keyMsg: '', answer: '', code: null, codeErr: '', expired: false, poll: null, tick: null, copied: false,
+  var g = { keyText: '', keyStatus: '', keyMsg: '', answer: '', code: null, codeErr: '', expired: false, poll: null, tick: null, copied: false, requesting: false,
             name: { checked: '', free: null, picked: '' }, joining: false };
   var esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
   var nb = function (s) { return String(s).replace(/(\d) (s|tiles|of 10)\b/g, '$1&nbsp;$2'); };
@@ -86,12 +86,15 @@
       '<label class="f" style="margin-top:16px">' + p.quirks + ' <span class="muted" style="font-weight:400">· ' + p.quirksMax + '</span></label><div class="chipline">' + quirks.map(function (q) { var on = (P.quirks || []).indexOf(q.id) >= 0; return '<button type="button" class="chip' + (on ? ' on' : '') + '" data-act="g:quirk:' + q.id + '" aria-pressed="' + on + '">' + q.label + '</button>'; }).join('') + '</div>' +
       (t && short ? '<p class="small" style="margin:16px 0 0"><span class="who">' + esc(short) + '</span> “' + esc(t.sample[0]) + '”</p>' : '');
   }
+  function doorLabel(name) {
+    return '<span class="door-label">' + root.SnapMarks.mark(name === 'Claude Code' ? 'Claude' : name) + '<span>' + esc(name) + '</span></span>';
+  }
   function doorsBody(h) {
     var d = C.doors;
     return returning(h) + '<p class="lead">' + d.line + '</p><div class="group-h">' + d.keyGroup + '</div>' +
-      d.key.filter(function (r) { return keyDoorOffered(r[0]); }).map(function (r) { return '<button type="button" class="door2" data-act="g:door:key:' + r[0] + '"><span>' + r[0] + '</span><span class="r">' + r[1] + '</span></button>'; }).join('') +
+      d.key.filter(function (r) { return keyDoorOffered(r[0]); }).map(function (r) { return '<button type="button" class="door2" data-act="g:door:key:' + r[0] + '">' + doorLabel(r[0]) + '<span class="r">' + r[1] + '</span></button>'; }).join('') +
       '<div class="group-h">' + d.planGroup + '</div>' +
-      d.plan.map(function (r) { return '<button type="button" class="door2" data-act="g:door:plan:' + r[0] + '"><span>' + r[0] + '</span><span class="r">' + r[1] + '</span></button>'; }).join('');
+      d.plan.map(function (r) { return '<button type="button" class="door2" data-act="g:door:plan:' + r[0] + '">' + doorLabel(r[0]) + '<span class="r">' + r[1] + '</span></button>'; }).join('');
   }
   function keyStatus(h, door) {
     var k = C.key;
@@ -128,9 +131,10 @@
       g.expired ? '<p class="bad small st" role="alert">' + p.expired + ' ' + lnk('g:newcode', p.newCode) + '</p>' :
       g.code ? '<p class="small st" role="status"><span class="dots"><i></i><i></i><i></i></span> ' + esc(F(p.waiting, { left: '' })) + '<span id="code-left">' + left() + '</span></p>' :
       '<p class="small st" role="status">' + p.asking + '</p>';
-    return returning(h) + '<p class="lead">' + esc(F(p.line, { agent: agent, plan: a.planName })) + '</p>' +
+    return returning(h) + (agent === 'Codex' ? '' : '<p class="lead">' + esc(F(p.line, { agent: agent, plan: a.planName })) + '</p>') +
       '<ol class="how plain"><li class="now"><span>' + p.copyH + '</span>' + b('g:copy', g.copied ? p.copied : p.copy, 'plate', g.code ? '' : 'disabled') + '</li></ol>' +
       '<pre class="cmd" aria-label="Command">' + esc(command(agent, h)) + '</pre>' +
+      (a.networkNote ? '<p class="small">' + esc(a.networkNote) + '</p>' : '') +
       '<ol class="how plain" style="counter-reset:n 1"><li><span>' + p.paste + '</span><span></span></li><li><span>' + p.keepOpen + '</span><span></span></li></ol>' + status +
       '<div class="hr"></div><div class="eyebrow" style="margin-bottom:6px">' + p.runsH + '</div><p class="small" style="margin:0">' + esc(F(p.runs, { perms: a.perms })) + '</p>' +
       '<div class="hr"></div><label class="f">' + p.limitH + '</label><div class="chipline">' + p.limits.map(function (x) { return '<button type="button" class="chip' + (x === stop ? ' on' : '') + '" data-act="g:stop:' + x + '" aria-pressed="' + (x === stop) + '">' + x + '</button>'; }).join('') + '</div>' +
@@ -223,9 +227,19 @@
   // ------------------------------------------------------------------ the AI door: a plan, through the player's own agent session
   function stopPlan() { if (g.poll) root.clearInterval(g.poll); if (g.tick) root.clearInterval(g.tick); g.poll = g.tick = null; }
   async function requestCode(h, agent) {
+    if (g.requesting) return;
+    g.requesting = true;
     var P = root.SnapProviders; stopPlan(); g.code = null; g.codeErr = ''; g.expired = false; g.copied = false; g.joinedFor = ''; h.render();
-    if (!P || !P.snap) { g.codeErr = 'The snap module did not load.'; return h.render(); }
-    var r; try { r = await P.snap.requestCode({ agent: C.plan[agent].agent, name: h.P.name || '', planStop: parseInt(h.P.planStop || '10%', 10) }); } catch (e) { r = { ok: false, message: e.message }; }
+    if (!P || !P.snap) { g.requesting = false; g.codeErr = 'The snap module did not load.'; return h.render(); }
+    var r, args = { agent: C.plan[agent].agent, name: h.P.name || '', planStop: parseInt(h.P.planStop || '10%', 10) };
+    try { r = await (h.requestCode ? h.requestCode(args) : P.snap.requestCode(args)); }
+    catch (e) { r = { ok: false, message: e.message }; }
+    finally { g.requesting = false; }
+    // A different door may have been picked while the wallet confirmed the token; never show the old door's code.
+    if (!h.P.pick || h.P.pick.route !== 'plan' || h.P.pick.door !== agent) {
+      if (h.P.pick && h.P.pick.route === 'plan') return requestCode(h, h.P.pick.door);
+      return;
+    }
     if (!r || !r.ok) { g.codeErr = (r && r.message) || 'The arena did not give a code.'; return h.render(); }
     g.code = { code: r.code, expiresAt: r.expiresAt, snapUrl: r.snapUrl || '' }; h.render();
     g.tick = root.setInterval(function () { var el = root.document.querySelector('#code-left'); if (el) el.textContent = left(); if (g.code && Date.now() > g.code.expiresAt) { g.expired = true; stopPlan(); h.render(); } }, 1000);

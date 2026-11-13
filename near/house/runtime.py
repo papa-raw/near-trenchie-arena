@@ -7,6 +7,8 @@ The sim never waits on a model: calls run on worker threads and their answers ar
 Budget: a daily cap per phase; at 80% of the day's cap each active trenchie slows to one
 call per 30 s; at 100% calls stop until 00:00 UTC and the "autopilot" chip shows; at a cumulative $77 a
 hard stop holds until Pat releases the reserve. Every fallback says so: nothing is silent.
+Calls with no confirmed usage consume a conservative uncached prompt/output allowance. An unreadable
+or unwritable spend meter stops calls until its history is recovered and the runtime restarted.
 Every write path is under the data directory (/srv/arena/data in the container). Standard library only.
 """
 
@@ -22,12 +24,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 try:
-    from . import battle as battle_mod, guard as guard_mod, novelty, quote
+    from . import battle as battle_mod, guard as guard_mod, novelty, quote, pursuit
 except ImportError:
     import battle as battle_mod
     import guard as guard_mod
     import novelty
     import quote
+    import pursuit
 
 # Catalogue prices for deepseek-ai/DeepSeek-V4.1-Flash-1017, in nano-USD per token ($0.30 / $1.20 / $0.006 per 1M).
 PRICE_NANOUSD = {"in": 300, "out": 1200, "cache": 6}
@@ -43,6 +46,7 @@ BANTER_INTERVAL_S = 10                # at most one line per 10 s per trenchie (
 FAILING_AFTER = 3                     # this many failed calls in a row, with no success between, shows the failing chip
 MEASURED_CACHED_SHARE_PCT = 55
 NOTES_KEPT = 50                       # the roster shows the last 5; older notes are dropped
+CHAT_MESSAGE_TOKEN_ALLOWANCE = 32     # framing overhead per message when usage is unknown
 
 
 def cost_microusd(usage):
@@ -60,10 +64,39 @@ class JsonMeter:
     def __init__(self, path):
         self.path = Path(path)
         self.lock = threading.Lock()
+        self.fault = None
+        self.data = {"days": {}, "total": 0, "calls": 0, "cached_tokens": 0, "prompt_tokens": 0}
         try:
-            self.data = json.loads(self.path.read_bytes())
+            data = json.loads(self.path.read_bytes())
+            if self.valid(data):
+                self.data = data
+            else:
+                self.fault = "invalid history"
+        except FileNotFoundError:
+            if self.path.is_symlink():
+                self.fault = "unreadable history"
+            else:
+                try:
+                    self._save()  # learn that a new meter cannot be written before a model call
+                except OSError:
+                    self.fault = "unwritable history"
         except (OSError, ValueError):
-            self.data = {"days": {}, "total": 0, "calls": 0, "cached_tokens": 0, "prompt_tokens": 0}
+            self.fault = "unreadable history"
+
+    @staticmethod
+    def valid(data: object) -> bool:
+        """Reject corrupt counters as well as invalid JSON; a valid-looking reset must not fail open."""
+        if not isinstance(data, dict) or not isinstance(data.get('days'), dict):
+            return False
+        counters = [data.get(k) for k in ('total', 'calls', 'cached_tokens', 'prompt_tokens')]
+        counters += list(data['days'].values())
+        names = data.get('names', {})
+        if not isinstance(names, dict) or any(not isinstance(day, dict) for day in names.values()):
+            return False
+        counters += [value for day in names.values() for value in day.values()]
+        return (all(type(n) is int and n >= 0 for n in counters)
+                and data['total'] >= sum(data['days'].values())
+                and data['cached_tokens'] <= data['prompt_tokens'])
 
     def today(self, day):
         return self.data["days"].get(str(day), 0)
@@ -76,6 +109,8 @@ class JsonMeter:
 
     def add(self, day, microusd, usage=None, who=None):
         with self.lock:
+            if self.fault:
+                raise OSError("spend meter unavailable; recover its history before restarting")
             self.data["days"][str(day)] = self.today(day) + microusd
             if who is not None:                         # the per-trenchie meter the roster shows for house members
                 names = self.data.setdefault("names", {}).setdefault(str(day), {})
@@ -88,11 +123,20 @@ class JsonMeter:
             self._save()
 
     def _save(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=self.path.parent, prefix=".spend.")
-        with os.fdopen(fd, "w") as f:
-            json.dump(self.data, f, sort_keys=True)
-        os.replace(tmp, self.path)
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=self.path.parent, prefix=".spend.")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(self.data, f, sort_keys=True)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp, self.path)
+            finally:
+                Path(tmp).unlink(missing_ok=True)
+        except OSError:
+            self.fault = "unwritable history"
+            raise
 
 
 # The cap period by the UTC clock, from the hackathon's own rule dates only (rules-raw/HACKATHON.md:20-22: submission
@@ -143,6 +187,9 @@ class Budget:
     def state(self, now=None):
         day, spent, total = self.day(now), self.meter.today(self.day(now)), self.meter.total()
         base = {"spent_today_microusd": spent, "cap_microusd": self.cap_microusd, "total_microusd": total}
+        if getattr(self.meter, 'fault', None):
+            return {**base, "mode": "meter_error", "interval_s": None, "autopilot": True,
+                    "chip": "autopilot (spend meter unavailable)"}
         if total >= HARD_STOP_USD * USD:
             return {**base, "mode": "hard_stop", "interval_s": None, "autopilot": True, "chip": "autopilot (hard stop)"}
         if spent >= self.cap_microusd:
@@ -317,10 +364,13 @@ class Runtime:
         self.notes = []            # no silent fallback: every fallback is recorded here and shown, stamped with its UTC time
         self.note_texts = []       # the same notes without their stamps, for the repeat check
         self.note_lock = threading.Lock()   # note() runs on executor threads too (_pick, _banter): both lists change together
+        self.engage_notes = {}     # name -> its latest "plan changed so it engages" line, stamped; apart from notes, so a
+                                   # rewrite every few seconds (full mode) never pushes a failing call off the roster
         self.log = log if log is not None else []
         self.call_times = {}       # name -> recent call times, for calls_per_min on the private status
         self.failing = 0           # failed calls in a row (a success resets it; a budget stop is not a failure)
         self.battle = battle_mod.Memory() if battle else None   # battle mode: behaviours instead of single intents
+        self.pursuits = pursuit.Pursuits() if battle else None
         self.stats = {"calls": 0, "banter": 0, "intent": 0, "pick": 0, "failed": 0, "autopilot_lines": 0, "plan": 0, "line": 0}
 
     def note(self, text):
@@ -350,7 +400,15 @@ class Runtime:
         sheet = self.sheets[name]
         card = "\n".join(["Recent lines: " + " | ".join(self.voices[name].card_lines()), task])
         messages = [{"role": "system", "content": sheet["prefix"]}, {"role": "user", "content": card + "\n" + instruction}]
-        answer = self.client.chat(messages, thinking=thinking, max_tokens=max_tokens)
+        try:
+            answer = self.client.chat(messages, thinking=thinking, max_tokens=max_tokens)
+        except Exception:
+            # A timeout may still be billed. UTF-8 bytes bound prompt tokens conservatively; the output
+            # allowance is the requested maximum. Include 32 tokens per message for chat framing.
+            usage = {"prompt_tokens": sum(len(m['content'].encode('utf-8')) + CHAT_MESSAGE_TOKEN_ALLOWANCE for m in messages),
+                     "completion_tokens": max_tokens, "cached_tokens": 0}
+            self.budget.charge(usage, self.clock(), who=name)
+            raise
         now = self.clock()
         self.budget.charge(answer["usage"], now, who=name)
         times = self.call_times.setdefault(name, [])
@@ -409,9 +467,12 @@ class Runtime:
         battle_mod.watch(self.battle, mine, self.sheets, arena.sim.state, arena.sim.state["events"], arena.sim.rules, now, tag)
         line_gap = battle_mod.STYLES[self.battle.style]["line_s"]
         busy = {n for n, _, _ in self.pending}
+        self.pursuits.prune(mine, arena.sim.state['tick'])
         for name in mine:
             if name in busy:
                 continue                                   # one call in flight per trenchie
+            if self._retarget(name):
+                continue                                   # one logged order; let it reach the engine before any model rewrite
             wants_plan = name not in self.battle.planned or bool(self.battle.pending.get(name))
             wants_line = (self.battle.unspoken.get(name, 0) > 0 and now - self.last_banter.get(name, -10 ** 9) >= max(BANTER_INTERVAL_S, line_gap)
                           and getattr(self.driver, "may_banter", lambda n: True)(name))
@@ -426,6 +487,24 @@ class Runtime:
                 self.battle.unspoken[name] = 0
                 self.pending.append((name, "line", self.executor.submit(self._line, name)))
 
+    def _retarget(self, name):
+        """Release only stale house pursuits through the existing bridge and receipt/log path."""
+        game = self.driver.arena.sim
+        f = game.state['fighters'].get(name)
+        if f is None or game.state['tick'] - f['last_intent'] < game.rules['intent_interval']:
+            return False
+        result = self.pursuits.observe(name, game.state, game.rules,
+                                       lambda a, b: game.target_score(a, b) >= 0 and game._may_strike(a, b))
+        if result is None:
+            return False
+        plan, reason = result
+        try:
+            self._apply_battle(name, 'plan', {'behaviour': plan, 'trigger': 'stale_pursuit', 'fixed': [reason]})
+        except Exception as exc:
+            self.note('%s: retarget order failed (%s); last accepted plan continues' % (name, type(exc).__name__))
+            self.stats['failed'] += 1
+        return True
+
     def _plan(self, name, trigger, detail, ring):
         task = battle_mod.plan_ask(name, self.sheets, trigger, detail, ring, self.battle.behaviour.get(name),
                                    minor=battle_mod.schema_minor(self.driver.arena.sim.rules))
@@ -433,9 +512,9 @@ class Runtime:
         behaviour = data.get("behaviour")
         if not isinstance(behaviour, dict):
             raise ValueError("the answer had no behaviour object")
-        behaviour = dict(behaviour, v=1)
+        behaviour, fixed = battle_mod.engage(dict(behaviour, v=1), self.sheets[name]["game"], self.driver.arena.sim.rules)
         return {"behaviour": behaviour, "trigger": trigger, "say": battle_mod.clean_say(data.get("say")),
-                "emoji": data.get("emoji")}
+                "emoji": data.get("emoji"), "fixed": fixed}
 
     def _line(self, name):
         task = battle_mod.line_ask(name, self.sheets, self.battle)
@@ -488,7 +567,11 @@ class Runtime:
             return
         if result.get("emoji") and hasattr(self.driver.feed, "set_voice_emoji"):
             self.driver.feed.set_voice_emoji(name, result["emoji"])      # the plan's reflex says speak with this emoji
-        ack = self.driver.apply_behaviour(name, result["behaviour"], result["trigger"])
+        if result.get("fixed"):                          # the house's own engage check changed the plan: said out loud,
+            n = len(result["fixed"])                     # each change in full in the behaviour log (house_fixed)
+            self.engage_notes[name] = time.strftime("%Y-%m-%dT%H:%M:%SZ ", time.gmtime(self.clock())) + \
+                "%s: plan changed in %d place%s so it engages" % (name, n, "" if n == 1 else "s")
+        ack = self.driver.apply_behaviour(name, result["behaviour"], result["trigger"], fixed=result.get("fixed") or [])
         status = (ack or {}).get("status")
         if status in ("applied", "clipped"):
             self.battle.planned.add(name)

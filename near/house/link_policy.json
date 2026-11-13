@@ -1,0 +1,8 @@
+{
+  "speech_exceptions": [
+    "polka dot dress"
+  ],
+  "address": "\\b[a-z][a-z0-9+.-]*\\s*://|\\bwww\\.|(?<![\\w])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+(?:xn--[a-z0-9-]+|[a-z]{2,})(?![\\w-])",
+  "spoken_dot": "\\s+dot\\s+",
+  "bracketed_dot": "\\[\\s*\\.\\s*\\]|\\(\\s*\\.\\s*\\)"
+}

@@ -32,7 +32,7 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
     const t0 = await p.evaluate(() => ({ title: document.title, h1: document.querySelector('h1').textContent, net: document.getElementById('net').textContent, sw: document.getElementById('mainnet').checked,
       signins: [...document.querySelectorAll('#btns button')].map((x) => x.textContent), grey: [...document.querySelectorAll('button:disabled')].map((x) => [x.textContent, (document.getElementById(x.getAttribute('aria-describedby')) || {}).textContent || '']),
       swLabel: document.querySelector('label[for], fieldset label').innerText }));
-    ok(/testnet/i.test(t0.title) && !/mainnet/i.test(t0.title + t0.h1) && /^Network: TESTNET/.test(t0.net) && t0.sw === false && t0.signins.length === 4 && t0.signins.every((x) => / \(testnet\)$/.test(x)),
+    ok(/testnet/i.test(t0.title) && !/mainnet/i.test(t0.title + t0.h1) && /^Network: TESTNET/.test(t0.net) && t0.sw === false && t0.signins.length === 1 && t0.signins.every((x) => / \(testnet\)$/.test(x)),
       `opened with no clicks the page is testnet: title "${t0.title}", "${t0.net.slice(0, 40)}…", sign-in buttons "${t0.signins[0]}"…`);
     ok(t0.grey.length === 2 && t0.grey.every(([, why]) => why.trim().length > 0), `each grey button says why: ${t0.grey.map(([b2, w]) => b2 + ' (' + w + ')').join('; ')}`);
     ok(/Switch to MAINNET/.test(t0.swLabel) && /real mainnet account/.test(t0.swLabel) && /adds no key, sends no transaction and moves no money/.test(t0.swLabel), `the mainnet switch says what it does: "${t0.swLabel.slice(0, 150)}…"`);

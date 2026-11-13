@@ -20,7 +20,9 @@ import argparse
 import http.client
 import mimetypes
 import posixpath
+import socket
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -31,6 +33,41 @@ PASS_POST = ("/room/", "/dev/identity", "/snap/code")
 KEEP_HEADERS = ("content-type", "x-dev-now", "x-dev-paused")
 TYPES = {".js": "text/javascript", ".mjs": "text/javascript", ".json": "application/json", ".woff2": "font/woff2",
          ".css": "text/css", ".html": "text/html; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml"}
+HTTP_WORKERS = 32  # leave room under the container's 256-PID cap for the arena, house and curl
+CLIENT_TIMEOUT_S = 10
+
+
+class BoundedHTTPServer(ThreadingHTTPServer):
+    """Refuse excess clients before starting threads; idle sockets cannot retain a worker forever."""
+
+    def __init__(self, server_address: tuple[str, int], handler: type[BaseHTTPRequestHandler],
+                 bind_and_activate: bool = True, *, max_workers: int = HTTP_WORKERS) -> None:
+        self.slots = threading.BoundedSemaphore(max_workers)
+        super().__init__(server_address, handler, bind_and_activate)
+
+    def process_request(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+        if not self.slots.acquire(blocking=False):
+            try:
+                request.settimeout(0.1)  # overload replies must not stall the accept loop
+                request.sendall(b'HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n'
+                                b'Retry-After: 1\r\nConnection: close\r\n\r\n')
+            except OSError:
+                self.close_request(request)
+            else:
+                self.shutdown_request(request)
+            return
+        try:
+            request.settimeout(CLIENT_TIMEOUT_S)
+            super().process_request(request, client_address)
+        except BaseException:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
 
 
 def passes(method: str, path: str) -> bool:
@@ -100,7 +137,8 @@ def make_handler(arena: str, port_box: list, public_host: str | None = None):
             finally:
                 conn.close()
             self.reply(r.status, data, r.getheader("Content-Type", "application/json"),
-                       {k: r.getheader(k) for k in ("X-Dev-Now", "X-Dev-Paused") if r.getheader(k) is not None})
+                       {k: r.getheader(k) for k in ("X-Dev-Now", "X-Dev-Paused", "X-Log-Hash", "X-Log-Window", "X-Log-Max-Bytes")
+                        if r.getheader(k) is not None})
 
         def do_GET(self) -> None:
             if not self.own_host():
@@ -144,7 +182,7 @@ def main(argv=None) -> None:
             raise SystemExit("serve: --public-origin is https://<name>, with no path")
         public_host = args.public_origin[len("https://"):]
     port_box = [args.port]
-    httpd = ThreadingHTTPServer((args.bind, args.port), make_handler(args.arena, port_box, public_host))
+    httpd = BoundedHTTPServer((args.bind, args.port), make_handler(args.arena, port_box, public_host))
     port_box[0] = httpd.server_address[1]
     ws = "ws://" + urlsplit(args.arena).netloc
     if public_host:

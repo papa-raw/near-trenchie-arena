@@ -652,12 +652,15 @@
     "name": {
      "type": "string",
      "minLength": 1,
-     "description": "The full name on the card."
+     "maxLength": 32,
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9 '-]*(?![\\s\\S])",
+     "description": "The full name on the card: at most 32 ASCII letters, digits, spaces, apostrophes or hyphens; starts with a letter or digit."
     },
     "tag": {
      "type": "string",
      "minLength": 1,
-     "maxLength": 16,
+     "maxLength": 12,
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9 '-]*(?![\\s\\S])",
      "description": "The short tag over the head in the arena and in the feed."
     },
     "loadout": {

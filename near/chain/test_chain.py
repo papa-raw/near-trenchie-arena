@@ -906,6 +906,79 @@ class ChainWriterCases(unittest.TestCase):
         self.assertNotEqual(fmt.check_registry(rows[1:], tables), [], "a removal fails")
         self.assertNotEqual(fmt.check_registry(rows + [rows[0]], tables), [], "a reused row fails")
 
+    def test_hosted_house_lives_start_without_identity_tokens_but_players_still_need_them(self) -> None:
+        from contextlib import ExitStack
+        from unittest.mock import patch
+        from near.chain import hosted_live
+        from near.chain.test_identity_desk import desk, inventory, premint_nft
+
+        # Four installs exercise both house implementations and the explicit identity opt-in.
+        for mode, house_on_identity in (("live", False), ("keyed", False), ("dev", False), ("live", True)):
+            with self.subTest(house=mode, house_on_identity=house_on_identity), ExitStack() as cleanup:
+                tmp = cleanup.enter_context(tempfile.TemporaryDirectory(prefix="hosted-house-"))
+                rig = Rig(tmp, batch_segments=1, commit_size=5, lookahead=2)
+                empty_identity = premint_nft()
+                identity_desk, idc, *_ = desk(empty_identity, inventory(), {})
+                identity_desk.s.chain = rig.writer.cfg
+                identity_desk.s.identity_network = "mainnet"
+                idc.contracts = {IDENT: empty_identity}
+                rig.writer.identity = idc
+                self.assertEqual(empty_identity.tokens, {})
+                rig.writer.start()
+                # install patches module globals; keep every scenario and following test isolated.
+                for obj, attr in ((snap_local, "make_contexts"), (snap_local, "player_token"),
+                                  (snap_local.DevHouse, "binding"), (snap_local, "DevRoom"),
+                                  (snap_local, "MODE_NOTE"), (snap_local.server, "Arena"),
+                                  (snap_local.DevRoom, "health")):
+                    cleanup.enter_context(patch.object(obj, attr, getattr(obj, attr)))
+                # Exercise --house live construction without a key or model calls.
+                cleanup.enter_context(patch.object(snap_local.house_runtime, "Budget",
+                                                  return_value=snap_local.house_live.NoKeyBudget()))
+                room_cls = hosted_live.install(identity_desk.s, rig.writer, identity_desk,
+                                               house_on_identity=house_on_identity)
+                room = room_cls(8765, str(Path(tmp) / "room"), house=mode,
+                                house_client=snap_local.house_live.NoModel())
+                cleanup.callback(room.pool.shutdown, wait=True)
+                arena = room.round.arena
+                if mode != "dev":
+                    cleanup.callback(room.round.house.runtime.executor.shutdown, wait=True)
+                # Seat and lock through the real bridge, then let the scheduler start the lives.
+                # Read workers are driven synchronously; neither RPC nor wall-clock timing is involved.
+                for _ in range(20):
+                    rig.writer.read_owners()
+                    for member in list(arena.members.values()):
+                        if member["life_id"] not in arena.locks:
+                            arena.bridge.lock_prediction(member["binding"], member["life_id"], None)
+                    arena.advance()
+                rig.writer.process()
+                # A missing player's activation still needs a mainnet read, even with the house account;
+                # conversely a house token held by a player account cannot use the house exemption.
+                player = dict(room.round.house.binding("satrenchi"), nft_token_id="never-minted",
+                              account_id="player.near", context=room.round.context)
+                # Stand in only for a valid room grant; the arena's real composed life guard still
+                # has to refuse this player's missing token before and after the identity read.
+                with patch.object(room.round.host, "life_guard", return_value=True):
+                    self.assertFalse(arena.life_guard(player))
+                    rig.writer.read_owners()
+                    self.assertFalse(arena.life_guard(player))
+                for binding in (dict(player, account_id=snap_local.HOUSE_ACCOUNT),
+                                dict(player, nft_token_id="satrenchi")):
+                    self.assertFalse(rig.writer.owner_ok(binding))
+                    rig.writer.read_owners()
+                    self.assertFalse(rig.writer.owner_ok(binding))
+                rig.writer.process()
+                missing = [line for line in rig.log if "OWNER_MISSING" in line]
+                self.assertTrue(any("token=never-minted" in line and "binding=player.near" in line
+                                    for line in missing), rig.log)
+                self.assertEqual(room.round.context["contract_ids"]["nft"], IDENT)
+                lives = sum(m["ever_started"] for m in arena.members.values())
+                if house_on_identity:
+                    self.assertEqual(lives, 0)
+                    self.assertTrue(any("binding=house.dev.local" in line for line in missing), rig.log)
+                else:
+                    self.assertGreater(lives, 0, f"{mode}: no house life started; {missing}")
+                    self.assertTrue(all(m["binding"]["context"] == arena.context for m in arena.members.values()))
+
     def test_only_other_contracts_skip_the_owner_read(self):
         rig = Rig(self.tmp, batch_segments=1, commit_size=5, lookahead=2)
         rig.arena()

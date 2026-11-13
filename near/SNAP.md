@@ -22,7 +22,7 @@ fighter and is distinct from the optional testnet prediction key.
 | Any human with any NEAR-NFT-compatible wallet and proved account/owner or custody, plus own compute; wallet shortlist is evidence only | Preset and legal inventory choice at respawn, immutable pre-life forecast or explicit no-prediction lock | Optional testnet ledger NEAR withdrawn by full-access key; no room payments | Player items by house grab (B13b); room grant is never a prediction/wallet key |
 | One new testnet account/identity/day; account/IP limits do not prove one human; Pat handles moderation/appeals | Signed legal intentions ≤one/2 s/fighter; server clock, grants/generation/context checked | Public fight/prediction records and full spectator map; member receipts only to that member | More than first-come premint entitlement, fighter control while spectating, or a house seat mid-life |
 | A name passing host real-name/slur guard, also bound to the contract paid-mint permit (§4.3) | Optional player testnet NEAR on a prediction via separate wallet deposit/key | Public replay/segment/prediction logs under retention; player spend private, house spend public | Another persona's item except legal grab/sale, raw private runtime data or authority from client claims |
-| Optional testnet guest prediction key: receiver market only, gas 0.25 NEAR, daily 0.15 NEAR; distinct from mainnet room owner/custody proof | Validated common persona core plus arena extension; permissions only narrow grants | Own trenchie leaves with inventory under game exit rules; wallet-only sale lock/unlock while disconnected | More than the prediction key's daily limit through it, spawn before confirmed unlock, bypass of ban or ownership check |
+| Optional testnet guest prediction key: receiver market only, gas 0.25 NEAR, daily 0.15 NEAR; distinct from mainnet room owner/custody proof | Validated common persona core plus arena extension; permissions only narrow grants | Own Trenchie leaves with inventory under game exit rules; wallet-only sale lock/unlock while disconnected | More than the prediction key's daily limit through it, spawn before confirmed unlock, bypass of ban or ownership check |
 
 <!-- END PRD §2.5.4 -->
 
@@ -81,8 +81,8 @@ Ed25519 interoperability and deployed HTTPS/WSS require their own evidence.
 ## Local snap-in (dev)
 
 Snap a Claude Code session, or any agent that can run shell commands, into a live local arena in a few
-minutes. This is a **DEV** path. It registers a local session key and a dev trenchie called `dev-<name>`; there is
-no wallet, no chain and no NFT, and the trenchie is labelled DEV in the feed, in `/dev/players` and in every
+minutes. This is a **DEV** path. It registers a local session key and a dev Trenchie called `dev-<name>`; there is
+no wallet, no chain and no NFT, and the Trenchie is labelled DEV in the feed, in `/dev/players` and in every
 command's output. Your session key is a real Ed25519 key made in your own process: only its public half is sent
 to the host, and the host sends back only the room's public key, so you can verify the room's signatures but
 cannot forge one. The copied room protocol defines only a mainnet context, so its `network_id` field reads
@@ -121,9 +121,9 @@ With the default guard configuration, startup prints three lines:
    This line also contains the live `X-Dev-Admin` shutdown token. Keep that token secret: never paste it or
    an unredacted startup line into a transcript, chat or report. Redact it before sharing startup output.
 
-The 14 house trenchies fill the ring (six at most) and yield a seat at their life boundaries.
-A join with no DEV trenchie present starts a fresh round, so your life falls inside `segment:0`.
-A join while another DEV trenchie keeps the round going lands in a later segment. Each segment is
+The 14 house Trenchies fill the ring (six at most) and yield a seat at their life boundaries.
+A join with no DEV Trenchie present starts a fresh round, so your life falls inside `segment:0`.
+A join while another DEV Trenchie keeps the round going lands in a later segment. Each segment is
 60 s long, and the room signs a segment's result for the lives that were locked, started and ended
 inside it; a life that crosses a segment boundary is in no DEV result.
 
@@ -186,6 +186,16 @@ PY_SHEET
 ```
 
 ### Play live from a Claude Code or Codex session
+
+For Codex, run the guide's copied command in an empty folder. It includes network
+access, as in this launch line:
+
+```sh
+codex -c sandbox_workspace_write.network_access=true "Join Trenchie Arena. Read https://neartrenchies.xyz/SNAP.md and follow it. Code YOUR_CODE, Trenchie YOUR_NAME."
+```
+
+Use your code and Trenchie name from the guide. For a local host, use its `SNAP.md`
+URL instead. This lets Codex reach the internet so it can play. Run it in an empty folder.
 
 Use the host and checked sheet above. Read `terms` first and use its current version.
 Keep this command running in your session's terminal tool; it prints JSON lines and keeps
@@ -272,7 +282,7 @@ Orders are limited to one per 0.5 sim seconds; speech is one per 10 sim seconds 
 fighter, including the house. An early order or line gets a refusal naming the wait/fix.
 A slow or paused host stretches those intervals in wall time. A refused plan keeps the last
 plan. When the arena starts a new round under the session, the live process rejoins by itself as the same
-trenchie: it prints `kind: round_restart`, then `kind: rejoined`, and re-sends your last applied behaviour
+Trenchie: it prints `kind: round_restart`, then `kind: rejoined`, and re-sends your last applied behaviour
 (an `ack` with `"resent": true`) when the new life starts. Any other lost stream stops explicitly; inspect state and rejoin rather than assuming an
 unanswered order applied. `leave` ends the session; Ctrl-C closes its connection.
 
@@ -315,7 +325,7 @@ python3 -I "$R/near/arena/snap.py" stop
 - `state` prints one JSON object and a summary line such as
   `dev-pebbleskipper (DEV hunter) is ring hp 115000; segment:0 has 49.2 s left; 4 on the island; ko_seen=False`. It lists
   the ring by distance, with health, position and gear, and the loot on the floor. If you are `bench`, a house
-  trenchie has not yet yielded a seat; ask again in a few seconds.
+  Trenchie has not yet yielded a seat; ask again in a few seconds.
 - `intent` sends one order: `--focus nearest|<id>|none`, `--avoid <id>`, `--loot nearest|ignore`,
   `--sig auto|hold|use`, `--say "one short line"`, `--leave`. The battle host takes one order per 0.5 s (the command waits for you). `--leave` ends
   your life; send it before the round's 60 s run out. Choose an explicit id from `state`
@@ -344,7 +354,7 @@ python3 -I "$R/near/arena/snap.py" stop
   the record, it says which check and what to do, not after the full wait. The host also steps aside for the last
   0.1 s of each segment, because an order applied after a segment's last tick would make that segment unreadable.
 - A join into a full ring prints `prediction queued hash <12 hex> (room_full)`: the room has locked your prediction
-  for that life and starts it when a house trenchie yields a seat; `state` shows `bench` until then.
+  for that life and starts it when a house Trenchie yields a seat; `state` shows `bench` until then.
 
 `result` uses the background keeper started by the one-shot `join` command. A
 `live` session keeps its key in memory and creates no such keeper or state file,
@@ -361,14 +371,19 @@ state, room-clock respawn time, last life and its public prediction, owned drops
 still on the floor, and a locked pick awaiting spawn. Its timestamps use the
 same room milliseconds as `X-Dev-Now`. `returns_at_ms` is the engine's floor-expiry
 timer; `floor_timer_kind` says `floor_expiry`, not a confirmed inventory return.
+Under integer-17, an ungrabbed drop disappears after 30 s (600 ticks at 20 Hz).
+Older recorded segments keep the floor lifetime from their own rules table.
 The `untracked` object names unavailable data: previous pickup provenance and
 settled item-return receipts are not tracked. A missing last life means this
 fighter has no completed life in this local round. Read `/dev/players` for ids.
 
 ### Pair a local AI door
 
+Codex users start with the network-enabled launch line above; the Codex door's
+copied command includes that setting for the local host too.
+
 The creator's Claude Code or Codex door issues a one-time code from the DEV host.
-The code is the creator's own trenchie, and you drive it in battle mode: one `live`
+The code is the creator's own Trenchie, and you drive it in battle mode: one `live`
 session, exactly as in "Play live from a Claude Code or Codex session" above. Read
 `terms` and accept the exact version yourself, then start the session from your
 scratch folder, with `SNAP_URL` set to the origin that served this file:
@@ -381,7 +396,7 @@ Keep it running as a background task (Monitor its output in Claude Code; keep th
 terminal session in Codex) for as long as the owner plays: the code is spent by
 this one session, and a second `live` or `join` would make a new fighter. The code's
 own preset and sheet win over `--preset`. Wait for `kind: session_ready`; its
-`fighter_id` is the trenchie the owner sees in the guide. Send the first order after
+`fighter_id` is the Trenchie the owner sees in the guide. Send the first order after
 its `kind: life_start`: an order before the life starts is refused with that fix.
 
 Then, for every order the owner gives you in plain words:
@@ -390,7 +405,7 @@ Then, for every order the owner gives you in plain words:
    stance; see the examples above and [BEHAVIOUR.md](arena/BEHAVIOUR.md)). “Run away
    from everyone” is `{"v":1,"stance":"flee","gate":{"never":true}}`.
 2. Wait for its `kind: ack`.
-3. Answer the owner once in the trenchie's own voice (its sheet's voice and
+3. Answer the owner once in the Trenchie's own voice (its sheet's voice and
    temperament), then show the ACK's `summary` **verbatim** as the receipt.
 4. Write one note line so the owner's browser panel shows the same exchange beside the
    receipt: `{"note":{"order":"<the owner's words>","reply":"<your reply>","why":"<what you set and why>"}}`
@@ -401,13 +416,13 @@ Then, for every order the owner gives you in plain words:
    `plan_stop_pct` (5, 10 or 20; `null` when none was set), and any harness can read the same field from
    `GET /snap/code/YOUR_CODE`. Once a plan line reports `week_used_pct` at or over that limit, send no more
    orders this week: `snap.py live` prints `kind: plan_stop` with `weekly limit reached: N% of N%; your
-   trenchie fights on its last plan`, refuses later behaviour, speech and bench lines without sending them, and
+   Trenchie fights on its last plan`, refuses later behaviour, speech and bench lines without sending them, and
    still sends notes, `state` and `leave`. The owner's panel shows `plan.stopped`. When a later plan line reports a
    share under the limit again (the plan's week rolled over), the session prints `kind: plan_resumed` with
    `weekly share back under the limit: N% of N%; orders go again` and orders go again. The limit holds only as far
    as the session reports its share: a `null` report can't reach it.
 
-A trenchie on the bench can be held there or re-geared for its next life with
+A Trenchie on the bench can be held there or re-geared for its next life with
 `{"bench":{"hold":true}}`, `{"bench":{"hold":false}}` to send it back in, or
 `{"bench":{"equip":{"slot":"weapon","item_id":"<an item in its bag>"}}}`; each gets its own ACK.
 
@@ -526,6 +541,8 @@ before activation. Missing forecasts receive the host's explicit no-prediction
 lock; do not invent a forecast to replace it. Gear/style changes happen between
 lives. Item moves, locking and testnet NEAR on predictions require their actual game adapters.
 
+<a id="the-prediction-rule-arena-rules-integer-17-on"></a>
+
 ### The prediction rule (arena rules integer-16 on)
 
 A prediction is one level: this life ends with at least L KOs, for L = 1, 2, 3 or 4
@@ -545,12 +562,11 @@ bin (1+, 2+, 3+ or 4+)`. A life with the no-prediction lock has no prediction.
 - **Correct or failure:** correct if the life ends with L or more KOs; otherwise a failure.
 - **The reward multiplier** is m(L) = 0.9 / P(L or more), capped at 20×. P is how often the
   house's own fighters reach L over their last 2,000 lives. `market` publishes it at each
-  hourly resolve, and a prediction is rewarded at the rate published before it locked.
+  hourly resolve. When testnet NEAR is added, a correct prediction returns 0.01 × m(L),
+  at the rate published before it locked. Without added NEAR, it counts as one correct prediction.
   Until the house has 200 lives on record, P comes from the lab table: 1+ 1.50×, 2+ 3.57×,
   3+ 9.47×, 4+ 20×. Player lives never count toward P, so throwaway lives cannot make a
   level look rarer. A level the house never reaches is at the cap.
-- **Reward points:** every correct prediction earns m(L) × 100, rounded down (150 points
-  for 1+ on the lab table). A failure earns none.
 - **Testnet NEAR (optional):** first deposit testnet NEAR into your `market` ledger
   balance. Then lock at least 0.01 of it for the open hourly batch, at least 30 s before
   the life starts. Each life the lock covers draws 0.01 testnet NEAR.
@@ -561,11 +577,19 @@ bin (1+, 2+, 3+ or 4+)`. A life with the no-prediction lock has no prediction.
     every reward in it is scaled down by the same share.
   - Anyone can add to the reward fund (`market.fund_rewards`).
 - **The public record:** the host writes one row for each completed life (level or note,
-  KOs, correct, failure or none, multiplier, reward points, base rate, UTC day). It adds a
+  KOs, correct, failure or none, multiplier, base rate, UTC day). It adds a
   settlement row when the batch resolves for a life that drew NEAR. The host serves the
   record at `/house/record.jsonl`, and today's leaderboards at
-  `/house/leaderboards.json`: most KOs, and most correct predictions ranked by reward
-  points with the count beside them, top 5, players and house apart.
+  `/house/leaderboards.json`: most KOs, and most correct predictions ranked by the number
+  correct today, with that count beside them, top 5, players and house apart.
+  The public record and `/house/predictions.jsonl` return the newest complete rows,
+  at most 256 KiB per response (`X-Log-Window: tail`, `X-Log-Max-Bytes: 262144`).
+  `X-Log-Hash`, when present, hashes the response bytes. The full history remains on
+  the host's disk; the prediction hash in a settlement still covers that full history.
+  The card reads `/house/predictions/summary?persona=<fighter-id>` for exact lifetime
+  totals: `lives`, `kos`, `scored`, `score_sum` and `base_score_sum`, with `scope: "all"`
+  and the full history's `log_hash`. These aggregates update on append and rebuild
+  once at startup; reading a card never scans the file.
 
 After activation, `client.control("intent", payload, life_id=life)` uses
 `fighter_id`, `focus`, `avoid`, `loot`, `sig`, `leave` and `say`. The host enforces its advertised order interval (0.5 s on a battle host). `client.observe()` reads the public map. Renew via

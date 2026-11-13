@@ -95,7 +95,7 @@ class BattleHouse(unittest.TestCase):
                 first.setdefault(name, payload)
             for name, payload in first.items():                # the plan follows that persona's own sheet
                 style = house.sheets[name]["game"]["fight_style"]
-                self.assertEqual(payload["stance"], STANCE[style], name)
+                self.assertEqual(payload["stance"], "hunt-weakest" if style == "hunter" else "berserk", name)
             asks = [a for a in house.client.asks if "Write the behaviour you want now" in a]
             for name in planned:
                 rivals, allies = battle.relations(house.sheets[name]["game"])

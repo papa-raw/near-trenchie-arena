@@ -252,7 +252,7 @@ class Combat(unittest.TestCase):
         self.assertGreater(a["bag"]["leg-laser-eyes"]["serial"], serial1)
         drop = game.drop_item("r-beam", 11000, 0, "a", False)
         expires = game.state["drops"][drop]["expires_at"]
-        self.assertEqual(expires - game.state["tick"], 1200)
+        self.assertEqual(expires - game.state["tick"], 600)
         game.state["tick"] = expires
         game._grabs()
         self.assertNotIn(drop, game.state["drops"])

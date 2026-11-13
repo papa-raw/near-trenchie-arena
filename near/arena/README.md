@@ -30,7 +30,8 @@ balance outcome is implied by these cases.
 A KO scatters exactly one worn non-default item three to four tiles before
 boundary clamping. Six undamaged ticks complete a grab. Ownership changes
 immediately; duplicate rows disappear and unclaimed floor items expire after
-sixty seconds. House bodies refuse player-origin drops. A house kit returns
+thirty seconds under integer-17. Older recorded segments keep their own table's lifetime.
+House bodies refuse player-origin drops. A house kit returns
 on its next life. Legendary serials increase on the first grab of a new copy.
 Inventory entries and equipped rows remain distinct.
 

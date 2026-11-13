@@ -371,7 +371,7 @@ class Engine(unittest.TestCase):
         self.assertEqual(sim.digest(fifteen), "0bcbd83d92dab9bc89b2c7a461ca21e44f1b9c8062595315cc156dadf3174fbe")
         self.assertEqual({k: fifteen.get(k) for k in set(fifteen) | set(fourteen) if fifteen.get(k) != fourteen.get(k)},
                          {"version": "integer-15", "steer_band": 1000})
-        # integer-16 (predictions) is the current table; arena/test_predict.py checks it is 15 plus the predict block
+        # integer-16 adds predictions; integer-17 changes floor expiry. Their release cases pin both archived tables.
 
     def test_a_battle_segment_replays_to_the_same_hash_and_resumes(self):
         def segment():

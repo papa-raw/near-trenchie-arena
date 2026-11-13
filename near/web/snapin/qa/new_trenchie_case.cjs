@@ -155,7 +155,7 @@ async function setName(p, name) { await p.fill('#name', name); await sleep(150);
       if (v === 0) await q.goto(guide + '?step=wallet'); else await q.reload();
       await ready(q); await q.waitForFunction(() => /out of the arena/.test(document.querySelector('#app').innerText), null, { timeout: 20000 }).catch(() => {});
       const tc = (await text(q)).replace(/\s+/g, ' '), dc = JSON.parse(await draft(q) || '{}');
-      ok(out && dc.name === 'Charlie Pip' && /DEV Charlie Pip is out of the arena \(no page was open to keep it\)\. Your trenchie is kept\./.test(tc) && !!(await q.$('[data-act="rejoin"]')) && !!(await q.$('[data-act="new-trenchie"]')) && joins2 === 0,
+      ok(out && dc.name === 'Charlie Pip' && /DEV Charlie Pip is out of the arena \(no page was open to keep it\)\. Your Trenchie is kept\./.test(tc) && !!(await q.$('[data-act="rejoin"]')) && !!(await q.$('[data-act="new-trenchie"]')) && joins2 === 0,
         `closed every tab, came back${v ? ' and reloaded ' + v + 'x' : ''}: the draft still holds Charlie Pip, the guide offers "Snap Charlie Pip back in" or "Make a new trenchie", no join sent (${joins2})`);
     }
     // The lapsed seat's round result is unread, and the host holds new joins until it is read. "Snap

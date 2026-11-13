@@ -40,8 +40,9 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || REPO);
         const g = await p.evaluate(() => {
           const a = document.getElementById('snapin-cta'), cue = a.querySelector('.cue'), img = a.querySelector('img'), svg = a.querySelector('svg.tail');
           const c = cue.getBoundingClientRect(), im = img.getBoundingClientRect(), cs = getComputedStyle(cue);
+          const scale = a.getBoundingClientRect().width / a.offsetWidth, physical = (q) => q.map((v) => v * scale);
           return { c: [c.left, c.top, c.width, c.height], im: [im.left, im.top, im.width, im.height], bw: parseFloat(cs.borderBottomWidth), radius: parseFloat(cs.borderBottomLeftRadius),
-            tail: svg ? { corner: svg.dataset.corner.split(',').map(Number), arc: svg.dataset.arc.split(',').map(Number), base: svg.dataset.base.split(';').map((q) => q.split(',').map(Number)), tip: svg.dataset.tip.split(',').map(Number), face: svg.dataset.face.split(',').map(Number) } : null,
+            tail: svg ? { corner: physical(svg.dataset.corner.split(',').map(Number)), arc: svg.dataset.arc.split(',').map(Number), base: svg.dataset.base.split(';').map((q) => physical(q.split(',').map(Number))), tip: physical(svg.dataset.tip.split(',').map(Number)), face: physical(svg.dataset.face.split(',').map(Number)) } : null,
             ink: cs.borderBottomColor, paper: cs.backgroundColor };
         });
         const [cl, ct, cw, chh] = g.c, clip = { x: Math.max(0, cl - 70), y: Math.max(0, ct - 30), width: Math.min(cw + 90, W - Math.max(0, cl - 70)), height: 110 };

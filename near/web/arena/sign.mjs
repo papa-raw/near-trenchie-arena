@@ -1,14 +1,14 @@
 // The wall sign (approved board 2, direction C): two boards on one plank hung at the top centre, read from the host's
 // public record (GET /house/leaderboards.json, near/arena/predict.py). "Most KOs this hour" (O3) and "Correct predictions
 // today (UTC)" (N5), each with a Players | House switch (the house apart from players, O3); both boards switch together.
-// Top 3 at 1440; the leader alone on a phone or in a window under 780 px tall. Points and the count correct sit side by
-// side; on a phone a row is the leader's name and number (and "4 ✓" on predictions), so the name is never cut.
+// Top 3 at 1440; the leader alone on a phone or in a window under 780 px tall. Predictions show the count correct
+// ("4 ✓") at every width, so the name is never cut.
 // The rows are the host's `boards` (most_kos_hour, most_correct_day, each split into players and house); a host
 // without them shows both boards empty ("No KOs yet"), never another window under this label.
 
 export const PERIOD_MS = 10000;
 export const WORDS = { ko: 'Most KOs', koWhen: 'this hour', pr: 'Correct predictions', prShort: 'Predictions',
-  prWhen: 'today (UTC)', players: 'Players', house: 'House', points: 'points', correct: '✓',
+  prWhen: 'today (UTC)', players: 'Players', house: 'House', correct: '✓',
   noKos: 'No KOs yet', noCorrect: 'No correct predictions yet', offline: 'No arena running', counted: 'Counted as each life ends.' };
 
 /** The boards route on the same host as the spectator socket. */
@@ -26,11 +26,11 @@ export const rowsFor = (vw, vh) => (vw <= 600 || vh < 780 ? 1 : 3);
  *  -> {ko: {rows:[{id, num}]}, pr: {rows:[{id, num, count}]}} */
 export function boards(json, side, n) {
   const b = (json && json.boards) || {};
-  // a row ranks only with something to rank: 0 KOs (or 0 points) is not a place on the board
-  const ko = ((b.most_kos_hour && b.most_kos_hour[side]) || []).filter((r) => r.kos > 0), pr = ((b.most_correct_day && b.most_correct_day[side]) || []).filter((r) => r.reward_points > 0);
+  // The host ranks before taking its top rows; a row needs a KO or a correct prediction to place.
+  const ko = ((b.most_kos_hour && b.most_kos_hour[side]) || []).filter((r) => r.kos > 0), pr = ((b.most_correct_day && b.most_correct_day[side]) || []).filter((r) => r.correct > 0);
   return {
     ko: { rows: ko.slice(0, n).map((r) => ({ id: r.persona, num: r.kos })) },
-    pr: { rows: pr.slice(0, n).map((r) => ({ id: r.persona, num: r.reward_points, count: r.correct })) },
+    pr: { rows: pr.slice(0, n).map((r) => ({ id: r.persona, num: r.correct, count: r.correct })) },
   };
 }
 
@@ -75,7 +75,7 @@ export function columnsHtml(b, o) {
     const head = '<div class="ct"><span class="ttl">' + (kind === 'ko' ? W.ko : (o.short ? W.prShort : W.pr)) + ' <small>' + (kind === 'ko' ? W.koWhen : W.prWhen) + '</small></span>' + sw + '</div>';
     const rows = o.offline ? [] : b[kind].rows;
     const body = rows.length ? rows.map((r, i) => '<li><span class="rk">' + (i + 1) + '</span>' + face(r.id) + '<span class="nm"><span class="t">' + nameHtml(o.name(r.id), o.dev(r.id)) + '</span></span><b class="num">' + r.num +
-        (kind === 'pr' ? ' <small>' + W.points + '</small>' : '') + '</b>' + (kind === 'pr' ? '<span class="cnt">' + r.count + ' ' + W.correct + '</span>' : '') + '</li>').join('')
+        (kind === 'pr' ? ' ' + W.correct : '') + '</b></li>').join('')
       : '<li class="empty">' + (o.offline ? W.offline : kind === 'ko' ? W.noKos : W.noCorrect) + '</li>';
     return head + '<ol>' + body + '</ol>';
   };
@@ -120,8 +120,8 @@ export class Sign {
     this.el.querySelector('[data-board="pr"]').innerHTML = html.pr;
     this.fit(); this.paint();   // the fit changes the plank's height: paint the wood after it
   }
-  /** After a draw, the sheet's rule that a name is never cut: if any name would not fit on its line, the rank, the face
-   *  and the word "points" drop (tight) and names wrap between words onto at most 2 lines. If a name still needs more,
+  /** After a draw, the sheet's rule that a name is never cut: if any name would not fit on its line, the rank and the face
+   *  drop (tight) and names wrap between words onto at most 2 lines. If a name still needs more,
    *  it takes the row's whole width and the numbers go on the line below (stack). An ellipsis only beyond that (CSS).
    *  Re-run when the fonts arrive. */
   fit() {

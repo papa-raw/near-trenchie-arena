@@ -31,7 +31,7 @@ export function nameColour(base) {
 //   {kind:'ko', who, victim, ambush}              who KO'd victim (who null: victim was knocked out of the ring)
 //   {kind:'leg', who, victim, item, steal, from}  a KO that dropped a legendary, or a legendary grabbed (steal)
 //   {kind:'pred', who, level}                     a life starts predicting level+ KOs
-//   {kind:'res', who, level, points}              the prediction met: correct, with its reward points
+//   {kind:'res', who, level}                      the prediction met: correct
 //   {kind:'escape', who, hp}                      a near-death escape
 // name(id) -> the trenchie's name (never an id). Returns {cls, who, glyph, parts:[{text, who?, kind?}]}.
 const kos = (n) => n + '+ KO' + (n === 1 ? '' : 's');
@@ -48,7 +48,7 @@ export function slip(item, name) {
         ? { cls: 'leg', who: name(item.victim), glyph: GLYPH.leg, parts: [{ text: 'DROPS ' }, { text: item.item, kind: 'legn' }] }
         : { cls: 'leg', who, glyph: GLYPH.leg, parts: [{ text: 'KO ' }, { text: name(item.victim), who: item.victim }, { text: ', who DROPS ' }, { text: item.item, kind: 'legn' }] };
     case 'pred': return { cls: 'pred', who, glyph: GLYPH.pred, parts: [{ text: 'PREDICTS ' + kos(item.level) }] };
-    case 'res': return { cls: 'res', who, glyph: GLYPH.res, parts: [{ text: 'MADE ' + kos(item.level) + ': CORRECT' }, ...(item.points ? [{ text: ' +' + item.points + ' points', kind: 'pts' }] : [])] };
+    case 'res': return { cls: 'res', who, glyph: GLYPH.res, parts: [{ text: 'MADE ' + kos(item.level) + ': correct' }] };
     case 'escape': return { cls: 'escape', who, glyph: GLYPH.escape, parts: [{ text: 'ESCAPES at ' + item.hp + ' HP' }] };
     default: return null;
   }
@@ -96,6 +96,7 @@ export class Feed {
       for (const p of s.parts) {
         if (p.who != null) { const b = d.createElement('b'); b.textContent = p.text; b.style.color = this.colour(p.who); line.appendChild(b); if (this.dev(p.who)) line.appendChild(this.devChip()); }
         else if (p.kind) { const b = d.createElement(p.kind === 'status' ? 'span' : 'b'); b.className = p.kind; b.textContent = p.text; line.appendChild(b); }
+        else if (item.kind === 'say') { const dialogue = d.createElement('em'); dialogue.textContent = p.text; line.appendChild(dialogue); }
         else line.appendChild(d.createTextNode(p.text));
       }
       li.appendChild(line);

@@ -1,5 +1,4 @@
-// The arena HUD's crowd card on the real Hud.placeTags (approved board 2): three fighters within reach share one card
-// and their own tags hide; when the crowd breaks up, each fighter's own tag is back on the very next frame (no blink).
+// Real Hud.placeTags: crowded fighters retain separate tags, and separating them never hides a tag.
 //   node --no-warnings --experimental-loader ./near/web/arena-view-remainder-loader.mjs near/web/arena-board2-tags-case.mjs
 import './arena-view-fix-env.mjs';
 import assert from 'node:assert/strict';
@@ -24,15 +23,13 @@ Object.assign(hud, { w: 1440, h: 900, tags: new Map(), styles: new Map(), bounti
 const pos = () => new Map([...at].map(([id, p]) => [id, { x: p.x, z: p.y, state: 'alive', f: { status: 0, items: {} } }]));
 
 hud.placeTags(pos(), null, 0);
-assert.equal(hud.cards.size, 1, 'three within reach share one card');
-const card = [...hud.cards.values()][0].el;
-assert.equal(card.children[0].textContent, '3 here');
-assert.deepEqual(card.children.slice(1).map((r) => r.dataset.fighterId), ['a', 'b', 'c'], 'listed left to right');
-for (const id of ['a', 'b', 'c']) assert.match(hud.tags.get(id).className, /tag-hidden/, id + ' hides its own tag while in the card');
+assert.equal(hud.tags.size, 4, 'each fighter has an individual tag');
+assert.ok(!hud.tagLayer.children.some((el) => el.className === 'gcard'), 'no merged card is drawn');
+for (const id of ['a', 'b', 'c', 'd']) assert.doesNotMatch(hud.tags.get(id).className, /tag-hidden/, id + ' keeps its own tag in the crowd');
 
 at.set('c', { x: 1100, y: 700 }); at.set('a', { x: 300, y: 300 });   // the crowd breaks up
 hud.placeTags(pos(), null, 50);
-assert.equal(hud.cards.size, 0, 'the card goes with the crowd');
+assert.equal(hud.tags.size, 4, 'separating the crowd retains each individual tag');
 for (const id of ['a', 'b', 'c', 'd']) assert.doesNotMatch(hud.tags.get(id).className, /tag-hidden/, id + ' shows its own tag on the next frame');
 // the page's status pill ("No arena at … retrying") stands clear of the corner buttons and the feed, not on top of them
 const status = { classList: { contains: (c) => c === 'warn' }, offsetWidth: 190, offsetHeight: 60, style: {} };

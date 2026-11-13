@@ -306,7 +306,7 @@ class LevelsCounted(unittest.TestCase):
         sys.path[:0] = [str(HERE.parents[1])]
         import predict
         import sim
-        self.assertEqual(sim.DEFAULT_RULES["version"], "integer-16")
+        self.assertEqual(sim.DEFAULT_RULES["version"], "integer-17")
         return predict.read_level(sim.DEFAULT_RULES, pick_payload["spread_bps"], pick_payload["zero_bps"]), predict.NOT_COUNTED
 
     def test_an_agent_door_level_life_locks_a_counted_prediction_and_a_legacy_spread_does_not(self):

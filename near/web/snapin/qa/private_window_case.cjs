@@ -56,7 +56,7 @@ const act = async (p, a) => { await p.click(`[data-act="${a}"]`); await sleep(25
         ok(live && pan.includes(name) && await inRing(name), `${mode}: the arena page shows the live arena and the trenchie's own panel, and keeps driving it ("${pan.slice(0, 80)}")`);
       } else {
         const ring = (await p.evaluate(() => document.querySelector('#app').innerText)).replace(/\s+/g, ' ');
-        ok(/This browser keeps your trenchie only on this page \(it cannot store the key\): closing this page sends your trenchie home\./.test(ring) && !(await p.$('[data-act="watch-mine"]')),
+        ok(/This browser keeps your Trenchie only on this page \(it cannot store the key\): closing this page sends your Trenchie home\./.test(ring) && !(await p.$('[data-act="watch-mine"]')),
           `${mode}: the guide keeps the trenchie, says it is kept only on this page, and offers no page move that would lose it`);
         await sleep(40000);   // longer than the 30 s lease: still in, because this page keeps renewing it
         ok(await inRing(name) && await p.evaluate(() => SnapRoom.status().phase) === 'in', `${mode}: 40 s later the trenchie is still in the arena (the old move to the arena page lost it: item 39's one real failure)`);

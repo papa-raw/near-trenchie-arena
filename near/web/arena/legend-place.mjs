@@ -1,13 +1,13 @@
-// Where the legendary floor signs go (approved board 2: "LEGENDARY: <ITEM>" with the item's picture). Under board 3's
+// Where active legendary floor announcements go (the item's name and picture). Under board 3's
 // phone camera (2.8x) two drops and the bodies around them crowd one spot, and a sign covered another sign's text or a
 // body. Each sign keeps its pin on the item and takes the first clear spot right next to it: above (centred,
 // or slid so the pin sits under either end), below, the sides, the corners; on screen, clear of the bodies, the tags,
 // the crowd cards, the fixed HUD panels (the guide's snap-in button among them), every pin and the signs already
 // placed. The words are kept wherever they fit (the full words are part of the sign's design): the full sign
-// ("LEGENDARY: <NAME>" and the picture), else the picture and the name alone (never cut), else the picture alone next
+// (the name and the picture), else the picture and the name alone (never cut), else the picture alone next
 // to the pin or on the pin itself (a tap on a phone, or hover, opens the full sign; the full text is also its label); with no room even for that, only the pin shows until there is. A pin off screen or under
-// a HUD panel hides its sign. A word is never cut, and no line joins a sign to its pin (Pat's item 35: no thin line on
-// the sign). Pure: the legend-place case runs it in node.
+// a HUD panel hides its sign. A word is never cut, and no line joins a sign to its pin. Expired announcements never
+// enter this placement function. Pure: the legend-place case runs it in node.
 
 export const GAP = 14, LIFT = 22, NEAR = 8, MARGIN = 6, PIN = 5;   // NEAR: the short form sits closer (it is only a picture)
 const hit = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;

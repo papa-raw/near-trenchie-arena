@@ -12,7 +12,7 @@ Nobody knows who pulled it. The island has three theories and no proof:
 - **A faceless whale.** Something so large it moved the tide by sitting down. It never had a name and it never had a face.
 - **A rogue bot.** A program somebody told to start and nobody told to stop.
 
-All three are off-island. The rule of the island is that a trenchie never blames another trenchie for the Great Rug, because nobody knows, and a guess that names a neighbour is a rumour. The sheets hold to it: each one carries one of the three myths in its `belief` field, and the checker refuses anything else.
+All three are off-island. The rule of the island is that a Trenchie never blames another Trenchie for the Great Rug, because nobody knows, and a guess that names a neighbour is a rumour. The sheets hold to it: each one carries one of the three myths in its `belief` field, and the checker refuses anything else.
 
 ## The coin
 
@@ -36,7 +36,7 @@ These are the lines for the join flow. Each fits one feed row.
 
 ## The six temperaments
 
-A temperament is how a trenchie comes across before it says a word. The six names are a closed list and none of them is a fight-style word (brawler, hunter, looter, guardian, survivor), so a card can show both without repeating itself.
+A temperament is how a Trenchie comes across before it says a word. The six names are a closed list and none of them is a fight-style word (brawler, hunter, looter, guardian, survivor), so a card can show both without repeating itself.
 
 | Temperament | How it sounds |
 |---|---|
@@ -49,7 +49,7 @@ A temperament is how a trenchie comes across before it says a word. The six name
 
 ## The fourteen
 
-Every house trenchie has a short tag over its head in the arena and its full name on the card. Seven start with three rares and the legendary trinket (`rares`); seven start with the legendary and three commons (`commons`). The legendary is the famous move. It is a re-skin of one of six shared signatures, so there is no special code behind a name, only a look.
+Every house Trenchie has a short tag over its head in the arena and its full name on the card. Seven start with three rares and the legendary trinket (`rares`); seven start with the legendary and three commons (`commons`). The legendary is the famous move. It is a re-skin of one of six shared signatures, so there is no special code behind a name, only a look.
 
 | Name | Tag | Temperament | Fight style | Loadout | Legendary | Signature | The look |
 |---|---|---|---|---|---|---|---|
@@ -68,7 +68,7 @@ Every house trenchie has a short tag over its head in the arena and its full nam
 | Hameme Pumpeshi | Pumpeshi | Deadpan | hunter | rares | Poker Face | bubble | a fanned hand of cards closes into a shield; it pops like a table flip |
 | Stepan Gershunode | Gershunode | Deadpan | hunter | rares | Router Drone | blink_strike | a small cream drone blinks out of his orbit and reappears behind the weakest brawler |
 
-Each famous move matches its owner's joke. Laser Sailor owns Laser Eyes. Tommy Leeth stacks ether, so his is the Ether Stack, and he is the one trenchie who would never touch Stack Sats. Satrenchi sits on the oldest stack on the island and has never spent a coin of it, so Stack Sats is its.
+Each famous move matches its owner's joke. Laser Sailor owns Laser Eyes. Tommy Leeth stacks ether, so his is the Ether Stack, and he is the one Trenchie who would never touch Stack Sats. Satrenchi sits on the oldest stack on the island and has never spent a coin of it, so Stack Sats is its.
 
 A legendary that drops comes back with its owner at the next respawn, carrying the next serial: LASER EYES #1, LASER EYES #2, and on. The serial is part of the item, in the feed and on the card.
 
@@ -86,7 +86,7 @@ Four seeded rivalries and two alliances shape banter and who hunts whom. They ar
 ## Voice rules
 
 - Affectionate roast, no accusations. Jokes stay on the fourteen.
-- Nobody is called a rugger or a scammer. A line that names a trenchie never says "rug".
+- Nobody is called a rugger or a scammer. A line that names a Trenchie never says "rug".
 - The Great Rug is blamed only on the three myths above.
-- A trenchie speaks at most once every 30 seconds, and a line gets at most one reply.
+- A Trenchie speaks at most once every 10 seconds, and a line gets at most one reply.
 - Every line passes the output check. One that fails becomes an emote.

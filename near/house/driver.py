@@ -20,7 +20,7 @@ class ArenaDriver:
         self.arena, self.bindings = arena, dict(bindings)
         self.life_prefix = life_prefix              # makes a life id unique in a log that outlives one arena
         self.feed_tick = feed_tick                  # the feed's own clock when the feed outlives one arena
-        self.behaviour_log = None                   # battle mode: called with (name, trigger, sent, ack) for every order
+        self.behaviour_log = None                   # battle mode: called with (name, trigger, sent, ack, fixed) for every order
         self.log = log                              # a PredictionLog, or None for no log
         self.feed = feed if feed is not None else []
         self.models = models or {}
@@ -151,15 +151,16 @@ class ArenaDriver:
         return lock
 
     # --- battle mode: a behaviour order, answered by the arena's ACK --------------------------
-    def apply_behaviour(self, name, behaviour, trigger=None):
-        """Send one behaviour (schema v1) through the same bridge a player's room uses; log the ACK whatever it says."""
+    def apply_behaviour(self, name, behaviour, trigger=None, fixed=()):
+        """Send one behaviour (schema v1) through the same bridge a player's room uses; log the ACK whatever it says,
+        with what the house's engage check changed (`fixed`, battle.engage)."""
         b, m = self.bindings[name], self.arena.members.get(name)
         if m is None:
             return None
         ack = self.arena.bridge.apply(b, {"kind": "behaviour", "payload": behaviour, "life_id": m["life_id"],
                                           "sequence": self._next(name)})
         if self.behaviour_log is not None:
-            self.behaviour_log(name, trigger, behaviour, ack)
+            self.behaviour_log(name, trigger, behaviour, ack, list(fixed))
         return ack
 
     def may_banter(self, name):

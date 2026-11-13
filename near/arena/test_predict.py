@@ -29,7 +29,7 @@ class Table(unittest.TestCase):
     def test_integer_16_is_15_plus_the_predict_block_and_old_tables_keep_their_hashes(self):
         fifteen = json.loads((RULES_DIR / "integer-15.json").read_bytes())
         sixteen = json.loads((RULES_DIR / "integer-16.json").read_bytes())
-        self.assertEqual(sim.digest(sixteen), sim.digest(sim.DEFAULT_RULES))
+        self.assertEqual(sim.digest(sixteen), "852a82695da097598170e8dd4ab514a82010e68d483e544d434d9ea8e199d20e")
         self.assertEqual({k: sixteen.get(k) for k in set(sixteen) | set(fifteen) if sixteen.get(k) != fifteen.get(k)},
                          {"version": "integer-16",
                           "predict": {"levels": [1, 2, 3, 4], "margin_bps": 1000, "cap_bps": 200000,
@@ -96,9 +96,9 @@ class Leaderboards(unittest.TestCase):
         self.assertEqual(set(r), {"kind", "run", "life", "persona", "name", "house", "rules", "level", "note", "kos",
                                   "result", "multiplier_bps", "reward_points", "base_rate_bps", "day", "at_ns"})
         self.assertEqual((r["rules"], r["level"], r["kos"], r["result"], r["multiplier_bps"], r["reward_points"],
-                          r["day"]), ("integer-16", 2, 3, "correct", 35714, 357, "2026-11-12"))
+                          r["day"]), (sim.DEFAULT_RULES["version"], 2, 3, "correct", 35714, 357, "2026-11-12"))
 
-    def test_most_correct_ranks_by_points_then_count_then_name_and_most_kos_by_kos(self):
+    def test_most_correct_ranks_by_count_then_name_and_most_kos_by_kos(self):
         rows = ([self.row("timid", 1, level=1) for _ in range(6)]       # six correct 1+: 6 x 150 = 900 points
                 + [self.row("bold", 3, level=3)]                         # one correct 3+: 947 points
                 + [self.row("bold", 0, level=4)]                         # a failure: no points
@@ -108,7 +108,7 @@ class Leaderboards(unittest.TestCase):
                 + [self.row("quiet", 0, level=2)])
         b = predict.leaderboards(rows, "2026-11-12")
         self.assertEqual([(e["persona"], e["reward_points"], e["correct"]) for e in b["most_correct"]],
-                         [("bold", 947, 1), ("timid", 900, 6), ("twin-a", 357, 1), ("twin-b", 357, 1), ("pair", 300, 2)])
+                         [("timid", 900, 6), ("pair", 300, 2), ("bold", 947, 1), ("twin-a", 357, 1), ("twin-b", 357, 1)])
         self.assertEqual([(e["persona"], e["kos"], e["lives"]) for e in b["most_kos"]],
                          [("pair", 7, 3), ("timid", 6, 6), ("bold", 3, 2), ("twin-a", 2, 1), ("twin-b", 2, 1)])
         self.assertNotIn("yesterday", json.dumps(b))

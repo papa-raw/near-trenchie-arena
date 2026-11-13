@@ -21,6 +21,9 @@ The steps, each one call on the host (POST /dev/identity with an "op" field; hos
 Registration (POST /dev/identity with no "op") then seats the fighter under {account, token}; the arena's writer reads
 the owner again before every life (writer.owner_ok), so a sale moves the trenchie.
 
+With a state dir, sign-ins, confirmations and short-lived replay markers survive a restart in an atomic,
+owner-only identity-sessions.json. Each keeps its original expiry; confirmations last one session (two hours).
+
 Keys never pass through here as text: they come from the keys file (TRENCHIE_CHAIN_KEYS, owner-only, outside the repo).
 """
 
@@ -33,8 +36,10 @@ import os
 import secrets
 import stat
 import struct
+import tempfile
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -66,6 +71,9 @@ RECORD_BYTES = 1000             # storage a new inventory record takes with its 
 RECORDS_AMBER, RECORDS_RED = 50, 10
 MAX_INFLIGHT = 16
 MAX_LIVE_PERMITS = 3            # paid-mint permits an account holds unsent at once
+SIGNIN_RPC_PER_MINUTE = 60      # assumed ceiling, not a measured provider tolerance; shared across addresses
+SIGNIN_PERMISSION_TTL_S = 60   # only sign-in permission is cached; life owner reads remain fresh
+SIGNIN_BAD_KEY_COOL_OFF_S = 600
 PER_ADDRESS_INFLIGHT = 2        # identity steps one client address may have running at once
 # Per client address, per step: at most N calls in a sliding window of W seconds (the host's own limits; nginx adds its own).
 LIMITS = {"challenge": (20, 60), "signin": (10, 60), "claim": (3, 3600), "permit": (10, 3600), "confirm": (30, 60),
@@ -261,6 +269,73 @@ def envelope_bytes(op: str, sid: str, at: str, payload: str) -> bytes:
     return f"trenchie-desk|{op}|{sid}|{at}|{hashlib.sha256(payload.encode('utf-8')).hexdigest()}".encode()
 
 
+class SigninReads:
+    """A separate read allowance: unauthenticated traffic cannot consume the owner checks' RPC budget."""
+
+    def __init__(self, rpc: rpclib.Rpc, clock: Callable[[], float]) -> None:
+        self.rpc, self.clock = rpc, clock
+        self.calls: list[float] = []
+        self.permissions: dict[tuple[str, str], tuple[float, dict]] = {}
+        self.cool_off: dict[str, float] = {}
+        self.key_reads: set[str] = set()
+        self.lock = threading.Lock()
+
+    def take(self) -> None:
+        now = self.clock()
+        with self.lock:
+            self.calls = [at for at in self.calls if at > now - 60]
+            if len(self.calls) >= SIGNIN_RPC_PER_MINUTE:
+                raise rpclib.RpcUnreachable("sign-in read limit reached; wait a minute")
+            self.calls.append(now)
+
+    def _begin_key_read(self, account: str, public_key: str, address: str) -> dict | None:
+        """One read in flight per address prevents a concurrent burst from outrunning its cool-off."""
+        now = self.clock()
+        with self.lock:
+            self.permissions = {key: value for key, value in self.permissions.items() if value[0] > now}
+            self.cool_off = {ip: until for ip, until in self.cool_off.items() if until > now}
+            cached = self.permissions.get((account, public_key))
+            if cached is not None:
+                # A cached denial spends no RPC capacity; only an actual read allocates address state.
+                return dict(cached[1])
+            if address in self.cool_off:
+                raise IdentityError('a sign-in key from this address was not full-access; wait ten minutes before another key read')
+            if address in self.key_reads:
+                raise IdentityError('a sign-in key read from this address is still running; wait for it')
+            self.key_reads.add(address)
+        return None
+
+    def _remember_key(self, account: str, public_key: str, address: str, permission: object) -> None:
+        now = self.clock()
+        with self.lock:
+            self.permissions[(account, public_key)] = (now + SIGNIN_PERMISSION_TTL_S, {'permission': permission})
+            if permission != 'FullAccess':
+                self.cool_off[address] = now + SIGNIN_BAD_KEY_COOL_OFF_S
+
+    def access_key(self, account: str, public_key: str, *, address: str = '') -> dict:
+        cached = self._begin_key_read(account, public_key, address)
+        if cached is not None:
+            return cached
+        try:
+            self.take()
+            try:
+                result = self.rpc.access_key(account, public_key)
+            except rpclib.RpcError as exc:
+                if exc.name not in ('UNKNOWN_ACCESS_KEY', 'UNKNOWN_ACCOUNT'):
+                    raise
+                result = {'permission': None}  # a definitive missing key, never a transport failure
+            permission = result.get('permission') if isinstance(result, dict) else None
+            self._remember_key(account, public_key, address, permission)
+            return {'permission': permission}
+        finally:
+            with self.lock:
+                self.key_reads.discard(address)
+
+    def view(self, account: str, method: str, args: dict | None = None) -> object:
+        self.take()
+        return self.rpc.view(account, method, args)
+
+
 class IdentityDesk:
     """The identity steps. `id_rpc` reads the identity network; `id_sender` signs as the identity minter there;
     `inv_sender` signs as the inventory minter on testnet and reads the inventory (near/chain/sender.py's shape).
@@ -269,16 +344,17 @@ class IdentityDesk:
 
     def __init__(self, settings: HostedSettings, id_rpc, id_sender, inv_sender, permit_key: Ed25519PrivateKey,
                  recipient: str, *, names: tuple, check_persona=None, state_dir=None, clock=time.time, log=None,
-                 sleep=time.sleep):
+                 sleep=time.sleep, signin_rpc=None):
         self.s, self.id_rpc, self.id_sender, self.inv_sender = settings, id_rpc, id_sender, inv_sender
         self.permit_key, self.recipient, self.names = permit_key, recipient, names
         self.check_persona = check_persona
         self.clock, self.sleep = clock, sleep
+        self.signin_rpc = SigninReads(signin_rpc or id_rpc, clock)
         self._log = log or (lambda line: print(line, flush=True))
         self.lock = threading.Lock()
         self.challenges = {}       # nonce b64url -> {"expires", "page_key", "address"}
         self.signins = {}          # signin id -> {"account_id", "page_key", "expires"}
-        self.confirmed = {}        # (account, token) -> {"at", "shadow_tx", ...}
+        self.confirmed = {}        # (account, token) -> {"at", "expires", "shadow_tx", ...}
         self.journal = []          # every chain step: what, tx, network (the evidence rows)
         self.calls = {}            # (address, step) -> [times] within its window
         self.used = {}             # (signin, signature bytes) -> expires: each signed step is accepted once
@@ -289,11 +365,78 @@ class IdentityDesk:
         self.alarm = None          # the shadow minter's low float or cap, for /health
         self.state_dir = Path(state_dir) if state_dir else None
         self.claims_path = self.state_dir / "identity-claims.jsonl" if self.state_dir else None
+        self.sessions_path = self.state_dir / "identity-sessions.json" if self.state_dir else None
         self.claimed = set()       # accounts that took a free claim through this host: on disk, survives a restart
         if self.claims_path and self.claims_path.exists():
             for line in self.claims_path.read_text().splitlines():
                 if line.strip():
                     self.claimed.add(json.loads(line)["account_id"])
+        self._load_sessions()
+
+    def _session_scope(self) -> dict:
+        return {"network": self.s.identity_network, "identity_nft": self.nft,
+                "inventory_nft": self.s.chain.nft}
+
+    def _prune_sessions(self) -> None:
+        now = self.clock()
+        self.signins = {k: v for k, v in self.signins.items() if v["expires"] > now}
+        self.confirmed = {k: v for k, v in self.confirmed.items() if v["expires"] > now}
+        self.used = {k: v for k, v in self.used.items() if v > now}
+
+    def _load_sessions(self) -> None:
+        """Reload only unexpired authorizations; corrupt or public state refuses startup."""
+        if self.sessions_path is None or not self.sessions_path.exists():
+            return
+        try:
+            if self.sessions_path.stat().st_mode & 0o077:
+                raise ValueError("permissions")
+            data = json.loads(self.sessions_path.read_text())
+            if data["version"] != 1 or data["scope"] != self._session_scope():
+                raise ValueError("scope")
+            self.signins = data["signins"]
+            self.confirmed = {(r["account_id"], r["token_id"]): r for r in data["confirmed"]}
+            self.used = {(sid, bytes.fromhex(sig)): expires for sid, sig, expires in data["used"]}
+            for rec in self.signins.values():
+                _b64url_decode(rec["page_key"], 32, "page key")
+                if not chaincfg_account_ok(rec["account_id"], self.s.identity_network):
+                    raise ValueError("account")
+            self._prune_sessions()
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            raise chaincfg.ConfigError("cannot load identity session state; restore its owner-only backup or remove it to require fresh sign-ins") from None
+        self._save_sessions()
+
+    def _save_sessions(self) -> None:
+        """Under self.lock: durable owner-only replacement before acknowledging a signed step.
+
+        Only public page keys and authorization records are stored, never wallet or page private keys.
+        Replay markers retain their original short expiry across a process restart too.
+        """
+        if self.sessions_path is None:
+            return
+        self._prune_sessions()
+        data = {"version": 1, "scope": self._session_scope(), "signins": self.signins,
+                "confirmed": list(self.confirmed.values()),
+                "used": [[sid, sig.hex(), expires] for (sid, sig), expires in self.used.items()]}
+        tmp = None
+        try:
+            self.sessions_path.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(mode="w", dir=self.sessions_path.parent, suffix=".tmp", delete=False) as out:
+                tmp = Path(out.name)
+                os.fchmod(out.fileno(), 0o600)
+                json.dump(data, out)
+                out.flush()
+                os.fsync(out.fileno())
+            os.replace(tmp, self.sessions_path)
+            directory = os.open(self.sessions_path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        except OSError:
+            raise IdentityError("could not save sign-in state; the arena operator must check its state storage, then retry") from None
+        finally:
+            if tmp is not None:
+                tmp.unlink(missing_ok=True)
 
     @property
     def nft(self):
@@ -366,7 +509,7 @@ class IdentityDesk:
                              nonce, self.recipient):
             raise IdentityError("the wallet's signature does not match this sign-in code")
         try:
-            ak = self.id_rpc.access_key(account, public_key)
+            ak = self.signin_rpc.access_key(account, public_key, address=live['address'])
         except (rpclib.RpcError, rpclib.RpcUnreachable) as exc:
             raise IdentityError(f"could not read {account}'s keys on {self.s.identity_network}; try again "
                                 f"({type(exc).__name__})") from None
@@ -382,9 +525,10 @@ class IdentityDesk:
             if len(self.signins) >= MAX_LIVE_SIGNINS:
                 raise IdentityError("the arena is busy signing people in; try again in a minute")
             self.signins[sid] = {"account_id": account, "page_key": live["page_key"], "expires": now + SIGNIN_TTL_S}
+            self._save_sessions()
         self.log("signin", account=account, network=self.s.identity_network)
-        return dict(self.public(), signin=sid, account_id=account, trenchies=self.owned(account, strict=False),
-                    offer=self.offer())
+        return dict(self.public(), signin=sid, account_id=account, trenchies=self.owned(account, strict=False, rpc=self.signin_rpc),
+                    offer=self.offer(rpc=self.signin_rpc))
 
     def opened(self, op: str, env: dict) -> tuple[str, dict]:
         """A signed step: {signin, at, payload (a JSON string), sig}, signed by the page key the wallet named. Answers
@@ -407,6 +551,7 @@ class IdentityDesk:
             if (sid, raw_sig) in self.used:
                 raise IdentityError("this step was already used; send a new one")
             self.used[(sid, raw_sig)] = now + 2 * ENVELOPE_SKEW_MS / 1000
+            self._save_sessions()
         try:
             args = json.loads(payload or "{}")
         except ValueError:
@@ -416,19 +561,19 @@ class IdentityDesk:
         return rec["account_id"], args
 
     # ---- reads
-    def owned(self, account: str, strict: bool = True) -> list:
+    def owned(self, account: str, strict: bool = True, *, rpc=None) -> list:
         """The account's trenchies on the identity NFT. strict: an RPC failure refuses (claims fail closed)."""
         try:
-            toks = self.id_rpc.view(self.nft, "nft_tokens_for_owner", {"account_id": account, "limit": 20}) or []
+            toks = (rpc or self.id_rpc).view(self.nft, "nft_tokens_for_owner", {"account_id": account, "limit": 20}) or []
         except (rpclib.RpcError, rpclib.RpcUnreachable) as exc:
             if strict:
-                raise IdentityError(f"could not read {account}'s trenchies; try again ({type(exc).__name__})") from None
+                raise IdentityError(f"could not read {account}'s Trenchies; try again ({type(exc).__name__})") from None
             return []
         return [{"token_id": t["token_id"], "title": (t.get("metadata") or {}).get("title")} for t in toks]
 
-    def state(self) -> dict:
+    def state(self, *, rpc=None) -> dict:
         try:
-            return self.id_rpc.view(self.nft, "contract_state")
+            return (rpc or self.id_rpc).view(self.nft, "contract_state")
         except (rpclib.RpcError, rpclib.RpcUnreachable) as exc:
             raise IdentityError(f"could not read the identity contract; try again ({type(exc).__name__})") from None
 
@@ -438,8 +583,8 @@ class IdentityDesk:
         except (rpclib.RpcError, rpclib.RpcUnreachable) as exc:
             raise IdentityError(f"could not read the identity contract; try again ({type(exc).__name__})") from None
 
-    def offer(self) -> dict:
-        st = self.state()
+    def offer(self, *, rpc=None) -> dict:
+        st = self.state(rpc=rpc)
         held = int(((st.get("premint") or {}).get("held")) or 0)
         if held > 0:
             return {"kind": "claim", "held": held, "cost_yocto": "0"}
@@ -458,11 +603,11 @@ class IdentityDesk:
         reserved under the lock before anything is sent, so two claims at once give one token."""
         with self.lock:
             if account in self.claimed or account in self.reserving:
-                raise IdentityError("this account already has a trenchie; the free claim is one per account")
+                raise IdentityError("this account already has a Trenchie; the free claim is one per account")
             self.reserving.add(account)
         try:
             if self.owned(account, strict=True):
-                raise IdentityError("this account already has a trenchie; the free claim is one per account")
+                raise IdentityError("this account already has a Trenchie; the free claim is one per account")
             st = self.state()
             preset = contract_preset(str(args.get("preset", "")), st["presets"], self.names)
             held = self.view("nft_tokens_for_owner", {"account_id": st["custodian"], "limit": 100}) or []
@@ -476,7 +621,7 @@ class IdentityDesk:
             if out.get("landed") is None:   # outcome unknown: the account's claim stays recorded (fail closed for it)
                 self._record_claim(account, token, out.get("tx"))
                 self.log("claim_unknown", account=account, token=token, tx=out.get("tx"), failure=out.get("failure"))
-                raise IdentityError("the claim's outcome is not known yet; sign in again in a minute to see your trenchie")
+                raise IdentityError("the claim's outcome is not known yet; sign in again in a minute to see your Trenchie")
             if not out.get("ok"):
                 self.log("claim_failed", account=account, token=token, tx=out.get("tx"), failure=out.get("failure"))
                 raise IdentityError(f"the claim was refused: {clean(out.get('failure') or 'no answer')}")
@@ -505,7 +650,7 @@ class IdentityDesk:
         try:
             name, digest = self.check_persona(args.get("sheet"))
         except ValueError as exc:
-            raise IdentityError(f"that trenchie can't be minted: {clean(exc)}") from None
+            raise IdentityError(f"that Trenchie can't be minted: {clean(exc)}") from None
         st = self.state()
         preset = contract_preset(str(args.get("preset", "")), st["presets"], self.names)
         now_ms = int(self.clock() * 1000)
@@ -547,7 +692,9 @@ class IdentityDesk:
         if TX_HASH.fullmatch(tx):
             rec["mint_tx"] = tx
         with self.lock:
-            self.confirmed[(account, token)] = dict(rec, at=self.clock())
+            now = self.clock()
+            self.confirmed[(account, token)] = dict(rec, at=now, expires=now + SIGNIN_TTL_S)
+            self._save_sessions()
         self.log("confirmed", account=account, token=token, network=self.s.identity_network,
                  shadow=shadow.get("shadow"), shadow_tx=shadow.get("shadow_tx"), mint_tx=rec.get("mint_tx"))
         return rec
@@ -575,13 +722,13 @@ class IdentityDesk:
         with self.lock:
             self.shadows = [t for t in self.shadows if t > now - 3600]
             if len(self.shadows) >= SHADOW_PER_HOUR:
-                raise IdentityError("the arena has filed all the new trenchies it can this hour; try again later")
+                raise IdentityError("the arena has filed all the new Trenchies it can this hour; try again later")
             self.shadows.append(now)
         st = inv_state
         left = int(st.get("mint_cap", 0)) - int(st.get("minted_by_minter", 0))
         if left <= 0:
             self.alarm = "RED: the testnet inventory's mint cap is used up; no new trenchie can be filed"
-            raise IdentityError("the arena can't file new trenchies right now (its inventory is full); the operators "
+            raise IdentityError("the arena can't file new Trenchies right now (its inventory is full); the operators "
                                 "have been told")
         if left < SHADOW_LOW_CAP:
             self.alarm = f"AMBER: {left} inventory records left"
@@ -643,7 +790,10 @@ class IdentityDesk:
         owner = self.owner(token)
         if owner != account:
             raise IdentityError(f"{token} is owned by {owner or 'nobody'} now, not by {account}")
-        return self.confirmed[(account, token)]
+        rec = self.confirmed[(account, token)]
+        if rec.get("expires", 0) <= self.clock():
+            raise IdentityError(f"confirm {token} first (the confirmation expired)")
+        return rec
 
     def route(self, op: str, args: dict, address: str = "") -> dict:
         """One public step. Blocking (RPC): the host runs it off its event loop."""
@@ -682,7 +832,11 @@ def build(settings: HostedSettings, keys: dict, recipient: str, names: tuple, **
     RPC waits are short (15 s, 2 rounds): a page is waiting, and the host runs these off its loop."""
     from . import sender as senders
     id_rpc = rpclib.Rpc(settings.identity_send_urls, read_urls=settings.identity_send_urls, timeout=15, rounds=2)
+    # Sign-ins have no fallback or retry amplification: each allowance unit is one wire request. The
+    # authenticated owner/claim/permit paths retain their independent read client and fresh checks.
+    signin_rpc = rpclib.Rpc(settings.identity_send_urls[:1], timeout=5, rounds=1, attempts=1)
     id_sender = senders.RpcSender(id_rpc, {"identity_minter": keys["identity_minter"]})
     inv_rpc = rpclib.Rpc(settings.chain.rpc_urls, read_urls=settings.chain.rpc_urls, timeout=15, rounds=2)
     inv_sender = senders.RpcSender(inv_rpc, {"inventory_minter": keys["inventory_minter"]})
-    return IdentityDesk(settings, id_rpc, id_sender, inv_sender, keys["permit"], recipient, names=names, **kw)
+    return IdentityDesk(settings, id_rpc, id_sender, inv_sender, keys["permit"], recipient, names=names,
+                        signin_rpc=signin_rpc, **kw)

@@ -38,10 +38,10 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
   const ws = 'ws://' + new URL(arenaUrl).host;
   const b = await chromium.launch({ args: ['--single-process', '--no-zygote'] });
   let current = null, arenaStopped = false; const failed = [], overflow = [];
-  // the wallet list is our own (web/snapin/wallets-manifest.json, same origin); pressing a wallet door asks only for that
-  // wallet's pinned code (its executor), which is outside this machine and so cut here; near-connect's default list is never asked for
-  const WALLET_CODE = JSON.parse(fs.readFileSync(path.join(NEAR, 'web', 'snapin', 'wallets-manifest.json'), 'utf8')).wallets.map((w) => w.executor);
-  const isWalletCode = (u) => WALLET_CODE.includes(u.split('?')[0]);
+  // With no internet, NEAR Connect's own runtime manifest cannot load. These are the SDK's two default endpoints;
+  // the focused wallet_manifest_case supplies a complete manifest and walks the real stock chooser instead.
+  const WALLET_MANIFESTS = ['https://raw.githubusercontent.com/hot-dao/near-selector/refs/heads/main/repository/manifest.json', 'https://cdn.jsdelivr.net/gh/azbang/hot-connector/repository/manifest.json'];
+  const isWalletCode = (u) => WALLET_MANIFESTS.includes(u.split('?')[0]);
   // one browser context (single-process Chromium does not survive a second); the two visitors use two origins,
   // 127.0.0.1 and localhost, so their storage, keys and tab locks are separate as two people's would be
   const ctx = await b.newContext();
@@ -100,10 +100,10 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
     await shot('wallet');
     // ---- wallet: one that cannot connect here (no wallet app or network in this browser), then the DEV throwaway account
     const cutBefore = cut.length, w0 = Date.now();
-    await click('g:wallet:meteor');
-    await p.waitForFunction(() => /Wallet not connected/.test((document.querySelector('#feedback') || {}).textContent || ''), null, { timeout: 45000 }).catch(() => {});
+    await click('g:wallet:choose');
+    await p.waitForFunction(() => /Wallet list didn’t load/.test((document.querySelector('#feedback') || {}).textContent || ''), null, { timeout: 45000 }).catch(() => {});
     const wmsg = await p.$eval('#feedback', (e) => e.textContent).catch(() => '');
-    ok(/Wallet not connected: .+\. Keep watching, or try another wallet\./.test(wmsg) && (await step()) === 'wallet', `${tag}: a wallet that cannot connect says so plainly and leaves every door open, in ${((Date.now() - w0) / 1000).toFixed(1)} s with ${cut.length - cutBefore} outside requests cut and ${popups.length} wallet windows closed so far: "${wmsg.slice(0, 140)}"`);
+    ok(wmsg === 'Wallet list didn’t load; try again.' && (await step()) === 'wallet', `${tag}: a wallet that cannot connect says so plainly and leaves every door open, in ${((Date.now() - w0) / 1000).toFixed(1)} s with ${cut.length - cutBefore} outside requests cut and ${popups.length} wallet windows closed so far: "${wmsg.slice(0, 140)}"`);
     await shot('wallet-error');
     if (opts.keyboard) {
       const k = await tabTo('g:wallet:dev-throwaway');
@@ -286,7 +286,7 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
       await p.click('[data-act="join"]');
       await p.waitForFunction(() => SnapRoom.status().phase === 'error', null, { timeout: 30000 }).catch(() => {});
       const s = await p.evaluate(() => SnapRoom.status()), main = await p.innerText('main');
-      ok(s.phase === 'error' && /Cannot reach the DEV arena/.test(s.message) && /Try again/.test(main) && /Keep watching/.test(main), `A@1440: with the arena stopped: "${s.message}", with Try again and Keep watching`);
+      ok(s.phase === 'error' && /Cannot reach the arena/.test(s.message) && /Try again/.test(main) && /Keep watching/.test(main), `A@1440: with the arena stopped: "${s.message}", with Try again and Keep watching`);
       await p.screenshot({ path: path.join(OUT, '98-arena-gone-1440.png'), fullPage: true });
     }
     const wideBad = overflow.filter((x) => !x[2]);
@@ -294,7 +294,7 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
     const all = [...A.errs, ...B.errs];
     const offline = failed.filter(isWalletCode), other = failed.filter((u) => !isWalletCode(u));
     let unresolved = all.filter((e) => /net::ERR_NAME_NOT_RESOLVED/.test(e)).length;
-    ok(other.length === 0 && unresolved === offline.length && cut.every(isWalletCode) && !cut.some((u) => /manifest\.json/.test(u)), `failed requests: ${offline.length} fetches of a wallet's pinned code with no internet in this browser, no wallet list asked of another host (${cut.length} cut; ${popups.length} wallet windows closed${popups.length ? ': ' + [...new Set(popups)].join(', ') : ''}) (${[...new Set(offline.map((u) => u.split('?')[0]))].join(', ')}), ${other.length} others` + (other.length ? ': ' + other.join(', ') : ''));
+    ok(other.length === 0 && unresolved === offline.length && cut.every(isWalletCode), `failed requests: ${offline.length} stock manifest requests with no internet in this browser (${cut.length} cut; ${popups.length} wallet windows closed${popups.length ? ': ' + [...new Set(popups)].join(', ') : ''}) (${[...new Set(offline.map((u) => u.split('?')[0]))].join(', ')}), ${other.length} others` + (other.length ? ': ' + other.join(', ') : ''));
     const own = all.filter((e) => !(/net::ERR_NAME_NOT_RESOLVED/.test(e) && other.length === 0)).filter((e) => !(/^http 400 \/dev\/identity$/.test(e) || /status of 400/.test(e))).filter((e) => !(arena && (/status of 502/.test(e) && /index\.html\?step=ring/.test(e) || /^http 502 \/(room|dev)\//.test(e)))).filter((e) => !/GL Driver Message \(OpenGL, Performance, GL_CLOSE_PATH_NV, High\): GPU stall due to ReadPixels/.test(e) && !/cloud-api\.near\.ai.*401|status of 401/.test(e));
     fs.writeFileSync(path.join(OUT, 'console.json'), JSON.stringify(all, null, 1));
     ok(own.length === 0, 'console clean in both visitors (set aside: headless GL driver notes, the test-supplied 401, the wallet-manifest fetches counted above, the 502s of the stopped-arena check)' + (own.length ? ': ' + own.slice(0, 5).join(' | ') : ''));

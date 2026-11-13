@@ -47,6 +47,8 @@ const TMP = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'board1-
     const lines = async () => (await cur.evaluate(() => document.querySelector('#app').innerText)).replace(/\u00a0/g, ' ').split('\n').map((l) => l.trim()).filter(Boolean);
     const S = {};   // this run's values for the SPEC's sample ones
     const swap = (l) => {
+      // Pat's verdict (2026-11-13 08:55): "Trenchie" is capitalised in all user-facing text; SPEC.md still writes "trenchie"
+      l = l.replace(/(?<![\w.\-/])trenchie(s?)(?![\w\-/]|\.\w)/g, 'Trenchie$1');   // not inside a key or a URL (trenchie.snapin, near-trenchie)
       if (S.wallet) l = l.split('tidepool42.testnet').join(S.wallet);
       if (S.name) l = l.split('Barnacle Bertie of the Low Tide').join(S.name);
       l = l.replace('Lantern Lou is in the ring', 'Barnacle Bertie is in the ring');

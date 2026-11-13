@@ -102,7 +102,7 @@ const watch = (b) => b.on((s) => seen.push(JSON.stringify(s)));
     const n = f.calls.length;
     clock.t += 30000; await b.step();
     assert.equal(f.calls.length, n, 'no call at the cap'); assert.equal(b.status().state, 'capped');
-    assert.match(b.status().chip, /Hourly cap reached \(\$0\.012 of \$0\.01\): your AI is paused and your trenchie is on the arena’s own tactics/);
+    assert.match(b.status().chip, /Hourly cap reached \(\$0\.012 of \$0\.01\): your AI is paused and your Trenchie is on the arena’s own tactics/);
     clock.t += 3600 * 1000; await b.step();                          // the hour rolls on: it drives again
     assert.equal(f.calls.length, n + 1); assert.notEqual(b.status().state, 'capped');
     console.log('ok 4 cap: slow at 80%, stop at 100% with a chip, back after the hour'); }
@@ -111,12 +111,12 @@ const watch = (b) => b.on((s) => seen.push(JSON.stringify(s)));
   { const clock = { t: 1e6 }, f = provider([{ status: 401 }]);
     const { b, r } = brain(store(NEAR, 0.5), f, clock); watch(b);
     await b.step(); assert.equal(b.status().state, 'failed');
-    assert.match(b.status().chip, /Your AI did not answer \(the key was refused\): your trenchie is on the arena’s own tactics until you fix it at the AI door\./);
+    assert.match(b.status().chip, /Your AI did not answer \(the key was refused\): your Trenchie is on the arena’s own tactics until you fix it at the AI door\./);
     clock.t += 5000; await b.step(); assert.equal(f.calls.length, 1, 'a refused key is not tried again');
     b.store.m.set(B.constants.KEY_STORE + 'NEAR AI Cloud', KEY + 'X'); b.fetch = provider([level(2), order({})]);
     clock.t += 5000; await b.step(); assert.equal(b.status().state, 'driving', 'a new key at the door is tried at once');
     const f2 = provider([{ status: 503 }, level(2), order({})]); const two = brain(store(NEAR, 0.5), f2, clock);
-    await two.b.step(); assert.match(two.b.status().chip, /it returned an error\): your trenchie is on the arena’s own tactics; trying again\./);
+    await two.b.step(); assert.match(two.b.status().chip, /it returned an error\): your Trenchie is on the arena’s own tactics; trying again\./);
     clock.t += 5000; await two.b.step(); assert.equal(two.b.status().state, 'driving');
     console.log('ok 5 failures: a chip for each; a refused key stops, an error retries'); }
 
@@ -124,7 +124,7 @@ const watch = (b) => b.on((s) => seen.push(JSON.stringify(s)));
   { const clock = { t: 1e6 };
     for (const [st, re] of [[store(NEAR, undefined), /Set an hourly cap/], [store(NEAR, ''), /Set an hourly cap/],
                             [(() => { const s = store(NEAR, 0.5); s.m.delete(B.constants.KEY_STORE + 'NEAR AI Cloud'); return s; })(), /No key in this browser/],
-                            [store({ door: 'Codex', route: 'plan', identity: 'Codex' }, 0.5), /agent drives this trenchie through SNAP\.md/]]) {
+                            [store({ door: 'Codex', route: 'plan', identity: 'Codex' }, 0.5), /agent drives this Trenchie through SNAP\.md/]]) {
       const f = provider([]); const { b } = brain(st, f, clock); await b.step();
       assert.equal(f.calls.length, 0); assert.match(b.status().chip, re); assert.match(b.status().chip, /arena’s own tactics/);
     }
@@ -162,7 +162,7 @@ const watch = (b) => b.on((s) => seen.push(JSON.stringify(s)));
     const broken = store(NEAR, 0.5); broken.set = () => { throw new Error('QuotaExceededError'); };
     const fb = provider([order({})]); const nb = brain(broken, fb, clock); await nb.b.step();
     assert.equal(fb.calls.length, 0); assert.equal(nb.b.status().state, 'no-storage');
-    assert.match(nb.b.status().chip, /cannot keep the hourly spend.*your AI is off and your trenchie is on the arena’s own tactics/);
+    assert.match(nb.b.status().chip, /cannot keep the hourly spend.*your AI is off and your Trenchie is on the arena’s own tactics/);
     const reads = store(NEAR, 0.5); reads.get = () => { throw new Error('SecurityError'); }; reads.json = () => { throw new Error('SecurityError'); };
     const fr = provider([order({})]); const nr = brain(reads, fr, clock);
     const w = await nr.b.step();                                      // a throwing read neither rejects nor calls
@@ -187,7 +187,7 @@ const watch = (b) => b.on((s) => seen.push(JSON.stringify(s)));
   // state at all. Nothing is sent in any of them.
   { const clock = { t: 1e6 };
     for (const [st, want, re] of [[store(undefined, 0.5), 'no-door', /No AI picked at the door/],
-                                  [store({ door: 'Codex', route: 'plan', identity: 'Codex' }, 0.5), 'agent-door', /agent drives this trenchie through SNAP\.md/],
+                                  [store({ door: 'Codex', route: 'plan', identity: 'Codex' }, 0.5), 'agent-door', /agent drives this Trenchie through SNAP\.md/],
                                   [store(NEAR, 0.5), 'off', /arena’s own tactics/]]) {
       const f = provider([]), r = room(), states = [];
       const b = B.create({ room: r, store: st, fetch: f, now: () => clock.t, setTimer: () => 1, clearTimer: () => {} }).start();

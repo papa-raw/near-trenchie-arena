@@ -4,8 +4,9 @@
 // Everything here is render-only and a pure function of (events seen, render time): scrubbing or replaying reproduces it.
 import * as THREE from 'three';
 import { arenaTessellation } from './tessellation.mjs';
-import { milliToWorld, angleToRotY, lerpAngle } from './frame.mjs';
+import { milliToWorld, angleToRotY, angleDelta, lerpAngle } from './frame.mjs';
 import { TICK_MS } from './buffer.mjs';
+import { FADE_MS } from './prejump.mjs';
 import { weaponRenderScale as scaleFor } from './weapon-scale.mjs';
 export { WEAPON_SCALE } from './weapon-scale.mjs';
 
@@ -32,7 +33,7 @@ export const FEEL = {
   anticipationMs: 150, anticipationShortMs: 100, strikeMs: 50, followMs: 220,
   hitstopLightMs: 50, hitstopHeavyMs: 100, hitstopKoMs: 200, crowdN: 4, crowdR: 3.0, crowdScale: 0.75, heavyHit: 18,
   squashMs: 160, shoveMs: 200, flashCap: 0.6,
-  koLaunchMs: 650, arriveMs: 400,
+  koLaunchMs: 650,
   // board 3, A Heavy toon (final/SPEC.md); distances in tiles
   anticipationShotMs: 120, hitVibTiles: 0.05, koVibTiles: 0.07, flashHit: 0.6, flashKo: 1.0, flashIntensity: 0.7,
   shoveLightTiles: 0.22, shoveHeavyTiles: 0.45, shoveBackFromMs: 420, shoveBackToMs: 900,
@@ -41,6 +42,8 @@ export const FEEL = {
   shoulderOutMs: 120, shoulderLeaveMs: 60, shoulderLeaveOverMs: 50,
   attackMs: { swing: 300, lunge: 360, shot: 320, lob: 380, beam: 700, zap: 320 },   // motion3's, in this file's attack age (the lob's starts 40 ms in)
   stepLenTiles: 1.0, bobLocal: 0.03, footSweepLocal: 0.07, footLiftLocal: 0.04,
+  walkMinSpeed: 0.001, walkMinStride: 0.35, // ignore sub-milli-tile/s noise; slow approaches still have visible steps
+  turnDegreesPerSecond: 720,       // a half-turn takes 250 ms; body heading cannot twitch across the ring in one frame
 };
 
 // The swing is an overhead slam (final/SPEC.md section 2a): the stick rises up and back, comes down in the vertical plane
@@ -77,6 +80,8 @@ class Actor {
     this.baseScaleY = J.base.scale.y;
     this.def = { hand: J.handR.position.clone(), handL: J.handL.position.clone(), footL: J.footL.position.clone(), footR: J.footR.position.clone(), pivot: J.pivot.position.clone() };
     this.phi = 0; this.px = null; this.pz = null; this.speed = 0;
+    this.walkPose = [0, 0, 0, 0, 0]; // bob, sweep, left/right lift, lean; retained through hitstop
+    this.heading = null; this.poseTick = null; this.poseState = null;
     this.anims = [];                 // {kind, tick, ...} fired from events; evaluated against the render tick
     this.hpMax = 100; this.lastAlive = null;
     this.koAt = null; this.koTick = null; this.arriveAt = null;
@@ -174,8 +179,28 @@ export class Actors {
     else { const r = a.h.object3d.rotation.y; a.koDir = { x: -Math.sin(r), z: -Math.cos(r) }; }   // no KO-er: knocked backwards
     const s = ev.source && this.map.get(ev.source); if (s && s !== a) s.holds.push({ from: at, until: at + FEEL.hitstopKoMs, vib: 0, flash: 0 });
   }
-  // a new life drops in; delayMs holds the drop (the pre-jump card stamps first, prejump.mjs) with the body out of sight
-  onRespawn(ev, tick, nowMs, delayMs = 0) { const a = this.map.get(ev.fighter); if (a) { a.arriveAt = nowMs + delayMs; a.koAt = null; } }
+  // Keep the old standing pose through a plain fade, then use the new life's ring position.
+  onRespawn(ev, tick, nowMs) {
+    const a = this.map.get(ev.fighter); if (!a) return;
+    if (a.departure) this.fade(a, 1);
+    a.arriveAt = nowMs; a.koAt = null;
+    a.departure = { position: a.h.object3d.position.clone(), rotation: a.h.object3d.rotation.clone(), scale: a.h.object3d.scale.clone(),
+      basePosition: a.J.base.position.clone(), baseScale: a.J.base.scale.clone(), materials: new Map() };
+    a.departure.baseScale.y /= a.baseScaleY;
+  }
+
+  // Actor/body and worn-item materials are owned per fighter. Restore their original alpha/depth state after fading.
+  fade(a, amount) {
+    const saved = a.departure.materials;
+    a.h.object3d.traverse((node) => {
+      for (const material of [].concat(node.material || [])) {
+        if (!saved.has(material)) saved.set(material, { opacity: material.opacity, transparent: material.transparent, depthWrite: material.depthWrite });
+        const before = saved.get(material), transparent = amount < 1 || before.transparent;
+        material.opacity = before.opacity * amount; material.depthWrite = amount < 1 ? false : before.depthWrite;
+        if (material.transparent !== transparent) { material.transparent = transparent; material.needsUpdate = true; }
+      }
+    });
+  }
 
   // ---- one frame -------------------------------------------------------------------------------------------------------
   // fighters: [{id, x, y (milli), dir (deg), status, hp, shield, items, itemRows}] interpolated for this frame
@@ -201,7 +226,7 @@ export class Actors {
       }
       const w = milliToWorld(x, y);
       o.position.set(w.x, 0, w.z);
-      o.visible = f.status !== 2 && !(f.status === 0 && a.arriveAt !== null && nowMs < a.arriveAt);   // a held drop: not in sight yet
+      o.visible = f.status !== 2;
       out.set(f.id, { x: w.x, z: w.z, state, f });
       this.pose(a, f, state, w, dir, renderTick, nowMs, dtMs, casting.has(f.id));
       a.J.base.scale.y *= a.baseScaleY;
@@ -219,7 +244,6 @@ export class Actors {
     J.base.scale.set(1, 1, 1); J.base.position.set(0, 0, 0); J.pivot.position.copy(a.def.pivot); J.pivot.rotation.set(0, 0, 0);
     J.handR.position.copy(a.def.hand); J.handL.position.copy(a.def.handL); J.footL.position.copy(a.def.footL); J.footR.position.copy(a.def.footR);
     o.scale.setScalar(BODY_SCALE);
-    o.rotation.y = angleToRotY(dir);
     // bodies waiting on the shore cast no shadow: the ring holds 4 to 6, so most of the 14 are idle (budget lever)
     const casts = state !== 'bench';
     if (a.casts !== casts) { a.casts = casts; o.traverse((m) => { if (m.isMesh && m.name !== 'shadow') m.castShadow = casts; }); }
@@ -233,6 +257,14 @@ export class Actors {
     }
     if (vib) { const s = Math.sin(rtMs * 1.7 + a.id.length); o.position.x += s * vib; o.position.z += Math.cos(rtMs * 1.3) * vib * 0.5; }
     this.setFlash(a, flash);
+    const jump = a.px !== null && Math.hypot(w.x - a.px, w.z - a.pz) >= 1.5;
+    if (a.heading === null || state !== 'alive' || a.poseState !== state || rt < a.poseTick || jump) a.heading = dir;
+    else if (!frozen) {
+      const turn = angleDelta(a.heading, dir), limit = FEEL.turnDegreesPerSecond * Math.max(0, rt - a.poseTick) * TICK_MS / 1000;
+      a.heading += Math.max(-limit, Math.min(limit, turn));
+    }
+    a.poseTick = rt; a.poseState = state;
+    o.rotation.y = angleToRotY(a.heading);
     // a hold freezes the walk and every attack's age (the slam's head stays on the crown); the shove waits out the hold
     const heldSince = (ms) => a.holds.reduce((n, h) => n + Math.max(0, Math.min(h.until, rtMs) - Math.max(h.from, ms)), 0);
 
@@ -243,15 +275,19 @@ export class Actors {
       a.speed = dt > 0 ? (moved / dt) * 1000 : a.speed; // tiles per second
     }
     a.px = w.x; a.pz = w.z;
-    const moving = state === 'alive' && !frozen && a.speed > 0.4, sw = Math.min(1, a.speed / 3);
+    const moving = state === 'alive' && !frozen && a.speed > FEEL.walkMinSpeed;
+    const sw = Math.min(1, Math.max(FEEL.walkMinStride, a.speed / 3));
     const ph = a.phi * Math.PI;
-    if (moving) {
-      J.base.position.y = Math.abs(Math.sin(ph)) * FEEL.bobLocal * sw;
-      const s = Math.sin(ph) * FEEL.footSweepLocal * sw;
-      J.footL.position.z += s; J.footR.position.z -= s;
-      J.footL.position.y += Math.max(0, Math.cos(ph)) * FEEL.footLiftLocal * sw; J.footR.position.y += Math.max(0, -Math.cos(ph)) * FEEL.footLiftLocal * sw;
-      J.handL.position.z -= s * 0.8; J.pivot.rotation.x += 0.08 * sw;
-    } else if (state === 'alive' && !frozen) {
+    if (!frozen || state !== 'alive') {
+      a.walkPose = moving ? [Math.abs(Math.sin(ph)) * FEEL.bobLocal * sw, Math.sin(ph) * FEEL.footSweepLocal * sw,
+        Math.max(0, Math.cos(ph)) * FEEL.footLiftLocal * sw, Math.max(0, -Math.cos(ph)) * FEEL.footLiftLocal * sw, 0.08 * sw] : [0, 0, 0, 0, 0];
+    }
+    const [bob, sweep, leftLift, rightLift, walkLean] = a.walkPose;
+    J.base.position.y += bob;
+    J.footL.position.z += sweep; J.footR.position.z -= sweep;
+    J.footL.position.y += leftLift; J.footR.position.y += rightLift;
+    J.handL.position.z -= sweep * 0.8; J.pivot.rotation.x += walkLean;
+    if (!moving && state === 'alive' && !frozen) {
       const b = Math.sin(now / 420 + a.row.trenchieId.length), k = 0.015;
       J.base.scale.set(1 + k * b, 1 - k * 1.3 * b, 1 + k * b);
     }
@@ -328,13 +364,6 @@ export class Actors {
     } else if (state === 'bench') {
       o.scale.setScalar(BODY_SCALE * 0.9); // waiting on the shore: idle, facing the ring
     }
-    if (state === 'alive' && a.arriveAt !== null) { // respawn: a short drop with a landing
-      const t = now - a.arriveAt;
-      if (t > FEEL.arriveMs) a.arriveAt = null;
-      else if (t < 0) J.base.position.y = 1.4;   // held above the drop point until the drop starts
-      else if (t < 200) { J.base.position.y = (1 - eIn(t / 200)) * 1.4; J.base.scale.y = 1.1; J.base.scale.x = J.base.scale.z = 0.94; }
-      else { const k = (t - 200) / 200, sq = Math.sin(Math.PI * k) * (1 - k) * 0.22; J.base.scale.set(1 + sq, 1 - sq * 1.2, 1 + sq); }
-    }
     if (face !== a.face) { a.h.setFace(face); a.face = face; }
 
     // spawn / signature shield: a pale bubble
@@ -344,6 +373,14 @@ export class Actors {
     } else if (a.shieldMesh) a.shieldMesh.visible = false;
     if (slam && state === 'alive') this.slamPose(a, slam.m.crown, slam.age, casting);
     else { a.slam = null; this.shoulder(a, state === 'ko' ? 1 : attackShoulder, casting, { aim, upright, ko: state === 'ko' }); }
+    if (a.departure) {
+      const t = now - a.arriveAt;
+      if (state === 'alive' && t <= FADE_MS) {
+        o.position.copy(a.departure.position); o.rotation.copy(a.departure.rotation); o.scale.copy(a.departure.scale);
+        J.base.position.copy(a.departure.basePosition); J.base.scale.copy(a.departure.baseScale);
+        this.fade(a, 1 - clamp01(t / FADE_MS));
+      } else { this.fade(a, 1); a.departure = null; a.arriveAt = null; }
+    }
   }
 
   // The slam (SPEC section 2a), age 0..300 ms with the hit at 150 (held there through hitstop): the hand rises overhead and out

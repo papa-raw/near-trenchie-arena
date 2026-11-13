@@ -13,7 +13,7 @@ What it adds to snap_local's DEV arena (snap_local itself is used as it is, as n
   * the chain writer (near/chain/writer.py): seeds committed on the testnet arena before any segment opens, the
     hourly batches of results and gear filed on the testnet inventory under each token id, the stake resolver;
   * every binding names the identity NFT, so every life of a player waits for an owner read on that NFT (the writer's
-    owner_ok) and a sale moves the trenchie; the house's bindings name no NFT and are admitted without one
+    owner_ok) and a sale moves the trenchie; the host's house account and fixed roster are admitted without one
     (TRENCHIE_HOUSE_ON_IDENTITY=on makes the house wait for its own identity tokens too, as the rehearsals did);
   * POST /dev/identity with "op" runs the identity desk (challenge, signin, claim, permit, confirm); without "op" it
     registers a fighter only for a signed-in account and a token it owns, re-read at that moment;
@@ -41,8 +41,6 @@ from near.chain import dev_live, identity, rpc as rpclib, sender as senders  # n
 from near.chain.writer import ChainWriter, G0_OPTIONS  # noqa: E402
 import presets as battle_options  # noqa: E402  (near/arena)
 
-HOUSE_NFT = "house.local"   # the house's bindings name this id: no identity read (writer.owner_ok admits other ids)
-
 
 def chain_parts(env_path, keys_path, data_dir, *, g0="C", overrides=None, log=None):
     """The writer and the desk from the two files. Raises ConfigError on anything missing or unsafe."""
@@ -59,7 +57,7 @@ def chain_parts(env_path, keys_path, data_dir, *, g0="C", overrides=None, log=No
 
 
 def install(settings, writer, desk, *, house_on_identity=False):
-    """Patch snap_local for chain mode: contexts, the player predicate, the house's bindings and the DevRoom class."""
+    """Install chain contexts, player ownership checks, house admission and the hosted room class."""
     cfg = settings.chain
     dev_live.attach(writer)
     make = snap_local.make_contexts
@@ -76,13 +74,16 @@ def install(settings, writer, desk, *, house_on_identity=False):
     snap_local.player_token = lambda name: dev_player(name) or name in player_set
 
     if not house_on_identity:
-        house_binding = snap_local.DevHouse.binding
+        chain_owner_ok = writer.owner_ok
 
-        def binding(self, name):
-            b = house_binding(self, name)
-            b["context"]["contract_ids"] = dict(b["context"]["contract_ids"], nft=HOUSE_NFT)
-            return b
-        snap_local.DevHouse.binding = binding
+        def owner_ok(binding: dict) -> bool:
+            # Both house runtimes use the arena's context: reserve_life requires an exact match.
+            # Only the host's account AND fixed house roster bypass identity ownership; players still read mainnet.
+            if (binding.get("account_id") == snap_local.HOUSE_ACCOUNT
+                    and binding.get("nft_token_id") in snap_local.RULES["house"]):
+                return True
+            return chain_owner_ok(binding)
+        writer.owner_ok = owner_ok
 
     base = snap_local.DevRoom
     note = (f"CHAIN MODE: trenchies on {cfg.identity_nft} ({settings.identity_network}); results and gear filed on "
@@ -107,12 +108,12 @@ def install(settings, writer, desk, *, house_on_identity=False):
             persona checker and the name guard with the block list loaded (never unchecked), and the name is no house
             trenchie's. Answers (the checked name, the digest computed here)."""
             if not isinstance(sheet, dict):
-                raise ValueError("send the trenchie's sheet; the host checks it and computes its digest")
+                raise ValueError("send the Trenchie's sheet; the host checks it and computes its digest")
             persona = snap_local.check_sheet(sheet)
             if not persona.get("nameChecked"):
                 raise ValueError("the host's name list is missing, so it signs no mint (guard list missing)")
             if persona["name"].strip().lower() in {n.lower() for n in self.guard_names}:
-                raise ValueError("that name belongs to a house trenchie; choose an original one")
+                raise ValueError("that name belongs to a house Trenchie; choose an original one")
             return persona["name"], snap_local.sheet_digest(sheet)
 
         async def off_loop(self, fn, *a, address=None):
@@ -170,9 +171,9 @@ def install(settings, writer, desk, *, house_on_identity=False):
             """Thread: the confirmed token with a fresh owner read, and the sheet bound to the token's persona."""
             mine = self.desk.registered(account, token)
             if not isinstance(sheet, dict):
-                raise identity.IdentityError("send the trenchie's sheet with its token")
+                raise identity.IdentityError("send the Trenchie's sheet with its token")
             if snap_local.sheet_digest(sheet) != mine["persona_digest"]:
-                raise identity.IdentityError(f"that sheet is not {token}'s persona; play the persona the trenchie was "
+                raise identity.IdentityError(f"that sheet is not {token}'s persona; play the persona the Trenchie was "
                                              "minted with")
             return mine
 
@@ -190,7 +191,7 @@ def install(settings, writer, desk, *, house_on_identity=False):
             else:
                 ticket = args.get("ticket")
                 if not isinstance(ticket, dict):
-                    raise identity.IdentityError("sign in with your wallet first: a chain arena seats only owned trenchies")
+                    raise identity.IdentityError("sign in with your wallet first: a chain arena seats only owned Trenchies")
                 self.desk.limit(ip, "register")
                 if str(args.get("nft_token_id", "")) in self.round.arena.members:   # before the ticket is spent: a retry
                     raise identity.IdentityError(f"{args.get('nft_token_id')} is seated right now; `stop` that session first")

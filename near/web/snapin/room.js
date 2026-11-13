@@ -75,7 +75,7 @@
     bad_receipt: 'The arena’s answer did not check out, so it was not used. Try again.',
     not_found: 'The arena does not know this fighter any more. Snap in again; your choices are kept.',
     challenge_expired: 'The arena’s handshake timed out on a busy machine. Trying again…',
-    unreachable: 'Cannot reach the DEV arena right now. Try again in a moment.'
+    unreachable: 'Cannot reach the arena right now. Try again in a moment.'
   };
   // a code from the host is shown only as a known word or a plain identifier; anything else (it is unsigned) is "unknown error"
   function Refusal(code, detail) {
@@ -326,7 +326,7 @@
     })().finally(function () { loop = null; });
   }
   var stopped = false;
-  async function end(err) { stopped = true; S = null; await persist(); set('ended', '', err ? err.message : 'Your trenchie swam home.', err || null); }
+  async function end(err) { stopped = true; S = null; await persist(); set('ended', '', err ? err.message : 'Your Trenchie swam home.', err || null); }
 
   // one tab drives the fighter: the lock is held while this page runs the keeper
   var holding = false;
@@ -334,7 +334,7 @@
     if (!root.navigator.locks || holding) return fn();   // this worker already holds it: never "another tab" for its own lock
     return new Promise(function (res, rej) {
       root.navigator.locks.request('trenchie-keeper', { ifAvailable: true }, async function (lock) {
-        if (!lock) { set('elsewhere', '', 'Your trenchie is being driven from another tab. Close that tab to drive it here.'); res(false); return; }
+        if (!lock) { set('elsewhere', '', 'Your Trenchie is being driven from another tab. Close that tab to drive it here.'); res(false); return; }
         holding = true;
         try { await fn(); res(true); } catch (e) { holding = false; rej(e); return; }
         await new Promise(function (hold) { var t = setInterval(function () { if (!S || stopped) { clearInterval(t); hold(); } }, 1000); });
@@ -367,7 +367,7 @@
       S = saved; stopped = false;
       if (!(await loadKey())) { await end(Object.assign(new Error('This browser forgot the fighter’s key (private window or cleared site data). Snap in again; your choices are kept.'), { code: 'no-key' })); return api.status(); }
       await withLock(async function () {
-        set('joining', 'control', 'Reconnecting to your trenchie…');
+        set('joining', 'control', 'Reconnecting to your Trenchie…');
         try { await call('GET', '/dev/clock'); await authenticate(); set('in', 'ring', ''); runLoop(); }
         catch (e) {
           if (e.code === 'unreachable') { set('offline', '', e.message, e); return; }   // keep the fighter: the arena may come back within its lease
@@ -450,16 +450,16 @@
         for (var sw = 0; sw < 30 && swimmer; sw++) {
           var ob = null; try { ob = await call('GET', '/room/observe'); } catch (e) { break; }
           if (!(ob && ob.fighters || []).some(function (f) { return f.fighter_id === swimmer; })) break;
-          set('joining', 'identity', 'Your last trenchie is still swimming home…'); await sleep(1000);
+          set('joining', 'identity', 'Your last Trenchie is still swimming home…'); await sleep(1000);
         }
-        set('joining', 'identity', o.chain ? 'Registering ' + o.chain.nft_token_id + ' with the arena (owner read on ' + o.chain.network + ')…' : 'Registering your trenchie with the DEV arena…');
+        set('joining', 'identity', o.chain ? 'Registering ' + o.chain.nft_token_id + ' with the arena (owner read on ' + o.chain.network + ')…' : 'Registering your Trenchie with the DEV arena…');
         await call('GET', '/dev/clock');
         var body = { name: o.name, preset: o.preset, public_key: k.publicRaw }; if (o.sheet) body.sheet = o.sheet; if (o.look) body.look = o.look;
         if (o.chain) { body.ticket = o.chain.ticket; body.nft_token_id = o.chain.nft_token_id; }   // chain mode: a one-use ticket signed by the page that signed in
         var ident = await call('POST', '/dev/identity', enc.encode(JSON.stringify(body)));
         // this browser's own fighter, still swimming home from a leave a moment ago: wait for it rather than call it a clash
         for (var w = 0; w < 15 && ident && /seated right now/.test(ident.error || '') && lastLeft && lastLeft.name === String(o.name).toLowerCase() && Date.now() - lastLeft.at < 45000; w++) {
-          set('joining', 'identity', 'Your trenchie is still swimming home from the last round…'); await sleep(2000);
+          set('joining', 'identity', 'Your Trenchie is still swimming home from the last round…'); await sleep(2000);
           ident = await call('POST', '/dev/identity', enc.encode(JSON.stringify(body)));
         }
         // the last round's result is still unread (a seat that lapsed with no page open): the DEV host holds new joins until
@@ -496,7 +496,7 @@
           return send('POST', '/room/join', canonicalBytes(jreq));
         }, { room: now, real: function () { return root.performance.now(); }, sleep: sleep,
              refresh: function () { return call('GET', '/dev/clock').catch(function () { return null; }); },
-             waiting: function (secs) { set('joining', 'join', 'Waiting for the chain to read your trenchie’s owner… asking again in ' + secs + ' s'); } });
+             waiting: function (secs) { set('joining', 'join', 'Waiting for the chain to read your Trenchie’s owner… asking again in ' + secs + ' s'); } });
         if (grant && grant.status === 'spectating') throw Object.assign(new Error('The ring is full: you are queued as a spectator. Keep watching; try again when a seat frees up.'), { code: 'queued' });
         grant = await verified(grant, ident.context, ident);
         var jd = await digest(jreq, ['proof']);

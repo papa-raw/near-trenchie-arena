@@ -155,7 +155,7 @@ class LiveSession:
         if self.plan_stopped and kind in ('behaviour', 'speech', 'bench'):
             self.emit(dict(kind='refusal', code='plan_stop', sent=False,
                            fix=f'The weekly limit set at the door ({self.plan_stop_pct}% of the plan) is reached: no more '
-                               'orders this week. Your trenchie fights on its last plan; leave and state still work.'))
+                               'orders this week. Your Trenchie fights on its last plan; leave and state still work.'))
             return
         try:
             receipt = self.keeper.client.control(kind, payload, life_id=self.keeper.life_id)
@@ -181,7 +181,7 @@ class LiveSession:
                     if over:
                         self.emit(dict(kind='plan_stop', week_used_pct=used, plan_stop_pct=self.plan_stop_pct,
                                        summary=f'weekly limit reached: {used}% of {self.plan_stop_pct}%; '
-                                               'your trenchie fights on its last plan'))
+                                               'your Trenchie fights on its last plan'))
                     else:
                         self.emit(dict(kind='plan_resumed', week_used_pct=used, plan_stop_pct=self.plan_stop_pct,
                                        summary=f'weekly share back under the limit: {used}% of {self.plan_stop_pct}%; orders go again'))
@@ -200,7 +200,7 @@ class LiveSession:
         first = self.keeper.rejoin(round_index)
         self.resend = self.behaviour is not None
         self.emit(dict(kind='rejoined', fighter_id=self.keeper.token, first_life=first,
-                       summary='The arena started a new round; rejoined as ' + self.keeper.token + ' with the same trenchie'
+                       summary='The arena started a new round; rejoined as ' + self.keeper.token + ' with the same Trenchie'
                                + (', and your last behaviour is re-sent when the new life starts.' if self.resend else '.')))
 
     def resend_behaviour(self):

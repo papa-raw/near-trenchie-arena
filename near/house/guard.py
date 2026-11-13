@@ -13,6 +13,10 @@ Rules:
   at least as long is allowed.
 - Not blocked: "the Great Rug" and myth theories while no trenchie or real name is in the line;
   a first name or surname on its own; "exit".
+- Links and domain-shaped text (any alphabetic or punycode suffix, including bracketed/spoken dots), wallet
+  connection requests and credential lures are blocked. Single-letter initials and decimals pass. The shared
+  link_policy.json permits only exact ordinary speech phrases to skip spoken-dot conversion; literal dots
+  still block. Update its creator mirror with python3 -I near/tools/gen_link_policy.py.
 - Every check runs on a normalised copy of the line, and every listed term and trenchie name is normalised the
   same way (normalise()): NFKC; letters from other scripts folded to the Latin letter they imitate (Unicode's
   confusables.txt, as confusables.json; near/tools/gen_confusables.py rebuilds it); accents and other combining
@@ -41,6 +45,16 @@ EMOTES = ("(._.)", "(>_<)", "(^_^)", "(o_o)", "(-_-)", "\\(^o^)/")
 ALWAYS = ("scam", "fraud", "jail")          # stems: scammer, fraudster, jailed and frauds all match
 RUG = re.compile(r"\b(?:rug pull|rugger|rugged|rug)\b", re.I)
 GREAT_RUG = re.compile(r"\bthe great rug\b", re.I)
+# Suffix syntax covers future domains too; single-letter initials and decimal numbers are not domains.
+# The creator's copy is generated from this same policy by near/tools/gen_link_policy.py.
+LINK_POLICY = json.loads((Path(__file__).resolve().parent / "link_policy.json").read_text(encoding="ascii"))
+LINK = re.compile(LINK_POLICY['address'], re.I)
+SPOKEN_DOT = re.compile(LINK_POLICY['spoken_dot'], re.I)
+BRACKETED_DOT = re.compile(LINK_POLICY['bracketed_dot'])
+SPEECH_EXCEPTIONS = frozenset(LINK_POLICY['speech_exceptions'])
+WALLET_REQUEST = re.compile(r"\b(?:connect|link|sync|verify|restore|unlock)\s+(?:(?:your|a|the)\s+)?wallet\b|"
+                            r"\bwallet\s*connect\b", re.I)
+CREDENTIAL_REQUEST = re.compile(r"\b(?:seed|recovery|secret)\s+phrases?\b|\bprivate\s+keys?\b", re.I)
 
 
 CONFUSABLES = json.loads((Path(__file__).resolve().parent / "confusables.json").read_text(encoding="ascii"))
@@ -117,6 +131,16 @@ class Guard:
                                                          for t in trenchie_spans)]
         if real_alive:
             return "real-name"
+        # Keep punctuation for links: normalise() turns dots and slashes into spaces.
+        link_text = unicodedata.normalize("NFKC", line).translate(FOLD).translate(ZERO_WIDTH).casefold()
+        link_text = BRACKETED_DOT.sub('.', link_text)
+        # Only a whole approved speech phrase skips spoken-dot conversion; literal addresses still block.
+        if ' '.join(link_text.split()) not in SPEECH_EXCEPTIONS:
+            link_text = SPOKEN_DOT.sub('.', link_text)
+        if LINK.search(link_text):
+            return "link"
+        if WALLET_REQUEST.search(low) or CREDENTIAL_REQUEST.search(low):
+            return "wallet-lure"
         if any(re.search(r"\b" + w + r"\w*", low, re.I) for w in ALWAYS):
             return "accusation-word"
         if any(p.search(skel) for p in self.slurs):

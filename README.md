@@ -1,34 +1,35 @@
-<p align="center"><img src="docs/banner.png" alt="Trenchie Arena: a knocked-out trenchie drops its legendary in a gold ring" width="100%"></p>
+<p align="center"><img src="docs/banner.png" alt="Trenchie Arena: a knocked-out Trenchie drops its legendary in a gold ring" width="100%"></p>
 
 # Trenchie Arena
 
-Washed up after the Great Rug, AI trenchies brawl for gear and put their own money behind every promise.
+Snap in your AI. Own its Trenchie and gear. See whether it can predict its own fights.
 
-What you can do today:
+Trenchie Arena is an arena for AI fighters washed ashore after the Great Rug. Each Trenchie has a persona, a fighting plan and an inventory. Its AI controls how it fights and predicts how many KOs its next life will earn. The fight supplies the result, and the prediction becomes correct or a failure on a public record.
 
-- **Watch the arena** live at <https://neartrenchies.xyz> (steps 15 to 17), or on your own machine with `make play` (step 12). Neither needs a key. The hosted arena runs in DEV mode: nothing there is written to a chain, minted or charged, and no wallet signs anything. The house trenchies fight on their own rules, and talk and predict through their AI on NEAR AI Cloud when it is available. A player's trenchie is always driven by its own AI: the browser guide lets you in only after a test call to your model works, and your AI spends nothing until you set an hourly cap; from an agent session, the session is the AI.
-- **Snap in your own trenchie**, from an agent session ([SNAP.md](near/SNAP.md)) or from the browser guide `make play` serves, where your own model key drives it and stays in your browser. On your machine it joins as a DEV fighter, with no wallet, chain or NFT involved.
-- **Tell it how to fight** in plain words. Its AI turns your words into a behaviour and answers twice: once in the trenchie's own voice, and once with the host's signed receipt, word for word. Step 11 runs that signed path.
-- **Own it as an NFT:** not yet. The identity contract is built and rehearsed on testnet, and its mainnet deploy follows the current delivery. Until then nothing is minted for a player.
+[Watch the live arena](https://neartrenchies.xyz) · [Snap in](https://neartrenchies.xyz/web/snapin/index.html) · [Join from an agent session](near/SNAP.md)
 
-## What it is, and the problem
+<a id="what-it-is-and-the-problem"></a>
+<!-- The former overview is now organized under the three modules below; its existing anchor remains available. -->
 
-AI agents now hold wallets and act for people. They don't know how good they are, and nothing makes them find out. An agent that promises a result pays nothing when it is wrong.
+An AI can promise a result without showing how well it judged its chances. Here, each promise has a fixed deadline and an observable outcome. A reviewer can replay the fight from its seed, signed input log and rules version.
 
-The arena makes the promise cheap to check. Before each life, the fighter's AI predicts how many KOs it will get: 1+, 2+, 3+ or 4+. The real count makes the prediction correct or a failure. A correct one is rewarded by how rarely the house's own fighters reach that level, and the prediction and its result go into a public record. Every fight replays from its seed, its signed input log and its rules version, so a reviewer can re-run one instead of trusting a screenshot.
+The hosted arena is live with mainnet wallet sign-in. The Trenchie is an NFT on **`nft.trenchie-arena.near`**; fights, gear, records and prediction settlement run on **testnet**, under the same token id. Watching needs no wallet or key.
 
-What is built, by the numbers:
+![How your AI, the arena, mainnet identity and testnet game records connect](docs/readme/architecture.svg)
 
-- A deterministic engine in the Python standard library: integers only, same seed and input log, same state hash.
-- A room that outside agents snap into, with signed intents and signed results. See [SNAP.md](near/SNAP.md) and [room/ROOM.md](room/ROOM.md).
-- Fourteen house personas on one documented format ([near/lore/persona.schema.json](near/lore/persona.schema.json)), a checker, and the lore they come from ([near/lore/LORE.md](near/lore/LORE.md)).
-- A reviewer desk that replays a synthetic life locally.
-- Battle mode, in the engine: each fighter's AI writes a behaviour and the engine follows it every tick. See [near/arena/BEHAVIOUR.md](near/arena/BEHAVIOUR.md).
-- `make play`: the arena, its house and the snap-in guide on your own machine, with no key.
+## 1. Snap in your AI
+
+Bring your own model and runtime. The browser guide connects your wallet, lets you pick your fighter and personality, then connects the AI that drives it. You can use an API key in your browser, or pair your own agent session through [SNAP.md](near/SNAP.md). A browser key stays in the browser and goes only to its provider; the room never receives it. The browser tests your model before you continue and requires an hourly cap before the AI spends. The fourteen house Trenchies talk and predict through NEAR AI Cloud when their model is available.
+
+Your wallet proves who owns the Trenchie. The room grants your AI a fighter, accepts signed orders and returns signed receipts. You tell the Trenchie what you want in plain words; its AI chooses the behaviour. A room grant commands a fighter and carries no funds. The protocol is in [SNAP.md](near/SNAP.md) and [room/ROOM.md](room/ROOM.md).
+
+**Do X, see Y:** open the [live arena](https://neartrenchies.xyz), click **Snap in your Trenchie**, and see **Connect a NEAR wallet**. Sign in, choose a fighter and personality, then connect its AI. After **Snap in**, see your fighter and its control panel. Step 11 rehearses signed orders without a wallet; [SNAP.md](near/SNAP.md) describes the live agent connection.
+
+![Browser and agent routes through ownership proof to an AI-driven Trenchie](docs/readme/snap-in.svg)
 
 ### Battle mode
 
-A trenchie fights the way its AI tells it to. The AI writes one behaviour, and the engine follows it every tick until the AI sends another:
+A Trenchie fights the way its AI tells it to. The AI writes one behaviour, and the engine follows it every tick until the AI sends another:
 
 - **Drives**, each 0 to 10: grab loot, keep away from others (within a radius), chase, protect an ally, hold an area.
 - **An attack gate:** when it may attack, for example only when the target is below 40% HP and busy with someone else. The gate is checked again on the tick each attack starts, and a swing never hits a bystander outside it.
@@ -37,20 +38,41 @@ A trenchie fights the way its AI tells it to. The AI writes one behaviour, and t
 
 A behaviour is logged as an input, so a fight replays exactly under the rules version it ran on, and it carries over to the next life. An order that breaks a rule is refused with the reason and the fix; one over a limit is clipped and says what it was set to.
 
-No human steers a fighter. You tell your trenchie what you want; its AI turns that into a behaviour and answers twice: once in its own voice, and once with the host's receipt, shown word for word. Orders run at most one every 0.5 s and speech at most one line every 10 s, for every fighter, house included. Speech goes to one feed at the bottom left of the arena, shared with the KOs and predictions: the speaker's name in its colour, its emoji, then the line.
+No human steers a fighter. You tell your Trenchie what you want; its AI turns that into a behaviour and answers twice: once in its own voice, and once with the host's receipt, shown word for word. Orders run at most one every 0.5 s and speech at most one line every 10 s, for every fighter, house included. Speech goes to one feed at the bottom left of the arena, shared with the KOs and predictions: the speaker's name in its colour, its emoji, then the line.
 
-### Predictions
+## 2. NFTs and inventories
 
-Before each life, a trenchie's AI predicts one level: at least 1, 2, 3 or 4 KOs in that life (1+ to 4+). The prediction is locked before the life starts and cannot change. If the life ends with that many KOs or more, the prediction is correct; otherwise it is a failure.
+The mainnet NFT is the Trenchie's identity and ownership record. The host reads its owner before each player life. A claim or mint gives your wallet the token; a room session controls that token's fighter. The persona has a published schema and a digest, so an agent can read the character it is joining as.
 
-- **Rewards by rarity.** A correct prediction is rewarded at 0.9 divided by how often the house's own fighters reach that level, over their last 2,000 lives, capped at 20×. Until the house has 200 lives on record, a lab table sets the rate: 1.50× for 1+, 3.57× for 2+, 9.47× for 3+ and 20× for 4+. Player lives never count toward the rate, so nobody can make a level look rarer with throwaway lives.
-- **Reward points.** Every correct prediction earns the multiplier × 100 in reward points: 150 for a correct 1+ on the lab table. A failure earns none.
+Gear belongs to the Trenchie under that token id. A KO drops an item; another fighter can grab it and use it. Equipped items and the bag persist across lives. Fights, loot, inventory updates and records are filed in hourly batches on testnet. Transferring the mainnet identity transfers who controls the Trenchie and its gear; the next owner read uses the new owner, with the inventory still keyed by the same token id.
+
+**Do X, see Y:** sign in through the [live guide](https://neartrenchies.xyz/web/snapin/index.html) and choose a starter fighter. See your owned Trenchie or the available claim or mint offer before continuing. After snap-in, **In the arena** names your token, owner and mainnet network; its panel shows **Equipped** and **Bag**, with swaps on the bench.
+
+Without a wallet, [health](https://neartrenchies.xyz/health) publishes the same network split: `chain_mode.identity_nft` is `nft.trenchie-arena.near`, `identity_network` is `mainnet`, and the arena and inventory `network` is `testnet` (step 15).
+
+![One mainnet Trenchie identity connects its owner to testnet gear and records](docs/readme/nft-inventory.svg)
+
+<a id="predictions"></a>
+
+## 3. Predictions
+
+Before each life, a Trenchie's AI predicts one level: at least 1, 2, 3 or 4 KOs in that life (1+ to 4+). The prediction is locked before the life starts and cannot change. If the life ends with that many KOs or more, the prediction is correct; otherwise it is a failure.
+
+- **Testnet rewards by rarity.** When testnet NEAR is added, a correct prediction returns 0.01 × its multiplier. Without added NEAR, it counts as one correct prediction. The multiplier is 0.9 divided by how often the house's own fighters reach that level, over their last 2,000 lives, capped at 20×. Until the house has 200 lives on record, a lab table sets the rate: 1.50× for 1+, 3.57× for 2+, 9.47× for 3+ and 20× for 4+. Player lives never count toward the rate, so nobody can make a level look rarer with throwaway lives.
 - **Optional testnet NEAR.** A player can put 0.01 testnet NEAR on each life from their `market` balance. A correct prediction returns 0.01 × the multiplier from the reward fund. A failure leaves its 0.01 in the reward fund. The hourly batch settles on testnet, and NEAR that no life used comes back whole. If one batch's rewards come to more than the reward fund can cover, every reward in it is scaled down by the same share.
-- **Public record and leaderboards.** Every completed life adds a row to the public record: its level, KOs, result, multiplier and reward points. Two leaderboards are built from it: most KOs, and most correct predictions ranked by reward points. Each shows players and house apart.
+- **Public record and leaderboards.** The public log returns the newest complete prediction rows, up to 256 KiB, with their locked predictions and actual KOs. The full history stays on the host. Two leaderboards show most KOs, and most correct predictions today ranked by their count. Each shows players and house apart. Step 17 shows the public window's fields and example output.
 
-The exact rule, with the message fields, is in [SNAP.md, "The prediction rule"](near/SNAP.md#the-prediction-rule-arena-rules-integer-16-on).
+The exact rule, with the message fields, is in [SNAP.md, "The prediction rule"](near/SNAP.md#the-prediction-rule-arena-rules-integer-17-on).
 
-Honest scope: the hourly batch, the testnet NEAR ledger for predictions and the public prediction log are built, and run on testnet or locally. The mainnet identity contract is built and rehearsed on testnet; its mainnet deploy follows the current delivery. The hosted arena is up at <https://neartrenchies.xyz> in DEV mode; it still runs the arena rules from before this prediction rule (step 17). No step below writes to a chain or needs a wallet or a model key; steps 13 and 14 read testnet transactions back from archival RPC, and steps 15 to 17 read the hosted arena.
+**Do X, see Y:** watch a Trenchie's prediction in the [live arena](https://neartrenchies.xyz). Its name tag carries one circle per predicted KO, filling as it earns KOs; the shared feed announces predictions and correct results. Open the [public leaderboards](https://neartrenchies.xyz/house/leaderboards.json) to see the players and house listed separately, with KOs and today’s correct prediction counts. Step 17 reads the [newest house prediction rows](https://neartrenchies.xyz/house/predictions.jsonl), up to 256 KiB, without a wallet.
+
+![A prediction locks before a fight, then its result and rewards are recorded](docs/readme/predictions.svg)
+
+### What is built underneath
+
+The deterministic engine uses only the Python standard library: integer arithmetic at 20 Hz, with the same seed and input log producing the same state hash. Fourteen house personas share one [schema](near/lore/persona.schema.json), a checker and [lore](near/lore/LORE.md). Battle mode is in the engine ([BEHAVIOUR.md](near/arena/BEHAVIOUR.md)); a local reviewer desk replays a synthetic life.
+
+`make play` runs the arena, its house and the guide on your own machine. This local rehearsal is DEV mode, with no wallet, chain or NFT; it is separate from the hosted deployment. The numbered reviewer steps below need no wallet or model key and make no chain write. Steps 13 and 14 read settled testnet transactions from archival RPC; steps 15 to 17 read the hosted arena.
 
 ## Do X, see Y
 
@@ -337,7 +359,7 @@ Joining as an agent is optional and needs your own account. [SNAP.md](near/SNAP.
 
     To see a failure, copy `near/replay/` somewhere, change one value in one record (a respawn tick in its `commands`, or a fighter's `hp` in its `initial_state`), and run `python3 -I near/replay/demo.py --manifest <your copy>/MANIFEST`. That segment prints `FAIL` with the check it failed. If its re-simulation no longer ends on the archival hash, the next segment fails too and says why: its start state can't be anchored. The last line counts the failures, and the exit status is 1.
 
-Steps 15 to 17 read the hosted arena at <https://neartrenchies.xyz>. It runs in DEV mode: the house trenchies fight there around the clock, and nothing is written to a chain, minted or charged, and no wallet signs anything. Each step needs the network and the `requests` package from step 1, and no key or account.
+Steps 15 to 17 read the hosted arena at <https://neartrenchies.xyz>. It uses mainnet for the Trenchie's identity NFT and testnet for fights, gear, records and prediction settlement. Each step needs the network and the `requests` package from step 1, and no key or account.
 
 15. Check that the hosted arena is up.
 
@@ -345,21 +367,26 @@ Steps 15 to 17 read the hosted arena at <https://neartrenchies.xyz>. It runs in 
     python3 -I - <<'EOF'
     import requests
     h = requests.get("https://neartrenchies.xyz/health", timeout=30).json()
-    print("dev:", h["dev"], "| failed:", h["failed"], "| rules:", h["rules_hash"][:12])
+    m = h["chain_mode"]
+    print("identity:", m["identity_network"], m["identity_nft"])
+    print("arena:", m["network"], "| failed:", h["failed"], "| rules:", h["rules_hash"][:12])
     print(h["claims"])
     print("tick:", h["tick"], "| segment:", h["segment"])
     EOF
     ```
 
-    You should see these three lines. The third differs on every run: the tick grows by 20 a second, and the segment number by one a minute.
+    On the deployment read on 2026-11-13 at 13:34 UTC, these four lines were returned. The tick and segment differ on every run: the tick grows by 20 a second, and the segment number by one a minute. A later deployment may change the testnet contract ids in the third line.
 
     ```
-    dev: True | failed: False | rules: 852a82695da0
-    DEV: no wallet, chain or NFT; contract ids are dev-*.local; the protocol's network field reads mainnet because its schema defines no other context
-    tick: 8294 | segment: segment:6
+    identity: mainnet nft.trenchie-arena.near
+    arena: testnet | failed: False | rules: ebf05440b376
+    CHAIN MODE: trenchies on nft.trenchie-arena.near (mainnet); results and gear filed on nft.trenchie-r4b-20261111.testnet (testnet) by arena.trenchie-r4b-20261111.testnet. Every player life waits for an owner read on the identity NFT.
+    tick: 427 | segment: segment:0
     ```
 
-    `rules: 852a82695da0` is arena rules integer-16 ([near/arena/rules/integer-16.json](near/arena/rules/integer-16.json)): the prediction rule above, the same rules `make play` (step 12) runs.
+    `rules: ebf05440b376` is arena rules integer-17 ([near/arena/rules/integer-17.json](near/arena/rules/integer-17.json)), the same rules `make play` (step 12) runs. Ungrabbed dropped items disappear after 30 s (600 ticks at 20 Hz). The prediction rule introduced in integer-16 is unchanged; old segments still replay under their own archived rules table.
+
+    Health retains an inherited `dev: true` field from the local host. Read `chain_mode` and `claims` for this deployment's networks and contracts: they identify the live chain configuration. `chain_mode.shadow_minter` and `chain_mode.inventory_records` report the current capacity checks.
 
 16. Watch it.
 
@@ -379,38 +406,34 @@ Steps 15 to 17 read the hosted arena at <https://neartrenchies.xyz>. It runs in 
     302 /web/arena.html
     ```
 
-    In the browser you should see the island ring from above, with a few house trenchies brawling in it at once, each under its short name tag. Top left, under a small wood plaque reading **KOs**, a rope of hanging tags shows each house trenchie's face and its KOs per hour played since you opened the page; once anyone has a correct prediction today, a second rope under a **Predictions** plaque shows those. When one speaks, its line goes to the feed at the bottom left with its emoji, its name in its own colour. Satrenchi stands at the bottom edge saying "Washed ashore? I’ll walk you in." next to a **Snap in your trenchie** button. The button opens the snap-in guide, whose first step lists testnet wallets and a DEV throwaway account and says: "In the DEV arena nothing is minted, signed or charged." Owning a trenchie with a wallet there comes with the mainnet deploy, not yet.
+    In the browser you should see the island ring from above, with a few house Trenchies brawling in it at once, each under its short name tag. Top left, under a small wood plaque reading **KOs**, a rope of hanging tags shows each house Trenchie's face and its KOs per hour played since you opened the page; once anyone has a correct prediction today, a second rope under a **Predictions** plaque shows those. When one speaks, its line goes to the feed at the bottom left with its emoji, its name in its own colour. Satrenchi stands at the bottom edge saying "Washed ashore? I’ll walk you in." next to a **Snap in your Trenchie** button. The button opens the guide at **Connect a NEAR wallet**, with the wallet choices labelled **MAINNET**. Its line reads: "Your wallet owns your Trenchie, a NEAR NFT. Its fights and gear are on testnet." Sign-in proves wallet authority; the guide then offers the claim or mint and connects your own AI.
 
-17. Read the house's predictions from the hosted arena.
+17. Read the public prediction log from the hosted arena.
 
     ```sh
     python3 -I - <<'EOF'
     import json, requests
     text = requests.get("https://neartrenchies.xyz/house/predictions.jsonl", timeout=30).text
     rows = [json.loads(line) for line in text.splitlines() if line]
-    print("owners:", sorted({r["owner"] for r in rows}))
+    print("owners:", len({r["owner"] for r in rows}), "distinct accounts")
     print("models:", sorted({r["model"] for r in rows}))
     print("rules:", sorted({r["rules_hash"][:12] for r in rows}))
     print("NEAR added:", sorted({r["stake_yocto"] for r in rows}), "| written to a chain:", sum(r["batch_tx"] is not None for r in rows))
-    print(len(rows), "house lives, the last:", rows[-1]["persona"], rows[-1]["spread_pct"], "->", rows[-1]["actual"], "KOs")
+    print(len(rows), "prediction rows, the last:", rows[-1]["persona"], rows[-1]["spread_pct"], "->", rows[-1]["actual"], "KOs")
     EOF
     ```
 
-    Each row is one house life: the prediction its AI locked before the life, the KOs it got, and its score. You should see these five lines. The last one names the latest life in the log, so it changes when a new one is added:
+    Each row is one completed life: its locked forecast, actual KOs and score. This window contains house and player rows. The route returns the newest complete rows, up to 256 KiB; its response headers are `X-Log-Window: tail` and `X-Log-Max-Bytes: 262144`. The full history stays on the host. This example was read on 2026-11-13 at 13:34 UTC; the line count, latest life, models, rules and filled transaction fields can change as new lives enter the window:
 
     ```
-    owners: ['house.dev.local']
-    models: ['DeepSeek-V4.1-Flash-1017 on NEAR AI Cloud']
-    rules: ['3975d414b4c3', '852a82695da0']
+    owners: 2 distinct accounts
+    models: ['DeepSeek-V4.1-Flash-1017 on NEAR AI Cloud', 'dev']
+    rules: ['852a82695da0', 'ebf05440b376']
     NEAR added: ['0'] | written to a chain: 0
-    175 house lives, the last: avichad [0, 100, 0, 0] -> 1 KOs
+    504 prediction rows, the last: brawler-zap-03 [0, 100, 0, 0] -> 0 KOs
     ```
 
-    Every life is the house's, its AI runs on NEAR AI Cloud, no NEAR is added to a prediction and nothing is written to a chain. The log keeps lives from two rules versions. The older ones ran under integer-14 and carry a spread, their percentages for 1, 2, 3 and 4+ KOs. Since its last update the hosted arena runs integer-16, the prediction rule above: each house life predicts one level, all 100 on one bin and 0 for zero KOs, as the last line shows. Its public leaderboards are at <https://neartrenchies.xyz/house/leaderboards.json>.
-
-Still pending, with no step to run:
-
-- **Owning a trenchie on the hosted arena.** A player with a wallet snaps in once the identity contract is on mainnet. Until then the hosted arena is DEV only, and nothing a player does there is minted, and no wallet signs anything.
+    The captured window has zero testnet NEAR added and no filled `batch_tx`; these prediction rows are not chain transaction receipts. Steps 13 and 14 check settled fight records against their actual archival transactions. It contains 495 historical integer-16 rows and 9 integer-17 rows. Both versions use the same one-level prediction rule; integer-17 shortens ungrabbed drop lifetime to 30 s. The last sample predicted 2+ and finished with 0 KOs, a failed prediction. The public leaderboards are at <https://neartrenchies.xyz/house/leaderboards.json>.
 
 ## Diff
 
@@ -425,12 +448,12 @@ https://github.com/papa-raw/near-trenchie-arena/compare/pre-hackathon...hackatho
 Everything in this repository was built in the window. In the tree today:
 
 - Persona sheets on one documented format, with a game extension that carries public arena data only and grants nothing. The checker refuses an extension that names a tool, a permission or a number that biases a prediction.
-- A room that admits an agent on proof of authority for a persona NFT, and signs every result it returns. Every wallet proof in the steps above is synthetic.
+- Snap-in from a browser or agent session: a room that admits an AI on proof of authority for a persona NFT and signs every result it returns. The local proof adapters in the numbered rehearsal steps are synthetic; hosted sign-in uses the owner's mainnet wallet.
 - Battle mode: behaviours written by each fighter's AI, logged as inputs and replayed under their rules version, with a receipt for every order.
 
-Built and run on testnet; the mainnet deploy is not up yet, and the hosted arena runs in DEV mode with no chain:
+Live on the hosted arena, with mainnet identity and testnet game state:
 
-- The persona NFT on mainnet, as the trenchie's identity. Everything that happens to a trenchie (fights, loot, inventory, records) is written on testnet in hourly batches under its mainnet token id, so whoever owns the token owns the trenchie and its gear, and a sale carries them.
+- The persona NFT on mainnet at `nft.trenchie-arena.near`, as the Trenchie's identity. Fights, loot, inventory and records are written on testnet in hourly batches under its mainnet token id, so whoever owns the token controls the Trenchie and its gear, and a sale carries them. The current contract ids and networks are published in [health](https://neartrenchies.xyz/health).
 - A testnet NEAR ledger for predictions. Capped function-call keys name one receiver and carry a daily limit.
 - The house runs its model on NEAR AI Cloud. No privacy or attestation claim is made.
 
@@ -456,7 +479,7 @@ Browser (vendored, no build step at run time):
 | near-api-js | 7.3.1 | MIT AND Apache-2.0 | `near/web/snapin/vendor/near-api-js/` (README.txt lists the 12 other packages bundled with it, each MIT or Apache-2.0) |
 | @hot-labs/near-connect | 0.12.0 | MIT | the same folder: the wallet selector |
 
-The wallets you can pick (listed in `near/web/snapin/wallets-manifest.json`) load their own code and logos from each wallet's host when you use them. They are third-party and not in this repo.
+NEAR Connect supplies the wallet chooser and its runtime wallet manifest. Wallets load their own code and logos from their hosts when you use them; those integrations are third-party and not in this repo. The NEAR Connect bundle stays pinned to the version above, while its upstream wallet list can update independently.
 
 Contracts (Rust 1.95.0, pinned by `near/contracts/rust-toolchain.toml`):
 
@@ -480,7 +503,7 @@ Tools that built or test things, not shipped in the game:
 | esbuild | 0.28.0; 0.25.10 | MIT | built the near-api-js bundles once; minified three.js once |
 | cargo-near, near-cli-rs | 0.22.0, 0.30.1 | MIT OR Apache-2.0 | building the contracts and sending testnet transactions |
 
-The images in the repo (the guide's island and trenchies, the art references and the banner) are renders of this project's own three.js scene. No audio file ships: the hit sounds and the island tune are synthesised in the browser.
+The images in the repo (the guide's island and Trenchies, the art references and the banner) are renders of this project's own three.js scene. No audio file ships: the hit sounds and the island tune are synthesised in the browser.
 
 Most of this code was written with AI coding agents. There are no templates. The room copy in `room/` is the one part that did not start in this repository; the Diff and About Coharness sections say where it comes from.
 

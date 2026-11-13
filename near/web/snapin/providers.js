@@ -339,7 +339,7 @@
   // The words are board 1's: 'Join Trenchie Arena. Read <SNAP.md> and follow it. Code <code>, trenchie <name>.'
   function buildPrompt(code, snapMdUrl, name) {
     var n = String(name || '').replace(/["$`\\\n\r]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
-    return 'Join Trenchie Arena. Read ' + snapMdUrl + ' and follow it. Code ' + code + (n ? ', trenchie ' + n : '') + '.';
+    return 'Join Trenchie Arena. Read ' + snapMdUrl + ' and follow it. Code ' + code + (n ? ', Trenchie ' + n : '') + '.';
   }
   // one double-quoted argument, safe in sh, bash and zsh ($, `, \ and " escaped)
   function dq(s) { return '"' + String(s).replace(/(["$`\\])/g, '\\$1') + '"'; }
@@ -386,13 +386,14 @@
 
     // POST <base>/snap/code {agent, name} -> {code, expires_at, snap_url?, command?}
     // Returns {ok, code, expiresAt (ms), command, link}.
+    // A chain host receives opts.envelope from identity.codeRequest; the local DEV path keeps its plain request.
     requestCode: async function (args, opts) {
       args = args || {};
       if (!AGENTS[args.agent]) return fail('other', 0, "agent must be 'claude-code' or 'codex'");
       var r = await call(snapBase(opts) + '/snap/code', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ agent: args.agent, name: args.name || null, plan_stop_pct: args.planStop > 0 ? args.planStop : null })
+        body: JSON.stringify(opts && opts.envelope ? opts.envelope : { agent: args.agent, name: args.name || null, plan_stop_pct: args.planStop > 0 ? args.planStop : null })
       }, opts, null);
       if (isFail(r)) return r;
       if (r.status !== 200 || !r.body || typeof r.body.code !== 'string') return httpFail(r, null);

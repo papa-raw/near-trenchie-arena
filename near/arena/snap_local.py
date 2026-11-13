@@ -86,6 +86,9 @@ PROOF_METHOD = "dev_local_v1"
 HOUSE_ACCOUNT = "house.dev.local"
 SEED_BATCH = 600
 UNREAD_GRACE_S = 180
+SPECTATOR_DRAIN_S = 5  # a visitor cannot hold a pong's output buffer indefinitely
+SPECTATOR_FRAMES_PER_S = 10  # spectators receive state; only occasional control frames are needed
+PUBLIC_LOG_BYTES = 256 * 1024  # public log responses contain only the newest complete JSONL rows
 # The five battle presets: one per fight style, built only from free menu items.
 LEGACY_PRESETS = {
     "brawler": dict(style="brawler", loadout=dict(weapon="c-swing", trinket="c-shockwave", body="c-body-builder", head="c-head-builder")),
@@ -109,6 +112,23 @@ def battle_preset(name: str, rules: dict) -> dict:
     if name in LEGACY_PRESETS:
         return LEGACY_PRESETS[name]
     raise ValueError("unknown preset; choose one of " + ", ".join(GUIDE_PRESET_IDS))
+
+
+def public_log_tail(path: Path | None) -> bytes:
+    """Read at most 256 KiB from the end, dropping partial first/last rows. Stored history is unchanged."""
+    if path is None:
+        return b""
+    try:
+        with path.open('rb') as stream:
+            size = stream.seek(0, os.SEEK_END)
+            start = max(0, size - PUBLIC_LOG_BYTES)
+            stream.seek(start)
+            data = stream.read(PUBLIC_LOG_BYTES)
+    except FileNotFoundError:
+        return b""
+    if start:
+        _, _, data = data.partition(b'\n')
+    return data[:data.rfind(b'\n') + 1]
 
 
 def encoded(raw: bytes) -> str:
@@ -442,9 +462,9 @@ class DevRoom:
         return house_live.public_roster_of(self.round.arena, self.house_sheets, self.house_model)
 
     def house_predictions(self) -> bytes:
-        """The public per-AI predictions log (F79), the JSONL file exactly as written; empty for the deterministic house."""
+        """The newest complete prediction rows, at most 256 KiB; empty for the deterministic house."""
         log = getattr(self, "house_log", None)
-        return log.path.read_bytes() if log is not None and log.path.exists() else b""
+        return public_log_tail(log.path if log is not None else None)
 
     # --- DEV adapters -------------------------------------------------------------------------------
     def room_sign(self, body: bytes) -> str:
@@ -617,7 +637,7 @@ class DevRoom:
             persona["look"] = look
         if persona is not None:
             name = persona["name"]
-        name_check = check_display_name(name, persona["tag"] if persona is not None else name)
+        name_check = check_display_name(name, persona["tag"] if persona is not None else name, plain=persona is None)
         slug = "".join(c for c in name.lower() if c.isalnum())[:16]
         if not slug or preset not in PRESETS:
             raise ValueError("name needs letters or digits; choose a preset from " + ", ".join(GUIDE_PRESET_IDS))
@@ -873,8 +893,10 @@ class DevRoom:
 
     def health(self) -> dict:
         a = self.round.arena
-        chain = a.health().get("chain")
-        return {**({"chain": copy.deepcopy(chain)} if chain is not None else {}), "dev": True, "round": self.round_index, "tick": a.sim.state["tick"], "segment": a.segment_id,
+        engine_health = a.health()
+        chain = engine_health.get("chain")
+        return {"free_disk_bytes": engine_health.get("free_disk_bytes"), "status": engine_health.get("status", "unknown"),
+                **({"chain": copy.deepcopy(chain)} if chain is not None else {}), "dev": True, "round": self.round_index, "tick": a.sim.state["tick"], "segment": a.segment_id,
                 "spectators": len(self.clients), "dev_players": len(self.round.dev_members()), "failed": a.failed,
                 "dropped_sends": self.dropped, "clock_resyncs": self.resyncs, "slowest_step_ms": round(self.slowest * 1000, 2),
                 "rules_hash": a.sim.rules_hash, "claims": "DEV: no wallet, chain or NFT; contract ids are dev-*.local; the protocol's network field reads mainnet because its schema defines no other context"}
@@ -1005,9 +1027,9 @@ class DevRoom:
                 return 200, self.feed.public(int(query.get("since", "0") or 0))
             if path == "/house/roster":
                 return 200, self.house_roster()
-            if path == "/house/record.jsonl":  # the public record (arena/predict.py), the JSONL file as written
+            if path == "/house/record.jsonl":  # bounded public tail; the full record stays on disk
                 rec = self.round.arena.record
-                return 200, (rec.path.read_bytes() if rec.path is not None and rec.path.exists() else b"", None)
+                return 200, (public_log_tail(rec.path), None)
             if path == "/house/leaderboards.json":  # most KOs and most correct predictions, per UTC day, top 5
                 arena = self.round.arena
                 now_ns = arena.server_time_ms() * 1_000_000
@@ -1015,9 +1037,18 @@ class DevRoom:
                 if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", day):
                     return 400, {"error": "day is YYYY-MM-DD (UTC)"}
                 return 200, arena.record.leaderboards(day, now_ns=now_ns)
+            if path == "/house/predictions/summary" and method == "GET":
+                persona = query.get('persona', '')
+                if not persona or len(persona) > 256:
+                    raise ValueError('persona needs a fighter id of at most 256 characters')
+                log = getattr(self, "house_log", None)
+                return 200, (log.summary(persona) if log is not None else
+                             dict.fromkeys(house_predictions.TOTAL_FIELDS, 0) |
+                             dict(persona=persona, scope='all', log_hash=hashlib.sha256(b'').hexdigest()))
             if path == "/house/predictions.jsonl":
                 log = getattr(self, "house_log", None)
-                return 200, (self.house_predictions(), log.log_hash() if log is not None else None)
+                data = self.house_predictions()
+                return 200, (data, hashlib.sha256(data).hexdigest() if log is not None else None)
             if path == "/dev/terms":
                 return 200, self.round.host.service.export_owner_state()["terms"]
             if path == "/dev/clock":
@@ -1094,9 +1125,10 @@ class DevRoom:
         except (ValueError, asyncio.TimeoutError, asyncio.IncompleteReadError) as exc:
             status, value = 400, {"error": str(exc)[:200]}
         ctype, extra = "application/json", ""
-        if isinstance(value, tuple):  # the predictions log is served as the JSONL bytes on disk, with its hash
+        if isinstance(value, tuple):  # the log hash identifies these response bytes, including a bounded tail
             (data, log_hash), ctype = value, "application/x-ndjson"
             extra = f"X-Log-Hash: {log_hash}\r\n" if log_hash else ""
+            extra += f"X-Log-Window: tail\r\nX-Log-Max-Bytes: {PUBLIC_LOG_BYTES}\r\n"
         elif method == "GET" and path == "/SNAP.md" and status == 404:
             data = (ROOT / "near/SNAP.md").read_bytes()
             status, ctype = 200, "text/markdown; charset=utf-8"
@@ -1136,15 +1168,28 @@ class DevRoom:
             writer.write(dev_brawl.frame(self.latest))
         self.clients[writer] = compact
         try:
+            await asyncio.wait_for(writer.drain(), SPECTATOR_DRAIN_S)
+            frame_window, frames_received = time.monotonic(), 0
             while True:
                 opcode, data = await dev_brawl.read_frame(reader)
+                now = time.monotonic()
+                if now - frame_window >= 1:
+                    frame_window, frames_received = now, 0
+                frames_received += 1
+                if frames_received > SPECTATOR_FRAMES_PER_S:
+                    raise ValueError("spectator input rate exceeded")
                 if opcode == 0x8:
                     writer.write(dev_brawl.frame(b"", 0x8))
+                    await asyncio.wait_for(writer.drain(), SPECTATOR_DRAIN_S)
                     break
                 if opcode == 0x9:
-                    writer.write(dev_brawl.frame(data, 0xA))
-        except (asyncio.IncompleteReadError, ConnectionError, ValueError):
-            pass
+                    pong = dev_brawl.frame(data, 0xA)
+                    if writer.transport.get_write_buffer_size() + len(pong) > dev_brawl.MAX_BUFFER:
+                        raise ConnectionError("spectator output buffer full")
+                    writer.write(pong)
+                    await asyncio.wait_for(writer.drain(), SPECTATOR_DRAIN_S)
+        except (asyncio.IncompleteReadError, ConnectionError, ValueError, asyncio.TimeoutError):
+            writer.transport.abort()  # close() alone retains queued bytes while the peer reads a trickle
         finally:
             self.clients.pop(writer, None)
             self.styles.forget(writer)

@@ -47,7 +47,7 @@
 .b1p .you .t{display:block;font-size:10px;color:var(--muted);text-align:right}
 .b1p .reply{font-size:13px;line-height:1.45}
 .b1p .reply .who{font:18px 'Lilita One';color:var(--coral);margin-right:6px}
-.b1p .slip{background:#fbf3e2;border:1px dashed #b39b72;padding:8px 10px;font-size:11.5px;line-height:1.5;margin-top:5px}
+.b1p .slip{background:#fbf3e2;border:1px dashed #b39b72;padding:8px 10px;font-size:11.5px;line-height:1.5;margin-top:5px;max-height:min(240px,calc(100cqh - 32px));overflow:auto}
 .b1p .slip .h{font:700 10px 'Space Mono';letter-spacing:.1em;color:#5a4528;display:flex;justify-content:space-between;gap:8px}
 .b1p .slip ul{margin:4px 0 2px;padding:0 0 0 14px}
 .b1p .slip .why{color:var(--muted);margin-top:3px}
@@ -154,8 +154,9 @@
 .b1p .slip .h span+span{font-weight:400}
 .b1p .mny .link{white-space:nowrap}
 .b1p .pnl .face{min-height:0}
+.b1p .pnl .face>:not(.log){flex-shrink:0}
 .b1p .benchb{flex:0 1 auto;overflow:auto;min-height:0}
-.b1p .pnl .log{min-height:90px}
+.b1p .pnl .log{min-height:0;container-type:size}
 .b1p.w390 .slip,.b1p.w390 .reply,.b1p.w390 .you,.b1p.w390 .ev,.b1p.w390 .gi,.b1p.w390 .mny,.b1p.w390 .slip .h{font-size:13px}
 .b1p .pnl .chip{font-size:13px}
 .b1p .hprow .state{margin-left:4px}
@@ -178,8 +179,8 @@
 .b1p.w390 .benchb .slot .ico{width:34px;height:34px}
 .b1p.w390 .benchb .note{margin:0 0 6px}
 .b1p .hprow .hp{min-width:70px}
-.b1p.w390 .onbench .log{display:none}
-.b1p.w390 .onbench .benchb{flex:1 1 auto}
+.b1p.w390 .onbench .log{display:flex}
+.b1p.w390 .onbench .benchb{flex:0 0 auto}
 .b1p.w390 .rate{display:none}
 .b1p.w390 .capped-rate{display:inline}
 .b1p .ph-mid{min-width:0}

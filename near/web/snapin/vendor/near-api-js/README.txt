@@ -12,15 +12,16 @@ near-api-js 7.3.1
   tgz sha1    03b79f5c83fde1c2ca55ba2b1aea0084bbc33798 (npm dist.shasum)
   Ships ESM + CJS only (lib/index.js, lib/index.cjs), NO browser/IIFE bundle, so esbuild was used.
 
-@hot-labs/near-connect 0.12.0 (the wallet selector; wallet.js always hands it our reviewed list, ../../wallets-manifest.json,
-  never its own default list, which it would fetch unpinned from GitHub branches)
+@hot-labs/near-connect 0.12.0 (the stock wallet chooser and runtime manifest; no app-maintained wallet list or executor pins)
   published   2026-10-26 (npm time)
   licence     MIT
   tarball     https://registry.npmjs.org/@hot-labs/near-connect/-/near-connect-0.12.0.tgz
   tgz sha256  b5cd265f70e76c1fa3aeba5fca5640939fb577f7a385ca96eb44ead8f8898e4e
   tgz sha1    991338bf45804b984f0881572eaae5355a87862e (npm dist.shasum)
   No runtime dependencies. Its wallets run as sandboxed iframes whose code is fetched from each wallet's own host
-  (named in the manifest) at run time: those scripts are NOT vendored and are third-party code.
+  (named in its own default manifest) at run time: those scripts are NOT vendored and are third-party code.
+  The bundle version and hashes below stay pinned; the upstream manifest and wallet integrations may update independently.
+  Integration: https://docs.near.org/tools/near-connect
 
 esbuild 0.28.0 (published 2026-04-02), build command (see build/build.sh; inputs and lockfile are in build/):
   esbuild entry.mjs    --bundle --format=iife --global-name=NearApi        --platform=browser --target=es2020 --minify-syntax --legal-comments=none --alias:util=./util-shim.js --outfile=near-api-js-7.3.1.min.js
@@ -31,7 +32,7 @@ esbuild 0.28.0 (published 2026-04-02), build command (see build/build.sh; inputs
 
 Output sha256
   7821eae006b6b694da59664cbee98f612c9d235dacb21d26cd85d03b6ecea5c8  near-api-js-7.3.1.min.js   (195,402 bytes)
-  d5b09826a766de5217a30e02a7433ce91ab9eed0d4700bde24f9e46e18135b59  near-connect-0.12.0.min.js (61,047 bytes)
+  1896450e6c586092197ec1b872892054fb5355569dca58be2ffd8355e846c2c6  near-connect-0.12.0.min.js (96,258 bytes; unchanged by the stock-chooser integration)
 
 Packages inside the near-api-js bundle (from esbuild's metafile) and their licences:
   near-api-js 7.3.1 (MIT AND Apache-2.0) · @noble/curves 2.2.0 MIT · @noble/hashes 2.2.0 MIT · @noble/post-quantum 0.6.1 MIT

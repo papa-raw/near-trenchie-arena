@@ -8,7 +8,7 @@ nothing here applies to it.
 A correct prediction (KOs >= level) is rewarded at the multiplier m(L) = (1 - margin) / P(>=L), capped, where P(>=L)
 comes from the five-bin base rate (`market` stores it at each resolve, from house lives only). With 0.01 testnet NEAR
 drawn for the life, a correct one returns amount * m(L); a failure leaves its amount in the reward fund. With no
-NEAR, a correct one earns reward points, m(L) x 100.
+NEAR, a correct one is counted on the leaderboard; the multiplier only sets the NEAR reward.
 
 The public record: one seal row per completed life (`seal_row`), and a settlement row (`settle_row`) for a life NEAR
 was drawn for, once its batch resolves. The two leaderboards are computed from the seal rows alone, per UTC day.
@@ -130,7 +130,7 @@ def _most_correct(rows, top):
         house[name], shown[name] = r["house"], r.get("name") or name
         points[name] = points.get(name, 0) + int(r["reward_points"])
         correct[name] = correct.get(name, 0) + 1
-    order = sorted(points, key=lambda n: (-points[n], -correct[n], n))[:top]
+    order = sorted(correct, key=lambda n: (-correct[n], n))[:top]
     return [{"persona": n, "name": shown[n], "house": house[n], "reward_points": points[n], "correct": correct[n]}
             for n in order]
 
@@ -145,9 +145,9 @@ HOUR_NS = 3600 * 10 ** 9
 def leaderboards(rows, day, top=TOP, now_ns=None):
     """{day, most_kos, most_correct, boards} from the seal rows.
 
-    most_kos: KOs per persona on that UTC day (lives beside them). most_correct ("Most correct predictions"): reward
-    points per persona that day, with the count of correct predictions beside them; only personas with a correct one.
-    Ties: the larger count, then the persona's name. Both mix house and players.
+    most_kos: KOs per persona on that UTC day (lives beside them). most_correct ("Most correct predictions"):
+    the count of correct predictions per persona that day; only personas with a correct one.
+    Ties use the persona's name. Both mix house and players. Numeric reward fields remain in the public record.
 
     boards, the arena sign's two boards (slot 1, bd:19214), each split into players and house, top 5 each:
     most_kos_hour, KOs in the hour before `now_ns` (seal time, the hour it ends in); and most_correct_day, as

@@ -323,11 +323,34 @@ One page explains the arena: watching and snapping in, the AI doors, the cap, ho
 
 Check: open `near/web/docs.html`.
 
+## 2026-11-13 · The Trenchie is on mainnet
+
+The identity contract is live on NEAR mainnet at `nft.trenchie-arena.near`, the same code the testnet rehearsals ran. 50 free Trenchies wait in custody for their first owners. The deploy key deleted itself in the last step, so the contract's code can't change from here.
+
+Check: `nft_total_supply` on `nft.trenchie-arena.near` returns 50, and its access key list is empty.
+
+## 2026-11-13 · The hosted arena in real mode
+
+neartrenchies.xyz now signs you in with a mainnet wallet and reads who owns each Trenchie from mainnet before every life. Fights, gear, records and predictions are written to testnet under the same token id, so whoever holds the token holds the fighter and everything it has won. The house fighters were refused lives the first time this went live, because the server looked them up as mainnet tokens they don't have. They're exempt again, and a player still needs to own the token.
+
+Check: `/health` on neartrenchies.xyz shows `chain_mode` with `identity_network` mainnet.
+
+## 2026-11-13 · House fighters that fight
+
+In the morning the house fighters stood around. Their AI wrote plans that only attacked a target already low on health and close by, which at the start of a round is nobody, and one ally plan was refused outright. The house now opens that rule and sets a minimum chase on every plan it gets back, and names the ally properly, so every house fighter attacks within seconds of its plan.
+
+Check: `python3 -B near/house/test_house_engage.py` passes.
+
+## 2026-11-13 · How it works, edited
+
+The explainer page got a full read and edit: shorter steps, Trenchie with a capital T everywhere a player reads it, and the weekly-limit line for plan users rewritten.
+
+Check: open `near/web/docs.html`.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
 
-- the identity contract on mainnet
 - the gas measurements that set the batch size
 - the balance sweep's final report
 

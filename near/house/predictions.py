@@ -18,6 +18,7 @@ except ImportError:
 
 FIELDS = ("life", "rules_hash", "persona", "owner", "model", "spread_pct", "zero_pct", "actual", "score",
           "base_score", "stake_yocto", "returned_yocto", "batch_tx", "lock_hash", "prediction")
+TOTAL_FIELDS = ('lives', 'kos', 'scored', 'score_sum', 'base_score_sum')
 
 
 def digest(value):
@@ -30,8 +31,34 @@ class PredictionLog:
         self.on_line = on_line                                   # called once per public line, after it is written
         self.path = self.dir / "predictions.jsonl"
         self.locks = {}
-        for row in self.rows():                                  # a restart keeps every sealed life closed
-            self.locks[row["life"]] = {"resolved": True, "hash": row["lock_hash"]}
+        self.totals = {}
+        self.full_digest = hashlib.sha256()
+        try:
+            with self.path.open('rb') as stream:                  # one streaming rebuild at startup, never per request
+                for line in stream:
+                    self.full_digest.update(line)
+                    if line.strip():
+                        row = json.loads(line)
+                        self.locks[row["life"]] = {"resolved": True, "hash": row["lock_hash"]}
+                        self._add_totals(row)
+        except FileNotFoundError:
+            self.totals = {}
+
+    def _add_totals(self, row: dict) -> None:
+        if row.get('actual') is None:
+            return
+        totals = self.totals.setdefault(row['persona'], dict.fromkeys(TOTAL_FIELDS, 0))
+        totals['lives'] += 1
+        totals['kos'] += row['actual']
+        if row.get('prediction') and row.get('score') is not None and row.get('base_score') is not None:
+            totals['scored'] += 1
+            totals['score_sum'] += row['score']
+            totals['base_score_sum'] += row['base_score']
+
+    def summary(self, persona: str) -> dict:
+        """Exact card counters and full-log hash, maintained on append; no request-time file read."""
+        return dict(self.totals.get(persona, dict.fromkeys(TOTAL_FIELDS, 0)), persona=persona,
+                    scope='all', log_hash=self.full_digest.hexdigest())
 
     def rows(self):
         if not self.path.exists():
@@ -68,11 +95,14 @@ class PredictionLog:
         if extra:
             raise ValueError("fields outside the log: %s" % sorted(extra))
         self.dir.mkdir(parents=True, exist_ok=True)
+        line = json.dumps({k: row[k] for k in FIELDS}, sort_keys=True) + "\n"
         with open(self.path, "a") as f:
-            f.write(json.dumps({k: row[k] for k in FIELDS}, sort_keys=True) + "\n")
+            f.write(line)
             f.flush()
             os.fsync(f.fileno())
         entry["resolved"] = True
+        self.full_digest.update(line.encode('utf-8'))
+        self._add_totals(row)
         if self.on_line is not None:
             self.on_line({k: row[k] for k in FIELDS})
         return row

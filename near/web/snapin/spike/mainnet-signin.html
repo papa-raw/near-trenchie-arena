@@ -11,7 +11,7 @@ label{display:flex;gap:8px;align-items:flex-start} input[type=checkbox]{width:20
 <!-- The file keeps its old name (make play and the wallet notes link to it); the page is testnet first. -->
 <h1>Wallet test page</h1>
 <p id="net" role="status">Network: TESTNET (play money). Use a new test account, never your own.</p>
-<p><b>1. Sign in.</b> Each button opens that wallet's own sign-in and asks for the account name. Signing in sends no transaction and moves no money.</p>
+<p><b>1. Sign in.</b> Connect wallet opens NEAR Connect's wallet chooser and asks for the account name. Signing in sends no transaction and moves no money.</p>
 <div id="btns"></div>
 <p><b>2. Add the guest key</b> (testnet only). <button id="addkey" disabled aria-describedby="addkey-why">Add ONE guest key</button> <span class="why" id="addkey-why">Sign in on testnet first.</span></p>
 <p id="approval">The wallet will ask you to approve: a key that can call only <b id="receiver">(not set)</b>, with an allowance of 0.25 NEAR for gas and no payment. If its screen names any other contract or asks for money, do not approve.</p>
@@ -36,23 +36,23 @@ label{display:flex;gap:8px;align-items:flex-start} input[type=checkbox]{width:20
     var n = net();
     $('net').className = n;
     $('net').textContent = n === 'mainnet' ? 'Network: MAINNET (a real account). Sign-in only: no key, no transaction, no money.' : 'Network: TESTNET (play money). Use a new test account, never your own.';
-    [].forEach.call($('btns').children, function (b) { b.textContent = 'Sign in with ' + b.dataset.name + ' (' + n + ')'; });
+    [].forEach.call($('btns').children, function (b) { b.textContent = 'Connect wallet (' + n + ')'; });
     var canAdd = n === 'testnet' && signedIn.testnet, canTest = n === 'testnet' && keyAdded;
     $('addkey').disabled = !canAdd; $('addkey-why').textContent = n === 'mainnet' ? 'Testnet only: switch mainnet off.' : (signedIn.testnet ? '' : 'Sign in on testnet first.');
     $('testkey').disabled = !canTest; $('testkey-why').textContent = n === 'mainnet' ? 'Testnet only: switch mainnet off.' : (keyAdded ? '' : 'Add the guest key first.');
   }
   $('receiver').textContent = W.config.marketAccount || '(no market configured: chain.js did not load)';
-  show({ network: 'testnet (default)', market: W.config.marketAccount, rpc: W.config.rpc, importCheck: W.importCheck(), shortlist: W.list(), note: 'wallets are listed as "declares testnet" only; none is marked as working until a sign-in is logged' });
-  W.list().forEach(function (w) {
-    var b = document.createElement('button'); b.dataset.name = w.name;
+  show({ network: 'testnet (default)', market: W.config.marketAccount, rpc: W.config.rpc, importCheck: W.importCheck(), note: 'Wallet choices are provided by NEAR Connect.' });
+  {
+    var b = document.createElement('button');
     b.onclick = async function () {
-      var n = net(), r = await W.connect(w.id, { network: n });
-      show({ at: new Date().toISOString(), wallet: w.id, network: n, result: r });
+      var n = net(), r = await W.connect(null, { network: n });
+      show({ at: new Date().toISOString(), wallet: r.walletId || null, network: n, result: r });
       if (r.ok && n === 'testnet') signedIn.testnet = true;
       refresh();
     };
     $('btns').appendChild(b);
-  });
+  }
   $('mainnet').onchange = function () { show({ at: new Date().toISOString(), network: net(), note: net() === 'mainnet' ? 'switched to MAINNET: sign-in only' : 'back to testnet' }); refresh(); };
   $('addkey').onclick = async function () {
     var r = await W.guestKey({ network: 'testnet', receiver: 'market', allowanceNear: '0.25' });

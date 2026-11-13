@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 import sys
 
@@ -31,8 +32,21 @@ def check_sheet(sheet: dict) -> dict:
                 **check_display_name(game['name'], game['tag']))
 
 
-def check_display_name(name: str, tag: str) -> dict:
+def check_display_name(name: str, tag: str, *, plain: bool = False) -> dict:
     """A missing private list is an explicit unchecked label, never a silent name approval."""
+    for field, value in (("name", name), ("tag", tag)):
+        if plain:  # legacy local DEV names are slugged; this never applies to a minted persona sheet
+            if not isinstance(value, str) or not value.strip() or not value.isprintable() or len(value) > 64:
+                raise ValueError('a plain DEV name needs 1 to 64 printable characters')
+            continue
+        schema = SCHEMA['properties']['game']['properties'][field]
+        errors = []
+        checker.validate(schema, value, SCHEMA, field, errors)
+        if errors:
+            raise ValueError('name or tag needs ASCII letters, digits, spaces, apostrophes or hyphens; name max 32, tag max 12')
+    if not plain and (name != name.strip() or '  ' in name or not re.search('[A-Za-z]', name)
+                      or re.search(r'(.)\1{4,}', name)):
+        raise ValueError('name needs a letter, single spaces and no run of five repeated characters')
     blocklist = load_blocklist()
     name_guard = Guard(blocklist if blocklist is not None else dict(names=[], handles=[], slurs=[]), [])
     if name_guard.reason(name) or name_guard.reason(tag):

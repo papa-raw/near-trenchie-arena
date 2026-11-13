@@ -1,15 +1,15 @@
-// The arena HUD of approved board 2 (direction C, "Wall sign"), its pure pieces: the name-tag circles, the crowd card,
+// The arena HUD of approved board 2 (direction C, "Wall sign"), its pure pieces: the name-tag circles,
 // the merged feed's slips, the wall sign's boards, the layout beside board 1's panel, the sound button's two faces, the
 // lives the circles read (caught up with the snapshot buffer) and the pre-jump card's timeline.
 // Run: node near/web/arena-board2-case.mjs   (no browser; the browser pass is the reader's)
 import assert from 'node:assert/strict';
-import { circlesModel, circlesLabel, crowdGroups, cardSpot, REACH } from './arena/pips.mjs';
+import { circlesModel, circlesLabel } from './arena/pips.mjs';
 import { slip, nameColour, contrast, GLYPH, LINES, Feed } from './arena/feed.mjs';
 import { boards, signBox, rowsFor, signUrl, WORDS, columnsHtml, Sign, nameHtml } from './arena/sign.mjs';
 import { soundFace, COPY, docsSections } from './arena/corner.mjs';
 import { readFileSync } from 'node:fs';
 import { Lives } from './arena/lives.mjs';
-import { pose, STAMP_MS, SHRINK_MS, LIFT_PX } from './arena/prejump.mjs';
+import { pose, FADE_MS } from './arena/prejump.mjs';
 import { hudLayout } from './arena/hud-layout.mjs';
 let n = 0;
 
@@ -20,22 +20,6 @@ assert.deepEqual(circlesModel(2, 1), { n: 2, filled: 1, met: false, extra: 0 });
 assert.deepEqual(circlesModel(2, 2), { n: 2, filled: 2, met: true, extra: 0 }); n++;
 assert.deepEqual(circlesModel(1, 3), { n: 1, filled: 1, met: true, extra: 2 }); n++;
 assert.equal(circlesLabel(circlesModel(3, 1)), 'predicts 3+ KOs, 1 so far'); n++;
-
-// ---- the crowd rule: three or more within reach share a card, listed left to right; pairs keep their tags
-const R = REACH.wide;
-assert.deepEqual(crowdGroups([{ id: 'a', x: 100, y: 100 }, { id: 'b', x: 150, y: 110 }], R), []); n++;
-assert.deepEqual(crowdGroups([{ id: 'c', x: 250, y: 100 }, { id: 'a', x: 100, y: 100 }, { id: 'b', x: 180, y: 120 }, { id: 'far', x: 700, y: 400 }], R), [['a', 'b', 'c']]); n++;
-const row80 = [{ id: 'a', x: 100, y: 100 }, { id: 'b', x: 180, y: 100 }, { id: 'c', x: 260, y: 100 }];   // 80 px apart
-assert.deepEqual(crowdGroups(row80, REACH.wide), [['a', 'b', 'c']]); assert.deepEqual(crowdGroups(row80, REACH.narrow), []); n++;
-const view = { w: 1440, h: 900, top: 190, bottom: 820 };
-const up = cardSpot([{ x: 700, y: 400 }, { x: 760, y: 410 }, { x: 820, y: 400 }], [], { w: 140, h: 70 }, view);
-assert.equal(up.pos, 'up'); assert.ok(up.box.y + up.box.h <= 400); n++;
-// a group under the sign: above would reach under it, so the card goes elsewhere
-const nearTop = cardSpot([{ x: 700, y: 210 }, { x: 760, y: 215 }, { x: 820, y: 210 }], [], { w: 140, h: 70 }, view);
-assert.notEqual(nearTop.pos, 'up'); assert.ok(nearTop.box.y >= view.top); n++;
-// a fighter sitting where "above" would go pushes the card aside
-const busy = cardSpot([{ x: 700, y: 500 }, { x: 760, y: 505 }, { x: 820, y: 500 }], [{ x: 760, y: 440 }], { w: 140, h: 70 }, view);
-assert.notEqual(busy.pos, 'up'); n++;
 
 // ---- the feed: one stack, the speaker set apart, one glyph per meaning
 const name = (id) => ({ leeth: 'Leeth', sat: 'Satrenchi', lou: 'Lantern Lou', bz: 'Banana Zone', mw: 'Moonwood' })[id] || id;
@@ -50,7 +34,7 @@ s = slip({ kind: 'ko', who: 'bz', victim: 'leeth', ambush: true }, name); assert
 s = slip({ kind: 'leg', who: 'leeth', victim: 'sat', item: 'Stack Sats' }, name);
 assert.deepEqual([s.cls, s.glyph, text(s)], ['leg', '◆', 'KO Satrenchi, who DROPS Stack Sats']); n++;
 s = slip({ kind: 'pred', who: 'lou', level: 2 }, name); assert.deepEqual([s.cls, s.glyph, text(s)], ['pred', '◎', 'PREDICTS 2+ KOs']); n++;
-s = slip({ kind: 'res', who: 'lou', level: 1, points: 20 }, name); assert.deepEqual([s.cls, s.glyph, text(s)], ['res', '✓', 'MADE 1+ KO: CORRECT +20 points']); n++;
+s = slip({ kind: 'res', who: 'lou', level: 1, points: 20 }, name); assert.deepEqual([s.cls, s.glyph, text(s)], ['res', '✓', 'MADE 1+ KO: correct']); n++;
 s = slip({ kind: 'escape', who: 'lou', hp: 4 }, name); assert.deepEqual([s.glyph, text(s)], ['✚', 'ESCAPES at 4 HP']); n++;
 assert.equal(new Set(Object.values(GLYPH)).size, Object.keys(GLYPH).length); n++;   // one meaning per symbol
 assert.deepEqual(LINES, { wide: 5, narrow: 3 }); n++;
@@ -71,8 +55,8 @@ const json = { day: '2026-11-12', most_kos: [{ persona: 'bz', house: true, kos: 
     most_correct_day: { players: [{ persona: 'lou', house: false, reward_points: 140, correct: 4 }], house: [{ persona: 'sail', house: true, reward_points: 120, correct: 6 }] } } };
 let b = boards(json, 'players', 3);
 assert.deepEqual(b.ko.rows, [{ id: 'lou', num: 3 }, { id: 'cass', num: 2 }, { id: 'sid', num: 1 }]);
-assert.deepEqual(b.pr.rows, [{ id: 'lou', num: 140, count: 4 }]); n++;
-b = boards(json, 'house', 1); assert.deepEqual([b.ko.rows, b.pr.rows], [[{ id: 'bz', num: 7 }], [{ id: 'sail', num: 120, count: 6 }]]); n++;
+assert.deepEqual(b.pr.rows, [{ id: 'lou', num: 4, count: 4 }]); n++;
+b = boards(json, 'house', 1); assert.deepEqual([b.ko.rows, b.pr.rows], [[{ id: 'bz', num: 7 }], [{ id: 'sail', num: 6, count: 6 }]]); n++;
 // a host without the boards object: both boards empty, never the day's KOs under "this hour"
 b = boards({ day: '2026-11-12', most_kos: json.most_kos, most_correct: json.most_correct }, 'house', 3);
 assert.deepEqual(b, { ko: { rows: [] }, pr: { rows: [] } }); n++;
@@ -104,7 +88,7 @@ assert.equal(soundFace('waiting for a click').label, 'Sound'); n++;
 assert.equal(COPY.how, undefined); assert.doesNotMatch(JSON.stringify(COPY), /\b(bet|stake|pot|payout|terms)\b/i); n++;   // the text lives in docs.html only
 // How it works renders the docs page's own <main> sections (the one source, near/web/docs.html), sanitised
 const docs = docsSections(readFileSync(new URL('./docs.html', import.meta.url), 'utf8'));
-assert.deepEqual(docs.map((x) => x.id), ['arena', 'watch', 'ai', 'cost', 'fight', 'gear', 'predictions', 'leaderboards', 'onchain', 'rules']);
+assert.deepEqual(docs.map((x) => x.id), ['arena', 'watch', 'ai', 'cost', 'fight', 'gear', 'predictions', 'leaderboards', 'onchain']);
 for (const x of docs) {
   assert.match(x.html, /^<h3>[^<]+<\/h3>/, x.id + ' opens with its title, one level under the dialog');
   assert.doesNotMatch(x.html, /<(?!\/?(h3|h4|p|ul|ol|li|a|strong|em|code)\b)[a-z]/i, x.id + ': only the text tags');
@@ -136,12 +120,12 @@ lv.receive({ cass: { life: 'cass:2', level: 1, kos: 1, points: 150 } }, 4000);
 assert.deepEqual(lv.advance(4200), [{ id: 'cass', life: 'cass:2', level: 1, points: 150 }]); n++;   // a new life is met again
 lv.receive(null, 5000); assert.equal(lv.get('cass'), null); n++;
 
-// ---- the pre-jump: stamps above the drop point, then shrinks into the landing spot and fades
-const from = { x: 500, y: 400 }, to = { x: 510, y: 330 };
-assert.equal(pose(-1, from, to), null);
-let p = pose(0, from, to); assert.deepEqual([p.x, p.y, p.scale, p.opacity], [500, 400 - LIFT_PX, 1.4, 0]); n++;
-p = pose(STAMP_MS, from, to); assert.deepEqual([p.x, p.y, p.scale, p.opacity], [500, 400 - LIFT_PX, 1, 1]); n++;
-p = pose(STAMP_MS + SHRINK_MS, from, to); assert.deepEqual([p.x, p.y, +p.scale.toFixed(3), p.opacity], [510, 330, 0.4, 0]); n++;
+// ---- pre-jump: stationary fade, constant scale
+const from = { x: 500, y: 400 };
+assert.equal(pose(-1, from), null);
+let p = pose(0, from); assert.deepEqual([p.x, p.y, p.scale, p.opacity], [500, 400, 1, 1]); n++;
+p = pose(FADE_MS / 2, from); assert.deepEqual([p.x, p.y, p.scale, p.opacity], [500, 400, 1, 0.5]); n++;
+p = pose(FADE_MS, from); assert.deepEqual([p.x, p.y, p.scale, p.opacity], [500, 400, 1, 0]); n++;
 
 // ---- fixes from the first review
 // L4: a 0-KO row (or 0 points) is not a place on the board

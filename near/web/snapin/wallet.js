@@ -7,11 +7,7 @@
  * Tests inject {NearApi, NearConnectLib} instead.
  *
  * Every function returns a Promise of a plain object; none throws for a wallet or network error:
- *   {ok:true, ...}  or  {ok:false, kind:'no-lib'|'unknown-wallet'|'rejected'|'wrong-network'|'no-session'|'receiver'|'no-key'|'other', message}
- *
- * Status words: every shortlisted wallet is `declares: 'testnet'` (its own manifest says so; read from the
- * near-connect manifest). It stays "declares" until a real sign-in with that wallet is logged in the
- * build's verification log. Nothing here ever says a wallet "works".
+ *   {ok:true, ...}  or  {ok:false, kind:'no-lib'|'no-list'|'framed'|'rejected'|'wrong-network'|'no-session'|'receiver'|'no-key'|'other', message}
  *
  * The guest key: generated in the page (near-api-js KeyPairEd25519), the secret held in a closure
  * (memory only), never sent anywhere, never returned. The connected wallet is asked to add ONE
@@ -20,30 +16,13 @@
  * The market account and the RPC come from chain.js (load it first); config.marketAccount = null asks for the old
  * receiver LABEL instead (tests only). testKey() makes the one zero-deposit call through the guest key.
  *
- * The wallet list: wallets-manifest.json beside this file, a reviewed copy served from this origin (never near-connect's
- * default list, which it fetches unpinned from GitHub branches at run time). Copied 2026-11-11 from near-connect's default
- * manifest at commit e71894f7e69d9ea66a4d185b1297ac1d34f16b2a (azbang/near-connect, which hot-dao/near-selector now
- * redirects to), upstream sha256 a90e85a75a154025297db2bbe06de940f3bbdcac4782e3f59eb01f8ed7fae580; our copy keeps the four
- * shortlisted entries and pins the GitHub-hosted executors to commits (its _reviewed block lists each pin and its sha256).
- * Copy sha256: 0abc49fb667fa81caf48ec3c6acfffa99f39453dce1326ea32cedc0f1a7ede6f. A wallet is picked by its manifest id AND its
- * executor URL (both pinned below), and must be the selector's own sandboxed wallet: never by display name, never a wallet a
- * parent frame or another script injected, and never inside a frame.
+ * Wallet discovery and selection belong to NEAR Connect 0.12.0: its default runtime manifest, sandboxed wallet
+ * integrations and injected-wallet detection. No app shortlist, executor pins or display-name matching.
+ * https://docs.near.org/tools/near-connect
  */
 (function (root) {
   'use strict';
 
-  // F71 shortlist: our id, the label, and the reviewed manifest's id and executor URL (wallets-manifest.json). A manifest entry
-  // is used only when both match exactly; a look-alike (another id, or the same id with another executor) is refused.
-  var SHORTLIST = [
-    { id: 'meteor', name: 'Meteor', manifestId: 'meteor-wallet', executor: 'https://raw.githubusercontent.com/Meteor-Wallet/meteor_wallet_sdk/6369ad789d2f3aaf8e6ccb065021723111027174/storage/meteor-near-connect-latest.js' },
-    { id: 'intear', name: 'Intear', manifestId: 'intear-wallet', executor: 'https://wallet.intear.tech/near-selector.js' },
-    { id: 'nightly', name: 'Nightly', manifestId: 'nightly-wallet', executor: 'https://raw.githubusercontent.com/azbang/near-connect/e71894f7e69d9ea66a4d185b1297ac1d34f16b2a/repository/nightly.js' },
-    { id: 'ethereum-wallets', name: 'Ethereum Wallets', manifestId: 'ethereum-wallets', executor: 'https://evm-on-near.dev/executor.js' }
-  ];
-  // the reviewed list's address, beside this script (the pages that load it sit at different depths)
-  var MANIFEST_URL = (function () {
-    try { var src = root.document && root.document.currentScript && root.document.currentScript.src; return src ? new URL('wallets-manifest.json', src).href : null; } catch (e) { return null; }
-  })();
   var LIST_FAILED = 'Wallet list didn’t load; try again.';
   var DEFAULT_ALLOWANCE_NEAR = '0.25';
 
@@ -51,7 +30,7 @@
   var CHAIN = root.SNAPIN_CHAIN || (typeof module !== 'undefined' && module.exports && typeof require === 'function' ? (function () { try { return require('./chain.js'); } catch (e) { return null; } })() : null) || {};
   var config = { marketAccount: CHAIN.marketAccount || null, rpc: CHAIN.rpc || null }; // the market contract's full account id; the testnet RPC
   var TEST_GAS = '10000000000000';      // 10 Tgas for the test call, paid from the key's allowance
-  var sessions = {};                    // network -> {connector, wallet, accountId, manifestId, shortId}
+  var sessions = {};                    // network -> {connector, wallet, accountId, manifestId}
   var guest = null;                     // {accountId, publicKey, keyPair}  (memory only)
 
   function libs(opts) {
@@ -66,51 +45,25 @@
     return 'other';
   }
 
-  function list() {
-    return SHORTLIST.map(function (w) { return { id: w.id, name: w.name, declares: 'testnet', verified: false }; });
-  }
-
-  // The selector always gets our list (the reviewed file, or a test's own): with no manifest it would fetch its GitHub default.
-  function newConnector(L, network, opts) {
-    var o = { network: network };
-    if (opts && opts.connectorOptions) for (var k in opts.connectorOptions) o[k] = opts.connectorOptions[k];
-    o.manifest = (opts && opts.manifest) || MANIFEST_URL;
-    if (!o.manifest) return null;
-    return new L.C.NearConnector(o);
-  }
-
-  // Must be called from a user gesture (a click): the wallet opens a popup or an iframe.
+  // A null id opens NEAR Connect's own chooser; an explicit id is passed unchanged to the SDK. Call from a user click.
   async function connect(id, args, opts) {
     var network = (args && args.network) || 'mainnet';
     if (network !== 'mainnet' && network !== 'testnet') return fail('other', 'network must be mainnet or testnet');
-    var entry = SHORTLIST.filter(function (w) { return w.id === id; })[0];
-    if (!entry) return fail('unknown-wallet', 'not on the F71 shortlist: ' + id);
     var L = libs(opts);
-    if (!L.C || !L.C.NearConnector || !L.C.SandboxWallet) return fail('no-lib', 'near-connect bundle not loaded');
-    // a parent frame can hand the selector a wallet of its own under a shortlisted id: sign in only from a top-level page
+    if (!L.C || !L.C.NearConnector) return fail('no-lib', 'near-connect bundle not loaded');
+    // Sign in from our top-level page; the SDK may otherwise accept a parent-frame wallet.
     try { if (root.top && root.top !== root) return fail('framed', 'Open this page in its own tab to sign in: wallets do not open inside another site.'); }
     catch (e) { return fail('framed', 'Open this page in its own tab to sign in: wallets do not open inside another site.'); }
     try {
-      var connector = newConnector(L, network, opts);
-      if (!connector) return fail('no-list', LIST_FAILED);
-      await connector.whenManifestLoaded.catch(function () { /* handled below: empty list */ });
-      var wallets = (connector.manifest && connector.manifest.wallets) || [];
-      if (!wallets.length) return fail('no-list', LIST_FAILED);
-      var found = wallets.filter(function (m) { return m && m.id === entry.manifestId; })[0];
-      if (!found) return fail('unknown-wallet', entry.name + ' is not in the reviewed wallet list');
-      if (found.executor !== entry.executor || found.type !== 'sandbox') return fail('untrusted-wallet', entry.name + '’s entry is not the reviewed one, so it was not opened');
-      var declared = !!(found.features && found.features[network]);
-      if (!declared) return fail('wrong-network', entry.name + ' does not declare ' + network);
-      // the wallet the selector will open: its own sandboxed wallet built from that entry, not one injected under the same id
-      var mine = function (w) { return !!w && w instanceof L.C.SandboxWallet && !!w.manifest && w.manifest.id === entry.manifestId && w.manifest.executor === entry.executor && !w.manifest.debug; };
-      var registered = await connector.wallet(found.id).catch(function () { return null; });
-      if (!mine(registered)) return fail('untrusted-wallet', entry.name + ' was replaced on this page by a wallet that is not the reviewed one, so it was not opened');
-      var wallet = await connector.connect({ walletId: found.id });
-      if (wallet !== registered || !mine(wallet)) return fail('untrusted-wallet', entry.name + ' was swapped while it opened; sign-in not kept');
+      var connector = new L.C.NearConnector({ network: network });
+      await connector.whenManifestLoaded;
+      if (!connector.availableWallets.length) return fail('no-list', LIST_FAILED);
+      var wallet = await connector.connect(id ? { walletId: id } : {});
       var accounts = await wallet.getAccounts({ network: network });
       if (!accounts || !accounts.length) return fail('rejected', 'wallet returned no account');
-      sessions[network] = { connector: connector, wallet: wallet, accountId: accounts[0].accountId, manifestId: found.id, shortId: id };
-      return { ok: true, network: network, walletId: id, manifestId: found.id, accountId: accounts[0].accountId, accounts: accounts.map(function (a) { return a.accountId; }), declaredInManifest: true };
+      var manifest = wallet.manifest;
+      sessions[network] = { connector: connector, wallet: wallet, accountId: accounts[0].accountId, manifestId: manifest.id };
+      return { ok: true, network: network, walletId: manifest.id, walletName: manifest.name, manifestId: manifest.id, accountId: accounts[0].accountId, accounts: accounts.map(function (a) { return a.accountId; }) };
     } catch (e) {
       return fail(errKind(e), e && e.message || e);
     }
@@ -244,7 +197,7 @@
   }
 
   var api = {
-    list: list, connect: connect, guestKey: guestKey, guestSign: guestSign, guestPublicKey: guestPublicKey,
+    connect: connect, guestKey: guestKey, guestSign: guestSign, guestPublicKey: guestPublicKey,
     forgetGuestKey: forgetGuestKey, importCheck: importCheck, config: config, testKey: testKey,
     signMessage: signMessage, callContract: callContract, account: account,
     _reset: function () { sessions = {}; guest = null; },

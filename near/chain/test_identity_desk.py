@@ -369,7 +369,7 @@ class FailClosed(unittest.TestCase):
         d, idc, *_ = desk(nft, inventory(), {PLAYER: {pk}}, state_dir=state)
         page = Page(d, sk, pk)
         idc.fail_views = ("nft_tokens_for_owner",)
-        with self.assertRaisesRegex(identity.IdentityError, "could not read player-one.testnet's trenchies") as e:
+        with self.assertRaisesRegex(identity.IdentityError, "could not read player-one.testnet's Trenchies") as e:
             page.do("claim", {"preset": "hunter-lunge"})
         self.assertNotIn("SECRET", str(e.exception))
         self.assertEqual({t["owner"] for t in nft.tokens.values()}, {"custody.id-test.testnet"})
@@ -445,7 +445,7 @@ class ShadowBudget(unittest.TestCase):
             nft.tokens[f"paid-{i}"] = {"owner": PLAYER, "preset_id": "preset-1", "digest": f"{i:064x}", "sale_ready": False}
             page.do("confirm", {"token_id": f"paid-{i}"})
         nft.tokens["paid-x"] = {"owner": PLAYER, "preset_id": "preset-1", "digest": "e" * 64, "sale_ready": False}
-        with self.assertRaisesRegex(identity.IdentityError, "all the new trenchies it can this hour"):
+        with self.assertRaisesRegex(identity.IdentityError, "all the new Trenchies it can this hour"):
             page.do("confirm", {"token_id": "paid-x"})
 
 
@@ -756,7 +756,7 @@ class HostedRoom(unittest.TestCase):
         self.assertEqual(st, 400)
         st, out = self.post("/dev/identity", page.env("permit", {"preset": "hunter-lunge", "persona_digest": "ab" * 32, "name": "Pike"}))
         self.assertEqual(st, 400)
-        self.assertIn("send the trenchie's sheet", out["error"])
+        self.assertIn("send the Trenchie's sheet", out["error"])
         st, out = self.post("/dev/identity", page.env("permit", {"preset": "hunter-lunge", "sheet": sheet}))
         self.assertEqual(st, 200, out)
         self.assertEqual((out["args"]["permit"]["name"], out["args"]["permit"]["persona_digest"]),

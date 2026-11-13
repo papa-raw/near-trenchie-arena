@@ -312,7 +312,7 @@ class DoorPlanStop(unittest.TestCase):
             send({'plan': {'week_used_pct': 5}})
             stop = until('plan_stop')
             self.assertEqual(stop['kind'], 'plan_stop', stop)
-            self.assertEqual(stop['summary'], 'weekly limit reached: 5% of 5%; your trenchie fights on its last plan')
+            self.assertEqual(stop['summary'], 'weekly limit reached: 5% of 5%; your Trenchie fights on its last plan')
             time.sleep(0.6)
             send({'v': 1, 'stance': 'berserk'})
             refused = until('ack')

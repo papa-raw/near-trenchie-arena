@@ -34,13 +34,13 @@
   var OFF_STATES = ['no-key', 'no-cap', 'capped', 'failed', 'no-storage', 'no-locks'];
   // why the box is off, or '' when it can take an order
   function offReason() {
-    if (!root.SnapBrain) return 'Your trenchie can’t take orders on this page: its AI is not loaded here.';
-    if (!brain()) return 'Your trenchie can’t take orders yet: this version of its AI has no order channel.';
+    if (!root.SnapBrain) return 'Your Trenchie can’t take orders on this page: its AI is not loaded here.';
+    if (!brain()) return 'Your Trenchie can’t take orders yet: this version of its AI has no order channel.';
     var st = S.brain && S.brain.state;
     // no AI door: orders have nowhere to go from this page (brain.js 'no-door'); an agent door: the agent takes orders in its
     // own session, through SNAP.md ('agent-door'). Both are known from the first frame (brain.js gateNow at the room's "in").
     if (st === 'no-door') return 'Pick an AI door to give orders.';
-    if (st === 'agent-door') return 'Your agent drives this trenchie (it joined through SNAP.md); type orders in its session.';
+    if (st === 'agent-door') return 'Your agent drives this Trenchie (it joined through SNAP.md); type orders in its session.';
     // every state in which brain.js sends no call: the box is off with the brain's own words (it never offers "Try again")
     if (OFF_STATES.indexOf(st) >= 0) return (S.brain.chip || 'Your AI is not driving right now.');
     return '';
@@ -66,7 +66,7 @@
     var shown = t.slice(compact ? -2 : -6);
     return '<ol class="chat-turns" aria-label="Recent orders and replies">' + shown.map(function (x) {
       if (x.who === 'owner') return '<li class="owner"><span class="who">You</span>' + esc(x.text) + '</li>';
-      if (x.who === 'trenchie') return '<li class="trenchie"><span class="who">' + esc(x.name || 'Your trenchie') + '</span>“' + esc(x.text) + '”</li>';
+      if (x.who === 'trenchie') return '<li class="trenchie"><span class="who">' + esc(x.name || 'Your Trenchie') + '</span>“' + esc(x.text) + '”</li>';
       return '<li class="host">' + receiptLine(x.receipt || { status: x.status || x.state, summary: x.text, fixes: x.fixes }) + '</li>';
     }).join('') + '</ol>';
   }
@@ -77,9 +77,9 @@
   function doorHtml(o, st) {
     var link = '<a class="chat-door-link" href="' + esc(AI_STEP) + '">Pick an AI door</a>';
     var line = st === 'no-door' ? (o.card ? link + ' to give orders.' : 'No AI door picked: ' + link + ' to give orders.')
-      : (o.card ? 'Orders go to your agent: type them in its session.' : 'Your agent drives this trenchie (it joined through SNAP.md); type orders in its session.');
+      : (o.card ? 'Orders go to your agent: type them in its session.' : 'Your agent drives this Trenchie (it joined through SNAP.md); type orders in its session.');
     return '<div class="chat chat-door' + (o.compact ? ' compact' : '') + '" data-chat data-door="' + st + '">' +
-      '<div class="eyebrow">' + (o.compact ? 'Orders' : 'Orders for ' + esc(o.name || 'your trenchie')) + '</div>' +
+      '<div class="eyebrow">' + (o.compact ? 'Orders' : 'Orders for ' + esc(o.name || 'your Trenchie')) + '</div>' +
       '<p class="sub" id="order-state" role="status">' + line + '</p></div>';
   }
   function html(o) {
@@ -91,8 +91,8 @@
     var reply = rt ? '<div class="chat-reply' + (compact ? ' one-line' : '') + '" role="status" title="' + esc(rt) + '">“' + esc(rt) + '”</div>' : '';
     var receipt = last && last.receipt ? receiptLine(last.receipt, compact) : '';
     return '<form class="chat' + (compact ? ' compact' : '') + '" data-chat novalidate>' +
-      (compact ? '' : '<div class="eyebrow">Orders for ' + esc(o.name || 'your trenchie') + '</div>') +
-      '<label class="field" for="order">' + (compact ? 'Order' : 'Tell your trenchie what to do') + '</label>' +
+      (compact ? '' : '<div class="eyebrow">Orders for ' + esc(o.name || 'your Trenchie') + '</div>') +
+      '<label class="field" for="order">' + (compact ? 'Order' : 'Tell your Trenchie what to do') + '</label>' +
       '<textarea id="order" maxlength="' + MAX + '" rows="' + (compact ? 1 : 2) + '" placeholder="' + (off ? '' : 'Grab the loot and stay away from fights') + '"' + (off ? ' disabled' : S.sending ? ' readonly aria-busy="true"' : '') + ' aria-describedby="order-count order-state">' + esc(S.draft) + '</textarea>' +
       '<div class="chat-row"><span class="sub" id="order-count">' + n + ' / ' + MAX + '</span>' +
       '<button type="submit" class="secondary chat-send" data-act="chat-send"' + (off || S.sending || !S.draft.trim() ? ' disabled aria-disabled="true"' : '') + '>' + (S.sending ? 'Sending…' : 'Send order') + '</button></div>' +
@@ -102,12 +102,12 @@
   async function send(rerender) {
     var b = brain(), text = S.draft.trim();
     if (!b || S.sending || offReason()) return;   // an off box sends nothing (Enter in a stale form included)
-    if (!text || text.length > MAX) { S.error = 'Write what you want your trenchie to do (1–300 characters).'; return rerender && rerender(); }
+    if (!text || text.length > MAX) { S.error = 'Write what you want your Trenchie to do (1–300 characters).'; return rerender && rerender(); }
     S.sending = true; S.error = ''; rerender && rerender();
     try {
       var r = await b.tell(text);
       if (r && (r.reply || r.receipt)) { S.last = r; S.draft = ''; }
-      else S.error = (r && r.chip) || 'Your trenchie did not answer. Try again in a moment.';
+      else S.error = (r && r.chip) || 'Your Trenchie did not answer. Try again in a moment.';
     } catch (e) { S.error = 'The order did not go through: ' + (e && e.message ? e.message : 'no answer') + '. Try again.'; }
     S.sending = false; S.more = false; rerender && rerender();
     var box = root.document && root.document.querySelector('[data-chat] #order');   // a keyboard owner types the next order straight away
