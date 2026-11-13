@@ -72,7 +72,7 @@
   };
   // the trenchie panel on the arena page (board 1's fight, thinking, changecap, capped, bench, agent and closed states)
   C.panel = {
-    life: 'Life {life} · {source}', session: '{agent} session', hp: 'HP', leave: 'Leave', leaving: '{name} is swimming home…', leaveFailed: 'Could not leave: {why}. Try Leave again.', leaveAgent: 'Ask your agent to leave the arena from its session.', close: 'Close panel',
+    life: 'Life {life} · {source}', session: '{agent} session', hp: 'HP', leave: 'Leave', leaveConfirm: 'Leave the arena? This life ends', leaving: '{name} is swimming home…', leaveFailed: 'Could not leave: {why}. Try Leave again.', leaveAgent: 'Ask your agent to leave the arena from its session.', close: 'Close panel',
     states: { fight: 'Fighting', thinking: 'Thinking…', bench: 'Bench · held', benchDown: 'Bench', capped: 'Own tactics' },
     gearH: 'Equipped', bag: 'Bag · {n}', bagHint: 'Swap on the bench.', slots: { head: 'Head', body: 'Body', weapon: 'Weapon', trinket: 'Trinket' },
     money: { hour: 'This hour {spent} of your {cap} cap', visit: 'This visit {visit}', rate: 'About $0.10 an hour', change: 'Change cap', resets: 'Resets at {time}', set: 'Set cap', caps: ['$0.10', '$0.20', '$0.50', '$1.00'] },

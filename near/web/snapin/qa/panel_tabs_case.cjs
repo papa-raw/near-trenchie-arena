@@ -15,9 +15,9 @@ if (process.argv.includes('--markup-only')) {
     ['trenchie.snapin.cap', '0.1']
   ]);
   const listeners = {}, saved = JSON.parse(store.get('trenchie.snapin.v1'));
-  let phase = 'in', leaveCalls = 0, finishLeave;
+  let phase = 'in', leaveCalls = 0, finishLeave, now = Date.now();
   const context = vm.createContext({
-    URL, URLSearchParams, innerWidth: 390, location: { href: 'http://localhost/panel-tabs-case', search: '' },
+    URL, URLSearchParams, setTimeout, clearTimeout, Date: class extends Date { static now() { return now; } }, innerWidth: 390, location: { href: 'http://localhost/panel-tabs-case', search: '' },
     localStorage: { getItem: (key) => store.get(key) || null, setItem: (key, value) => store.set(key, value) },
     document: { addEventListener: (kind, fn) => { listeners[kind] = fn; }, createElement: () => ({ querySelector: () => null, contains: () => true }), body: { appendChild() {} } },
     addEventListener() {}, dispatchEvent() {}, requestAnimationFrame() {}, CustomEvent: function () {},
@@ -43,7 +43,7 @@ if (process.argv.includes('--markup-only')) {
   phase = 'joining'; context.SnapPanel.render();
   assert.match(context.SnapPanel.state.el.innerHTML, /data-pn="leave" disabled/, 'Leave is disabled while joining');
   clickLeave(); assert.equal(leaveCalls, 0, 'a stale click cannot leave during joining');
-  phase = 'in'; context.SnapPanel.render(); clickLeave();
+  phase = 'in'; context.SnapPanel.render(); clickLeave(); now += 600; clickLeave();
   assert.equal(leaveCalls, 1, 'Leave uses the room leave API');
   assert.equal(context.SnapPanel.state.leaving, true);
   assert.match(context.SnapPanel.state.el.innerHTML, /Coral Scout is swimming home/);
@@ -173,6 +173,8 @@ async function reachable(locator) {
       await page.evaluate(() => { roomPhase = 'in'; SnapPanel.render(); });
       const keptBefore = await page.evaluate(() => localStorage.getItem('trenchie.snapin.v1'));
       await leave.click();
+      await page.waitForTimeout(600);
+      await page.getByRole('button', { name: 'Leave the arena? This life ends', exact: true }).click();
       await page.waitForFunction(() => SnapPanel.state.leaving);
       assert.equal(await leave.isDisabled(), true);
       assert.match(await page.locator('.leave-msg').innerText(), /Coral Scout is swimming home/);

@@ -22,6 +22,8 @@
   })();
   if (!C) return;
   var SAVE = 'trenchie.snapin.v1', CAP_STORE = 'trenchie.snapin.cap', SPEND_STORE = 'trenchie.snapin.brain.spend', OPEN_STORE = 'trenchie.panel.open', TURNS = 'trenchie.panel.turns.';
+  var LEAVE_CONFIRM_MS = 5000; // a second activation must arrive within five seconds
+  var LEAVE_CONFIRM_MIN_MS = 500; // ignore accidental double clicks and double taps
   var PRESETS = ['Brawler Swing', 'Hunter Lunge', 'Survivor Beam', 'Looter Lob', 'Brawler Zap'];
   var SLOTS = ['head', 'body', 'weapon', 'trinket'];
   var ICON = {   // one drawing per slot (the item's own still is the card's)
@@ -41,7 +43,7 @@
   function draft() { try { return JSON.parse(ls.get(SAVE) || '{}') || {}; } catch (e) { return {}; } }
 
   var S = { open: ls.get(OPEN_STORE) !== '0', tab: 'chat', capEdit: false, capPick: null, raisePick: null, corner: null, codeLog: null, brain: null, draft: '', sending: false,
-            note: '', turns: [], visit: Date.now(), timer: null, el: null, room: null, swapMsg: '', leaving: false, leaveMsg: '' };
+            note: '', turns: [], visit: Date.now(), timer: null, el: null, room: null, swapMsg: '', leaving: false, leaveMsg: '', leaveUntil: 0, leaveFor: '', leaveTimer: null };
 
   // ------------------------------------------------------------------ who is mine, from which source
   function mine() {
@@ -75,8 +77,8 @@
     var source = m.plan ? F(C.session, { agent: m.agent }) : m.door;
     var room = root.SnapRoom, rs = room && room.status(), remote = m.plan && !(rs && rs.fighter && rs.fighter.id === m.id);
     var busy = S.leaving || (rs && /^(joining|leaving)$/.test(rs.phase));
-    var leave = '<button type="button" class="plate leave" data-pn="leave"' + (busy || remote || !room || !room.leave ? ' disabled' : '') + (remote ? ' title="' + C.leaveAgent + '"' : '') + '>' + C.leave + '</button>';
-    return '<div class="ph"><img src="' + avatar(m) + '" alt=""><div class="ph-mid"><h2>' + esc(m.name) + '</h2><div class="sub">' + esc(F(C.life, { life: m.life || 1, source: source }).replace(/ · $/, ''))   /* no AI door: no source after the dot */ + '</div>' + hpRow + '</div>' +
+    var leave = '<button type="button" class="plate leave" data-pn="leave"' + (busy || remote || !room || !room.leave ? ' disabled' : '') + (remote ? ' title="' + C.leaveAgent + '"' : '') + '>' + (S.leaveUntil ? C.leaveConfirm : C.leave) + '</button>';
+    return '<div class="ph' + (S.leaveUntil ? ' leave-armed' : '') + '"><img src="' + avatar(m) + '" alt=""><div class="ph-mid"><h2>' + esc(m.name) + '</h2><div class="sub">' + esc(F(C.life, { life: m.life || 1, source: source }).replace(/ · $/, ''))   /* no AI door: no source after the dot */ + '</div>' + hpRow + '</div>' +
       '<div class="ph-r"><div class="icons">' + leave + '<button type="button" class="ib plate" data-pn="close" aria-label="' + C.close + '">×</button></div></div></div>';
   }
   function equipped() { var b = S.corner && S.corner.bench; return b && Array.isArray(b.equipped) ? SLOTS.map(function (k) { return b.equipped.filter(function (x) { return x.slot === k; })[0]; }).filter(Boolean) : []; }
@@ -194,16 +196,19 @@
   // ------------------------------------------------------------------ draw, paint, keep focus and the log's place
   function render() {
     var m = mine(), el = S.el;
+    if (S.leaveUntil && (!m || !S.open || m.id !== S.leaveFor || Date.now() >= S.leaveUntil)) resetLeave();
     if (!m) { if (el) { el.innerHTML = ''; el.hidden = true; } root.dispatchEvent(new root.CustomEvent('snappanel', { detail: { shown: false } })); return; }
     if (!el) { el = S.el = doc.createElement('div'); el.id = 'b1-panel'; doc.body.appendChild(el); }
     el.hidden = false; el.className = 'b1p ' + (phone() ? 'w390' : 'w1440') + ' final';
     var f = doc.activeElement, keep = f && f.id === 'pn-order' ? [f.selectionStart, f.selectionEnd] : null, log = el.querySelector('#pn-log');
+    var keepLeave = f && f.dataset && f.dataset.pn === 'leave';
     if (log && log.clientHeight) { S.logAtEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 8; S.logTop = log.scrollTop; }
     var gear = el.querySelector('#pn-gear'); if (gear && gear.clientHeight) S.gearTop = gear.scrollTop;
     el.innerHTML = html(m); S.lastShape = shape(); S.lastLog = logShape();
     var nl = el.querySelector('#pn-log'); if (nl) nl.scrollTop = S.logAtEnd !== false ? nl.scrollHeight : S.logTop || 0;
     var ng = el.querySelector('#pn-gear'); if (ng) ng.scrollTop = S.gearTop || 0;
     if (keep && S.tab === 'chat') { var t = el.querySelector('#pn-order'); if (t) { t.focus({ preventScroll: true }); try { t.setSelectionRange(keep[0], keep[1]); } catch (e) { /* none */ } } }
+    if (keepLeave) { var lb = el.querySelector('[data-pn="leave"]'); if (lb && !lb.disabled) lb.focus({ preventScroll: true }); }
     root.requestAnimationFrame(function () { paint(el); });
     root.dispatchEvent(new root.CustomEvent('snappanel', { detail: { shown: true, open: S.open } }));
   }
@@ -282,6 +287,21 @@
     render();
   }
   function setCap(v) { if (v > 0) ls.set(CAP_STORE, String(v)); }
+  function resetLeave() {
+    root.clearTimeout(S.leaveTimer); S.leaveTimer = null; S.leaveUntil = 0; S.leaveFor = '';
+  }
+  function confirmLeave() {
+    var R = root.SnapRoom, rs = R && R.status(), m = mine();
+    if (!m || !R || !R.leave || !rs || !rs.fighter || rs.fighter.id !== m.id || S.leaving || /^(joining|leaving)$/.test(rs.phase)) return;
+    var now = Date.now(), confirmed = S.leaveFor === m.id && now < S.leaveUntil;
+    // A rapid repeat keeps the original confirmation window and timeout.
+    if (confirmed && now - (S.leaveUntil - LEAVE_CONFIRM_MS) < LEAVE_CONFIRM_MIN_MS) return;
+    resetLeave();
+    if (confirmed) { leave(); return; }
+    S.leaveUntil = now + LEAVE_CONFIRM_MS; S.leaveFor = m.id;
+    S.leaveTimer = root.setTimeout(function () { resetLeave(); render(); }, LEAVE_CONFIRM_MS);
+    render();
+  }
   async function leave() {
     var R = root.SnapRoom, rs = R && R.status(), m = mine();
     if (!m || !R || !R.leave || !rs || !rs.fighter || rs.fighter.id !== m.id || S.leaving || /^(joining|leaving)$/.test(rs.phase)) return;
@@ -300,13 +320,15 @@
     var button = S.el.querySelector('#pn-tab-' + tab); if (button) button.focus({ preventScroll: true });
   }
   doc.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-pn]'); if (!b || !S.el || !S.el.contains(b) || b.disabled) return;
+    var b = e.target.closest('[data-pn]'), own = b && S.el && S.el.contains(b);
+    if (S.leaveUntil && (!b || b.dataset.pn !== 'leave' || !S.el || !S.el.contains(b))) { resetLeave(); render(); }
+    if (!own || b.disabled) return;
     if (b.tagName === 'A') e.preventDefault();
     var a = b.dataset.pn;
     if (a === 'close') { S.open = false; ls.set(OPEN_STORE, '0'); render(); }
     else if (a === 'open') { S.open = true; S.tab = 'chat'; ls.set(OPEN_STORE, '1'); render(); }
     else if (a === 'tab:chat' || a === 'tab:gear') selectTab(a.slice(4));
-    else if (a === 'leave') leave();
+    else if (a === 'leave') confirmLeave();
     else if (a === 'capedit') { S.capEdit = true; S.capPick = null; render(); }
     else if (a.indexOf('cap:') === 0) { S.capPick = Number(a.slice(4)); render(); }
     else if (a === 'setcap') { if (S.capPick != null) setCap(S.capPick); S.capEdit = false; render(); }
@@ -319,7 +341,8 @@
   });
   doc.addEventListener('input', function (e) { if (e.target && e.target.id === 'pn-order') S.draft = e.target.value; });
   doc.addEventListener('keydown', function (e) {
-    if (e.target && e.target.id === 'pn-order' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    if (e.key === 'Escape' && S.leaveUntil) { resetLeave(); render(); }
+    else if (e.target && e.target.id === 'pn-order' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     else if (e.target && /^(pn-tab-chat|pn-tab-gear)$/.test(e.target.id) && /^(ArrowLeft|ArrowRight|Home|End)$/.test(e.key)) {
       e.preventDefault(); selectTab(e.key === 'Home' ? 'chat' : e.key === 'End' ? 'gear' : S.tab === 'chat' ? 'gear' : 'chat');
     }

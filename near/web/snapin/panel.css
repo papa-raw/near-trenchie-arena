@@ -104,7 +104,7 @@
 .b1p .hprow{display:flex;align-items:center;gap:8px;margin-top:6px}
 .b1p .hpl,.b1p .hpn{font:700 13px 'Space Mono'}
 .b1p .hprow .hp{margin:0;height:9px}
-.b1p .ph-r{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.b1p .ph-r{align-self:start;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
 .b1p .leave{min-height:36px;padding:6px 10px;font-size:13px;color:var(--danger)}
 .b1p .leave-msg{padding:0 16px 8px;font-size:13px}
 .b1p .state{font-size:13px;letter-spacing:.02em}
@@ -206,3 +206,11 @@ body.has-panel #snapin-cta,body.has-panel #order-mini{display:none!important}
 .b1p .chat-pane .order{flex-shrink:0}
 .b1p .gear-pane .gearrow{border-top:0}
 .b1p.w390 .pn-tabs{padding:6px 12px}
+
+/* Give the confirmation its own row; its longer label keeps clear of the close control. */
+.b1p .ph.leave-armed{grid-template-columns:60px minmax(0,1fr)}
+.b1p .leave-armed .ph-r{grid-column:1/-1;grid-row:1;width:100%}
+.b1p .leave-armed .icons{width:100%;align-items:flex-start}
+.b1p .leave-armed .leave{flex:1;min-width:0}
+.b1p .leave-armed .ib{flex-shrink:0}
+.b1p.w390 .ph.leave-armed{grid-template-columns:40px minmax(0,1fr)}
