@@ -34,7 +34,7 @@ Pat's call.
    told to keep its distance or attack only the weak and the busy, so nobody starts a fight. Mixed rings always
    fight (every mixed row has KOs), and the default AI never stalls.
 
-## Proposals (each Pat's call or the orchestrator's)
+## Proposals (new rules tables require approval)
 
 - **A (for integer-13's finding 4): built as integer-14** (1fd059e): with `chase` above 0
   and no gated enemy in view, walk toward the nearest enemy anywhere on the ring that passes the gate.

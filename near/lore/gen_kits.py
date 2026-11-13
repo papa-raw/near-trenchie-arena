@@ -125,7 +125,7 @@ for t, prefix in (("common", "c"), ("rare", "r")):
 # loadout (B8): in B21 order the first seven start with "commons" (the legendary + 3 commons), the last seven with
 # "rares" (3 rares + the legendary). Pat 2026-11-03: no identity label, only the loadout.
 # The first 6 legendaries keep their original pairings (signature and holder kept; two renamed
-# 2026-11-03 by an orchestrator decision, now Lifeboat and
+# 2026-11-03, now Lifeboat and
 # Builder Census; the old names are not in this repo). Round 7 (Q16): Stack Sats
 # is re-fitted to a bitcoin-coded trenchie, Satrenchi (the stack that never moves), replacing its earlier legendary;
 # the ETH-themed trenchie gets an ETH-themed magnet, Ether Stack. Laser Eyes stays with Laser Sailor. (Before round 7, Stack Sats sat with the ETH-themed trenchie.)

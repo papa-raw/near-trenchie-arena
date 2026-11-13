@@ -1,6 +1,6 @@
 """The hosted arena's identity desk: a wallet signs in, gets its trenchie on the identity NFT, and plays under it.
 
-Pat, 2026-11-12 11:58 (and bd:13955): a trenchie is an NFT on the identity contract (mainnet `trenchie_nft`, inited
+A Trenchie is an NFT on the identity contract (mainnet `trenchie_nft`, inited
 identity-only; until its deploy, a testnet rehearsal of the same code). Fights, gear and records stay on testnet, filed
 by the arena's chain writer on the testnet inventory under the identity token's id. Which network the identity lives on
 is one setting (TRENCHIE_IDENTITY_NETWORK); nothing else here changes with it.

@@ -38,7 +38,7 @@ RARES_LOADOUT = {"Illia Trenchukhin", "Eddie Lazertrench", "Mert Mumtrench", "Av
                  "Stepan Gershunode"}
 SIX_LEGENDARIES = {   # the six named legendaries, as amended: two renamed (2026-11-03) and Stack Sats re-fitted (Q16); one of the six left the house kits
     "Laser Eyes": ("beam_sweep", "Laser Sailor"),
-    "Builder Census": ("chain_storm", "Avichad"),    # renamed 2026-11-03 (orchestrator decision)
+    "Builder Census": ("chain_storm", "Avichad"),    # renamed 2026-11-03
     "Liquidity Wave": ("shockwave", "Captain Banana Zone"),
     "Stack Sats": ("magnet", "Satrenchi"),         # round 7 Q16: re-fitted to a bitcoin-coded trenchie
     "Lifeboat": ("bubble", "Kathie Moonwood"),            # renamed from its §2.5 name 2026-11-03 (same DECISION)

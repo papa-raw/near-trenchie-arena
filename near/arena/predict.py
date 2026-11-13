@@ -149,7 +149,7 @@ def leaderboards(rows, day, top=TOP, now_ns=None):
     the count of correct predictions per persona that day; only personas with a correct one.
     Ties use the persona's name. Both mix house and players. Numeric reward fields remain in the public record.
 
-    boards, the arena sign's two boards (slot 1, bd:19214), each split into players and house, top 5 each:
+    boards, the two leaderboards on the arena sign, each split into players and house, top 5 each:
     most_kos_hour, KOs in the hour before `now_ns` (seal time, the hour it ends in); and most_correct_day, as
     most_correct for `day`. Without `now_ns`, most_kos_hour is left out.
     """

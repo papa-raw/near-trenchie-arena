@@ -1,5 +1,5 @@
-// The case for qa/hosts.cjs (slot 1, 2026-11-12: six DEV arenas outlived their cases and burned ~30% CPU each for up to an
-// hour). A fixture case starts a host through the harness and then ends in each way a case can end; after each, the host
+// qa/hosts.cjs must stop hosts when their cases end: six DEV arenas outlived their cases on 2026-11-12 and burned ~30%
+// CPU each for up to an hour. A fixture case starts a host through the harness and ends in each way a case can end; the host
 // must be gone within 5 s (its port refuses connections and its process group is empty):
 //   finish (the normal end, with finish()'s own survivor check), throw, process.exit(1), SIGTERM to the case, SIGKILL to
 //   the case (no handler can run), and the harness's hard timeout. The host is a real near/arena/snap_local.py.
