@@ -148,7 +148,15 @@ class SnapClient:
         self._unexpired(request["challenge"])
         reply = self._transport.request("POST", "/room/join", raw)
         name = "QueueStatus" if isinstance(reply, dict) and reply.get("status") == "spectating" else "JoinAccepted"
-        reply = self._verified(name, reply)
+        try:
+            reply = self._verified(name, reply)
+        except SnapRefusal:
+            # A temporary admission refusal is a completed response, not a lost response. A later attempt
+            # needs a fresh challenge; transport failures still retain the exact pending request above.
+            if isinstance(reply, dict) and reply.get("type") == "error" and reply.get("code") in (
+                    "ownership_unavailable", "room_full", "rate_limited"):
+                self._pending_join = None
+            raise
         expected = dict(account_id=account_id, nft_token_id=nft_token_id, request_id=request_id,
                         request_digest=digest(request, exclude=("proof",)), message_domain=request["domain"])
         if any(reply[key] != value for key, value in expected.items()):

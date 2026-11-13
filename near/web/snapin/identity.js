@@ -3,7 +3,7 @@
  * A classic script, loaded after wallet.js; in a page it sets window.SnapIdentity, under node it is module.exports.
  * Every step is one POST /dev/identity {"op": ...} to the host (near/chain/hosted_live.py), and nothing here pretends:
  *   mode()         GET /dev/health: the host's chain_mode block (identity network, contracts), or null on a DEV host
- *   signIn()       makes this page's own key (WebCrypto Ed25519, memory only, never sent but its public half), asks
+ *   signIn()       makes this page's own key (nonextractable WebCrypto Ed25519, kept in IndexedDB), asks
  *                  for a challenge that names that key, and the wallet signs it (NEP-413, no transaction, no cost).
  *                  The host gives a sign-in id that is useless without this page's key: every later step is signed
  *                  by it (an envelope: op, sign-in id, time, the payload as text), and each is accepted once.
@@ -36,7 +36,27 @@
     var fetchFn = deps.fetch || (root.fetch && root.fetch.bind(root));
     var W = function () { return deps.wallet || root.SnapWallet; };
     var state = { mode: null, signin: null, account: null, owned: [], offer: null, pending: null };
-    var pageKey = null;   // {privateKey, pub}: memory only
+    var pageKey = null;   // {privateKey, pub}: only its public half leaves this browser
+    async function authorization(write) {
+      if (!root.indexedDB) return;
+      var db = await new Promise(function (resolve, reject) {
+        var r = root.indexedDB.open('trenchie-snapin', 1);
+        r.onupgradeneeded = function () { r.result.createObjectStore('keys'); };
+        r.onsuccess = function () { resolve(r.result); }; r.onerror = function () { reject(r.error); };
+      });
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('keys', write ? 'readwrite' : 'readonly'), store = tx.objectStore('keys');
+        var r = write ? store.put({ state: state, pageKey: pageKey }, 'identity') : store.get('identity');
+        tx.oncomplete = function () { db.close(); resolve(r.result); };
+        tx.onerror = function () { db.close(); reject(tx.error); };
+        tx.onabort = function () { db.close(); reject(tx.error); };
+      });
+    }
+    async function restoreAuthorization() {
+      if (state.signin && pageKey) return;
+      var saved = await authorization(false).catch(function () { return null; });
+      if (saved && saved.state && saved.pageKey) { state = saved.state; pageKey = saved.pageKey; }
+    }
 
     async function newPageKey() {
       var kp = await root.crypto.subtle.generateKey({ name: 'Ed25519' }, false, ['sign', 'verify']);
@@ -44,6 +64,7 @@
       return { privateKey: kp.privateKey, pub: b64url(raw) };
     }
     async function envelope(op, payload) {
+      await restoreAuthorization();
       if (!state.signin || !pageKey) throw new Error('sign in with your wallet first');
       // a random nonce in every payload: two identical steps in one millisecond still sign differently (Ed25519 is deterministic)
       var n = new Uint8Array(12); root.crypto.getRandomValues(n);
@@ -72,6 +93,7 @@
       if (!s || !s.ok) throw new Error('The wallet did not sign in: ' + ((s && s.message) || 'no answer'));
       var out = await post(fetchFn, { op: 'signin', account_id: s.accountId, public_key: s.publicKey, signature: s.signature, nonce: ch.nonce });
       state.signin = out.signin; state.account = out.account_id; state.owned = out.trenchies || []; state.offer = out.offer;
+      await authorization(true).catch(function () { /* no IndexedDB: this page can still play while open */ });
       return { account: out.account_id, owned: state.owned, offer: out.offer, network: net };
     }
 
@@ -103,7 +125,12 @@
 
     // the room join's ticket: signed by this page's key, for this token, one use, within a minute
     // o: {session_public_key, name, preset}: the ticket signs what the room will seat, so it can't seat another key
-    async function ticket(tokenId, o) { o = o || {}; return envelope('register', { nft_token_id: tokenId, session_public_key: o.session_public_key, name: o.name, preset: o.preset }); }
+    async function ticket(tokenId, o) {
+      o = o || {};
+      var payload = { nft_token_id: tokenId, session_public_key: o.session_public_key, name: o.name, preset: o.preset };
+      if (o.rejoin === true) payload.rejoin = true;
+      return envelope('register', payload);
+    }
     // the agent door's code request in chain mode (POST /snap/code): the code args, signed, for this token
     async function codeRequest(args, tokenId) { return envelope('code', Object.assign({}, args, { nft_token_id: tokenId })); }
 

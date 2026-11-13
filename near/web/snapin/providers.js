@@ -337,25 +337,26 @@
   // The prompt is what the player's own agent receives. Under 1000 chars (Claude Code's review
   // warning starts there; its hard cap is 5000). No cwd. It names SNAP.md and the one-time code.
   // The words are board 1's: 'Join Trenchie Arena. Read <SNAP.md> and follow it. Code <code>, trenchie <name>.'
-  function buildPrompt(code, snapMdUrl, name) {
+  function buildPrompt(code, snapMdUrl, name, agent) {
     var n = String(name || '').replace(/["$`\\\n\r]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
-    return 'Join Trenchie Arena. Read ' + snapMdUrl + ' and follow it. Code ' + code + (n ? ', Trenchie ' + n : '') + '.';
+    var download = agent === 'codex' ? ' Download the current client from the same site’s /snap-client.zip into a fresh folder first; do not use a local checkout.' : '';
+    return 'Join Trenchie Arena. Read ' + snapMdUrl + ' and follow it.' + download + ' Code ' + code + (n ? ', Trenchie ' + n : '') + '.';
   }
   // one double-quoted argument, safe in sh, bash and zsh ($, `, \ and " escaped)
   function dq(s) { return '"' + String(s).replace(/(["$`\\])/g, '\\$1') + '"'; }
 
   function buildHandoff(a) {
-    var prompt = buildPrompt(a.code, a.snapMdUrl, a.name);
+    var prompt = buildPrompt(a.code, a.snapMdUrl, a.name, a.agent);
     if (prompt.length >= 1000) return { ok: false, prompt: prompt };
-    // the prompt is the command's only argument: no option before it can swallow it (Pat's item 18: claude's
-    // --allowedTools takes several values and took the prompt as a tool name)
+    // The prompt is one positional argument; Codex's -c consumes exactly one configuration value.
+    // Claude gets no options (its variadic --allowedTools previously swallowed the prompt).
     var link, command;
     if (a.agent === 'claude-code') {
       link = 'claude-cli://open?q=' + encodeURIComponent(prompt);
       command = 'claude ' + dq(prompt);
     } else {
       link = 'codex://new?prompt=' + encodeURIComponent(prompt);
-      command = 'codex ' + dq(prompt);
+      command = 'codex -c sandbox_workspace_write.network_access=true ' + dq(prompt);
     }
     return { ok: true, prompt: prompt, link: link, command: command, snapUrl: a.snapMdUrl };
   }

@@ -174,7 +174,7 @@ const sameShape = (r) => r && typeof r.ok === 'boolean' && (r.ok || ('kind' in r
     ok('claude command: the shell splits it into exactly claude and the prompt (item 18)', argv.length === 2 && argv[0] === 'claude' && argv[1] === r.prompt && !argv.slice(1).some((x) => /^-/.test(x)), JSON.stringify(argv));
     ok('prompt in board 1\'s words', r.prompt === 'Join Trenchie Arena. Read http://127.0.0.1:8777/SNAP.md and follow it. Code CORAL-482, Trenchie Pebble.', r.prompt);
     const x = await P.snap.requestCode({ agent: 'codex' }, opts);
-    ok('codex link: codex://new?prompt=<text>', x.ok && x.link.startsWith('codex://new?prompt=') && decodeURIComponent(x.link.slice(19)) === x.prompt && x.command.startsWith('codex "'), JSON.stringify(x));
+    ok('codex link: codex://new?prompt=<text>', x.ok && x.link.startsWith('codex://new?prompt=') && decodeURIComponent(x.link.slice(19)) === x.prompt && x.command.startsWith('codex -c sandbox_workspace_write.network_access=true "'), JSON.stringify(x));
     const bad = await P.snap.requestCode({ agent: 'gemini' }, opts);
     ok('requestCode: unknown agent -> other, no request', bad.ok === false && bad.kind === 'other' && f.calls.length === 2, JSON.stringify(bad));
     const p = await P.snap.poll('CORAL-482', opts);
@@ -187,7 +187,7 @@ const sameShape = (r) => r && typeof r.ok === 'boolean' && (r.ok || ('kind' in r
     ok('requestCode with no endpoint (404) -> {ok:false,kind:other,status:404}', none.ok === false && none.kind === 'other' && none.status === 404, JSON.stringify(none));
     const quote = await P.snap.requestCode({ agent: 'codex', name: 'a\'b"c' }, opts);
     // Round-trip through a real shell: the quoted prompt must come back byte for byte.
-    const out = require('child_process').execFileSync('sh', ['-c', 'printf %s ' + quote.command.slice('codex '.length)]).toString();
+    const out = require('child_process').execFileSync('sh', ['-c', 'printf %s ' + quote.command.slice('codex -c sandbox_workspace_write.network_access=true '.length)]).toString();
     ok("shell quoting: a ' in the name round-trips through sh", quote.ok && out === quote.prompt, JSON.stringify([out, quote.prompt]));
   }
 

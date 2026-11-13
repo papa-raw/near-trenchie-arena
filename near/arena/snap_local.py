@@ -767,7 +767,9 @@ class DevRoom:
         row = self.codes.get(code)
         if row is None or time.time() >= row["expires_at"]:
             raise ValueError("code expired or unknown; ask the AI door for a new code")
-        if claim and row["claimed_by"] is not None:
+        # Registration can precede the first inventory/owner read. An unseated, unauthenticated attempt
+        # may restart with a new session key; a seated or paired fighter never gives this code back.
+        if claim and row["claimed_by"] is not None and (row["joined"] or row["claimed_by"] in self.round.arena.members):
             raise ValueError("code already used; ask the AI door for a new code")
         return row
 
@@ -1132,6 +1134,14 @@ class DevRoom:
         elif method == "GET" and path == "/SNAP.md" and status == 404:
             data = (ROOT / "near/SNAP.md").read_bytes()
             status, ctype = 200, "text/markdown; charset=utf-8"
+        elif method == "GET" and path == "/snap-client.zip" and status == 404:
+            from client_bundle import build_client_bundle
+            try:
+                data = build_client_bundle()
+                status, ctype, extra = 200, "application/zip", "Cache-Control: no-store\r\n"
+            except (OSError, ValueError):
+                status = 503
+                data = b'{"error":"client download unavailable; try again shortly"}'
         else:
             data = json.dumps(value, separators=(",", ":")).encode()
         paused = int(time.monotonic() < self.hold_until)

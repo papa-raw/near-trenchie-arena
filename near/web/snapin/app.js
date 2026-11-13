@@ -231,7 +231,7 @@
     if (t && t.error) terms = '<div class="sub" role="alert">' + esc(t.error) + '</div>' + btn('Try again', 'terms-reload', 'secondary');
     else if (!t) terms = '<div class="sub" role="status">Reading the arena rules…</div>';
     else terms = '<div class="eyebrow">Arena rules · version ' + esc(t.version) + '</div>' + U.line('Orders', 'one every ' + U.seconds(t.input_interval_ms)) + U.line('Rounds', U.seconds(t.segment_ms) + ', replayable');
-    return receipt(terms) + receipt('<div class="checks"><label><input type="checkbox" id="agree-ai"' + tick('agree-ai') + '>' + aiTickText() + '</label><label><input type="checkbox" id="agree-public"' + tick('agree-public') + '>Persona and banter: public</label><label><input type="checkbox" id="agree-gear"' + tick('agree-gear') + '>Gear drops: a KO can knock one worn item loose; whoever grabs it keeps it (the house never takes yours); ungrabbed for 60 s, it is gone</label></div>') +
+    return receipt(terms) + receipt('<div class="checks"><label><input type="checkbox" id="agree-ai"' + tick('agree-ai') + '>' + aiTickText() + '</label><label><input type="checkbox" id="agree-public"' + tick('agree-public') + '>Persona and banter: public</label><label><input type="checkbox" id="agree-gear"' + tick('agree-gear') + '>Gear drops: a KO can knock one worn item loose; whoever grabs it keeps it (the house never takes yours); ungrabbed for 30 s, it is gone</label></div>') +
       chips([CHAIN ? NETWORK + ' · your wallet owns it' : 'testnet · DEV arena', 'AI · your choice']) + btn('Snap in', 'agree', 'main-action');
   }
   function shortAcct(a) { a = String(a || ''); return a.length > 28 ? a.slice(0, 12) + '…' + a.slice(-8) : a; }

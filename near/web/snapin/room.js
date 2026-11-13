@@ -14,6 +14,8 @@
  *
  * One tab drives the fighter at a time (a Web Lock); the lease the room grants is renewed every few seconds while
  * a page holding the lock is open. Closing every tab stops the renewals and the room sends the fighter home.
+ * An open chain-mode keeper returns after a host restart using the saved wallet authorization and original choices;
+ * a bench hold or an explicit leave disables that return. Expired wallet authorization still requires sign-in.
  *
  * DEV: the identity is a session key, not a wallet or an NFT; the host labels the fighter "DEV" everywhere.
  */
@@ -306,6 +308,30 @@
   function seatSeen(ob, token) {
     return !!(ob && (ob.fighters || []).some(function (f) { return f.nft_token_id === token && (f.state === 'ring' || f.state === 'disconnected'); }));
   }
+  async function rejoinRestart() {
+    var saved = S;
+    if (!saved || !saved.rejoin || !saved.rejoin.chain || saved.benchHold || stopped || status.phase === 'leaving') return false;
+    var health = await call('GET', '/dev/health');
+    if (!health.room_public_key || health.room_public_key === saved.ident.room_public_key) return false;
+    if (!root.SnapIdentity && typeof root.importScripts === 'function') root.importScripts('identity.js');
+    if (!root.SnapIdentity) throw Refusal('proof_required');
+    var options = clone(saved.rejoin), key = await loadKey();
+    if (!key) throw Refusal('proof_required');
+    options.order = clone(saved.order); options.rejoining = true;
+    options.waitFor = null; options.ownHeldResult = false;
+    options.chain.session_public_key = key.publicRaw;
+    options.chain.ticket = await root.SnapIdentity.ticket(saved.ident.nft_token_id, {
+      session_public_key: key.publicRaw, name: options.name, preset: options.preset, rejoin: true
+    });
+    if (S !== saved || !saved.rejoin || saved.benchHold || stopped || status.phase === 'leaving') return false;
+    set('joining', 'identity', 'The arena restarted. Bringing your Trenchie back…');
+    await joinOnce(options, saved);
+    return true;
+  }
+  async function recoverRestart(error) {
+    if (['proof_required', 'stale_slot', 'context_mismatch', 'not_found'].indexOf(error.code) < 0) return false;
+    return rejoinRestart();
+  }
   function runLoop() {
     if (loop) return;
     var fails = 0;
@@ -317,7 +343,8 @@
         catch (e) {
           if (!S || stopped) break;
           fails++;
-          if (e.code === 'unreachable' && fails < 20) { if (status.phase !== 'leaving') set('offline', '', 'Lost the DEV arena for a moment. Retrying…', e); await sleep(1500); continue; }
+          try { if (await recoverRestart(e)) { fails = 0; continue; } } catch (recovery) { e = recovery; }
+          if (e.code === 'unreachable' && (fails < 20 || S.rejoin)) { if (status.phase !== 'leaving') set('offline', '', 'Lost the arena for a moment. Retrying…', e); await sleep(1500); continue; }
           if (e.code === 'proof_required' || e.code === 'stale_slot' || e.code === 'context_mismatch' || e.code === 'not_found') { await end(e); return; }
           if (fails >= 5) { await end(e); return; }
         }
@@ -370,7 +397,8 @@
         set('joining', 'control', 'Reconnecting to your Trenchie…');
         try { await call('GET', '/dev/clock'); await authenticate(); set('in', 'ring', ''); runLoop(); }
         catch (e) {
-          if (e.code === 'unreachable') { set('offline', '', e.message, e); return; }   // keep the fighter: the arena may come back within its lease
+          try { if (await recoverRestart(e)) return; } catch (recovery) { e = recovery; }
+          if (e.code === 'unreachable') { set('offline', '', e.message, e); runLoop(); return; }
           await end(e);
         }
       });
@@ -394,7 +422,11 @@
     behaviour: function (payload) { if (!payload || typeof payload !== 'object') return Promise.reject(Refusal('bad_message')); return battle('behaviour', payload); },
     /* the bench (board 1): {hold: true|false} (false = Send back in) or {equip: {slot, item_id}}; the room's signed battle_receipt,
        checked; ack {type: 'bench_ack', status: 'applied'|'refused', bench, summary} */
-    bench: function (payload) { if (!payload || typeof payload !== 'object') return Promise.reject(Refusal('bad_message')); return battle('bench', payload); },
+    bench: function (payload) {
+      if (!payload || typeof payload !== 'object') return Promise.reject(Refusal('bad_message'));
+      if (S && typeof payload.hold === 'boolean') { S.benchHold = payload.hold; persist(); }
+      return battle('bench', payload);
+    },
     /* a line for the feed with its emoji (or null): the room's signed battle_receipt, checked; ack.summary says posted/blocked/muted */
     speech: function (o) { o = o || {}; var t = String(o.text == null ? '' : o.text).trim(); if (!t) return Promise.reject(Refusal('bad_message')); return battle('speech', { text: t, emoji: o.emoji == null ? null : String(o.emoji) }); },
     /* the next life's pick (the corner): applies from the next life the room announces */
@@ -405,6 +437,7 @@
     },
     leave: async function () {
       if (!S) return;
+      S.rejoin = null; await persist();   // the player's leave choice wins even if the host disappears during it
       var who = S.name, id = S.ident.nft_token_id;
       set('leaving', '', 'Swimming home…');
       // the fighter swims home (an order with leave), then the seat is given up; if either fails the lease ends it within 30 s
@@ -434,12 +467,13 @@
       return r;
     } catch (e) { return null; }
   }
-  async function joinOnce(o) {
+  async function joinOnce(o, previous) {
     var ran = await withLock(async function () {
         set('joining', 'key', 'Making this browser’s key…');
         if (!api.supported()) throw Object.assign(new Error('This browser cannot make the key the arena needs (WebCrypto Ed25519). Use a current Chrome, Edge, Firefox or Safari.'), { code: 'unsupported' });
         var k;   // chain mode: the key the page's ticket already names (sessionKey below); else a fresh one
-        if (o.chain && premade && memKey && memKey.publicRaw === premade && o.chain.session_public_key === premade) k = memKey;
+        if (o.rejoining) { k = await loadKey(); if (!k) throw Refusal('proof_required'); }
+        else if (o.chain && premade && memKey && memKey.publicRaw === premade && o.chain.session_public_key === premade) k = memKey;
         else { await forgetKey(); k = await newKey(); }
         premade = null;
         // a new trenchie right after this browser's last one left: the host frees the seat at once but keeps the old fighter
@@ -457,6 +491,7 @@
         var body = { name: o.name, preset: o.preset, public_key: k.publicRaw }; if (o.sheet) body.sheet = o.sheet; if (o.look) body.look = o.look;
         if (o.chain) { body.ticket = o.chain.ticket; body.nft_token_id = o.chain.nft_token_id; }   // chain mode: a one-use ticket signed by the page that signed in
         var ident = await call('POST', '/dev/identity', enc.encode(JSON.stringify(body)));
+        if (previous && (S !== previous || !previous.rejoin || previous.benchHold || stopped)) return;
         // this browser's own fighter, still swimming home from a leave a moment ago: wait for it rather than call it a clash
         for (var w = 0; w < 15 && ident && /seated right now/.test(ident.error || '') && lastLeft && lastLeft.name === String(o.name).toLowerCase() && Date.now() - lastLeft.at < 45000; w++) {
           set('joining', 'identity', 'Your Trenchie is still swimming home from the last round…'); await sleep(2000);
@@ -476,6 +511,7 @@
         }
         if (!ident || !ident.nft_token_id) throw Object.assign(new Error(friendlyHost(ident && ident.error)), { code: 'host', detail: ident && ident.error });
         S = { ident: ident, grant: null, seq: 1, connection: null, order: Object.assign({}, ORDER_DEFAULT, o.order || {}, { preset: (o.order && o.order.preset) || o.preset }), name: o.name, life: null, lives: 0, joinedAt: Date.now() };
+        if (o.chain) { S.rejoin = clone(o); delete S.rejoin.chain.ticket; }
         set('joining', 'join', 'Asking the room for a seat…');
         var manifest = checked(await send('GET', '/room'), ident.context);
         if (manifest.admission !== 'open') throw Refusal('admission_closed');

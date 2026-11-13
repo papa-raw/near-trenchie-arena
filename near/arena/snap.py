@@ -326,12 +326,27 @@ class Keeper:
 
     def start(self, terms_version: str) -> dict:
         self.terms_version = terms_version
-        grant = self.client.join(account_id=self.ident["account_id"], nft_token_id=self.token,
-            persona_digest=self.ident["persona_digest"], session_public_key=self.ident["session_public_key"],
-            request_id="dev-join-" + str(self.now()), declared_compute=dict(harness="external", model="claude-code", source="owner", effort="high"),
-            prove_wallet=self.wallet)
-        if grant.get("state") != "accepted":
-            raise SystemExit("snap: the room queued this join (no fighter authority yet): " + json.dumps(grant)[:200])
+        deadline, attempt = time.monotonic() + 120, 0
+        while True:
+            attempt += 1
+            try:
+                grant = self.client.join(account_id=self.ident["account_id"], nft_token_id=self.token,
+                    persona_digest=self.ident["persona_digest"], session_public_key=self.ident["session_public_key"],
+                    request_id=f"dev-join-{self.public_key[:12]}-{self.now()}-{attempt}", declared_compute=dict(harness="external", model="claude-code", source="owner", effort="high"),
+                    prove_wallet=self.wallet)
+                if grant.get("state") == "accepted":
+                    break
+                reason = "room_full"
+            except SnapRefusal as exc:
+                reason = str(exc)
+                if reason not in ("ownership_unavailable", "room_full", "rate_limited"):
+                    raise
+            if time.monotonic() >= deadline:
+                raise SystemExit(f"snap: still waiting for {reason}; no fighter authority yet. Retry live with the same unjoined code.")
+            if attempt == 1:
+                print("snap: waiting for the arena's inventory/owner read or a free seat; keeping this session open", file=sys.stderr, flush=True)
+            # One quick retry, then at most four attempts per minute, within the room's join allowance.
+            time.sleep(min(2 if attempt == 1 else 15, max(0, deadline - time.monotonic())))
         terms = self.client.member_snapshot(request_id="dev-read-terms")["terms"]
         if terms is None or terms["version"] != terms_version:
             raise SystemExit(f"snap: the arena rules are now version {terms and terms['version']}; you accepted {terms_version}. Run `terms`.")

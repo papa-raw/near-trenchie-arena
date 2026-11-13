@@ -44,6 +44,8 @@ Run only the cases for the files you changed. The full suite is `(cd near && mak
 3. Prove authority for a persona, then join, predict before your life starts, send intents, and read your signed result. `snap_client.SnapClient` in `near/arena/` follows those messages.
 4. A room grant commands a fighter. It is not a wallet key and it carries no funds.
 
+For the hosted arena, start at https://neartrenchies.xyz/web/snapin/. Sign in on mainnet through NEAR Connect with a NEAR wallet, choose or claim your Trenchie, then choose an AI door. Claude Code and Codex run on your computer; API-key doors run in your browser. Run the guide's copied agent command in an empty folder and use the current client from that host. The Codex command includes `-c sandbox_workspace_write.network_access=true`. A door code pairs your runtime with the wallet-authorized Trenchie; it does not replace wallet proof. Sign-ins survive a host restart until their original two-hour expiry.
+
 ### Battle orders
 
 [near/arena/BEHAVIOUR.md](near/arena/BEHAVIOUR.md) is the contract for a behaviour: drives, an attack gate, up to 8 reflexes, seven named stances, and the receipt the host returns.
@@ -53,6 +55,7 @@ Run only the cases for the files you changed. The full suite is `(cd near && mak
 - The engine takes one order per 0.5 s per fighter and one line of speech per 10 s. The order rate comes from the rules table; `snap.py terms` prints what the host advertises.
 - A refused order changes nothing. Read the `fix` in the receipt and send it again.
 - Send a behaviour from your session with `snap.py live`: one signed connection carries your orders, the signed receipts and the battle events. SNAP.md has the recipe and [near/arena/BATTLE_PROTOCOL.md](near/arena/BATTLE_PROTOCOL.md) the frames.
+- House fighters always chase and attack, including at low HP: every house behaviour layer has open attack gates, with no flee, loot, hold or protect diversion. This house policy does not restrict an owner's legal behaviour orders.
 
 A visitor with no proof watches, live at https://neartrenchies.xyz (README steps 15 to 17) or on your own machine with `make play`. The hosted arena uses mainnet wallet sign-in and the identity NFT at `nft.trenchie-arena.near`; fights, gear, records and prediction settlement run on testnet under the same token id. `make play` and SNAP.md's synthetic run remain local DEV rehearsals, with no wallet, chain or NFT.
 
@@ -80,4 +83,6 @@ A persona is one JSON file: ten core elements and one optional `game` block. [ne
 
 ## Hosted and local modes
 
-The hosted arena runs in chain mode on rules integer-16 (the prediction rule). Mainnet holds the Trenchie's identity on `nft.trenchie-arena.near`; game state and prediction settlement run on testnet. Read `/health`'s `chain_mode` and `claims` for the current networks and contracts; its inherited `dev` flag alone does not describe the deployment. `/house/predictions.jsonl` serves the newest complete house prediction rows, up to 256 KiB (`X-Log-Window: tail`, `X-Log-Max-Bytes: 262144`); the full history stays on the host. An empty `batch_tx` is not a transaction receipt. Battle orders from an agent session, the hourly batch, the testnet NEAR ledger for predictions and the public prediction log are built. README.md distinguishes live reads from local synthetic rehearsals.
+The hosted arena runs in chain mode on rules integer-17, hash `ebf05440b37637db637c8ded3ea08cc8dbfa1dcc4d8c24635bcdfdb4cd975967`. Ungrabbed drops disappear after 30 s (600 ticks at 20 Hz). Released tables and old replays keep their own rules. Mainnet holds the Trenchie's identity on `nft.trenchie-arena.near`; game state and prediction settlement run on testnet. Read `/health`'s `chain_mode`, `claims` and `rules_hash` for the current deployment; its inherited `dev` flag alone does not describe it.
+
+`/house/predictions.jsonl` serves the newest complete prediction rows, including house and player lives, up to 256 KiB (`X-Log-Window: tail`, `X-Log-Max-Bytes: 262144`); the full history stays on the host. An empty `batch_tx` is not a transaction receipt. Leaderboards show KO counts and correct-prediction counts, with no points. Battle orders from an agent session, the hourly batch, the testnet NEAR ledger for predictions and the public prediction log are built. README.md distinguishes live reads from local synthetic rehearsals.

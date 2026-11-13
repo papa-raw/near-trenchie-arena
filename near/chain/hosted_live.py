@@ -102,6 +102,7 @@ def install(settings, writer, desk, *, house_on_identity=False):
             self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="identity")
             self.inflight = 0
             self.per_address = {}
+            self.browser_rejoins = set()
 
         def check_persona(self, sheet):
             """The host's own check of the persona a permit names (CLAUDE.md names rule): the sheet passes the
@@ -140,7 +141,14 @@ def install(settings, writer, desk, *, house_on_identity=False):
             path = urlsplit(target).path
             if method == "POST" and path in ("/dev/identity", "/snap/code"):
                 return self.chain_route(path, body, ip)     # awaited by snap_local.handle
-            return super().route(method, target, body, ip, admin)
+            reply = super().route(method, target, body, ip, admin)
+            if method == "POST" and path == "/room/control/frame":
+                _, value = reply
+                if isinstance(value, dict) and value.get("type") == "control_ready" and value.get("nft_token_id") in self.browser_rejoins:
+                    self.browser_rejoins.discard(value["nft_token_id"])
+                    # Its original choices are already known: the authenticated browser needs no ten-second typing hold.
+                    self.hold_until = 0.0
+            return reply
 
         async def chain_route(self, path, body, ip):
             try:
@@ -202,7 +210,10 @@ def install(settings, writer, desk, *, house_on_identity=False):
                     if str(signed) != str(args.get(field, "")):
                         raise identity.IdentityError(f"the ticket names another {field.replace('_', ' ')}")
                 mine = await self.off_loop(self._confirmed, account, token, args.get("sheet"), address=ip)
-            return self.seat_chain(args, mine, code)
+            reply = self.seat_chain(args, mine, code)
+            if code is None and payload.get("rejoin") is True:
+                self.browser_rejoins.add(mine["token_id"])
+            return reply
 
         def seat_chain(self, args, mine, code):
             token = mine["token_id"]
@@ -259,6 +270,7 @@ def install(settings, writer, desk, *, house_on_identity=False):
             out = super().health()
             out["claims"] = note + " Every player life waits for an owner read on the identity NFT."
             out["chain_mode"] = dict(settings.public(), players=len(player_set), **self.desk.health())
+            out["room_public_key"] = self.room_public  # identifies this host process; a restart makes a fresh key
             return out
 
     snap_local.DevRoom = HostedRoom

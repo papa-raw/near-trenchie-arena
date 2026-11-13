@@ -29,7 +29,7 @@ const note = 'This lets Codex reach the internet so it can play. Run it in an em
       for (const [door, prefix] of [['Codex', 'codex -c sandbox_workspace_write.network_access=true '], ['Claude Code', 'claude ']]) {
         await p.click('[data-act="g:door:plan:' + door + '"]');
         await p.waitForFunction(() => !!SnapGuide.state.code);
-        const command = prefix + prompt;
+        const command = prefix + (door === 'Codex' ? prompt.replace('follow it. Code', 'follow it. Download the current client from the same site’s /snap-client.zip into a fresh folder first; do not use a local checkout. Code') : prompt);
         assert.equal(await p.locator('.cmd').textContent(), command, door + ': displayed command');
         await p.click('[data-act="g:copy"]');
         assert.equal(await p.evaluate(() => window.copiedCommand), command, door + ': Copy sends exactly the displayed command');

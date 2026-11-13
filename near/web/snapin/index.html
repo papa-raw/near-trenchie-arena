@@ -6,13 +6,19 @@
 <title>Trenchie Arena · snap in</title>
 <meta name="description" content="Snap in your Trenchie: connect a wallet, pick a fighter and its personality, choose the AI that drives it.">
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="snapin.css" id="css-snapin">
-<link rel="stylesheet" href="board1.css" id="css-board1" disabled>
+<style>
+/* The first document paints before the guide's module graph or fonts arrive. */
+html,body{margin:0;min-height:100%;background:#c9dfd1;color:#2a2622}
+.snapin-loading{position:fixed;inset:0;display:grid;place-items:center;padding:24px;background:linear-gradient(#f4efe344,#f4efe388),url(img/island.png) center/cover}
+.snapin-loading p{box-sizing:border-box;max-width:100%;margin:0;padding:24px 28px;border:10px solid #b98e62;border-radius:8px;background:#fff8ea;box-shadow:0 5px 0 #705537;font:700 16px/1.5 monospace;text-align:center}
+</style>
+<link rel="stylesheet" href="snapin.css" id="css-snapin" disabled>
+<link rel="stylesheet" href="board1.css" id="css-board1">
 </head>
 <body>
 <div class="arena"></div>
 <div class="brand">Trenchie Arena</div>
-<div id="app"></div>
+<div id="app"><div class="snapin-loading"><p role="status">Opening the snap-in guide…</p></div></div>
 <noscript>Snapping in needs JavaScript.</noscript>
 <script type="importmap">{"imports":{"three":"../vendor/three/three.module.min.js"}}</script>
 <script src="art/ska.js"></script>

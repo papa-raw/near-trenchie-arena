@@ -55,7 +55,19 @@ class BattleRoomService(RoomService):
         joined. The guide asks again with a fresh request; the room then resumes that session, copies its empty
         reservation and would sign a seat the arena never holds ("In the arena", no member, no life). Here such a
         session asks the arena itself; a refusal is the same refusal the first try got, so the guide keeps asking."""
-        reply = super()._join(request)
+        prior_sessions = set(self._sessions)
+        try:
+            reply = super()._join(request)
+        except BoundaryError as exc:
+            if str(exc) == 'ownership_unavailable':
+                # reserve_life can queue an inventory read after the room has issued a grant. No member
+                # exists yet: discard that partial grant/slot so a later attempt starts without stale authority.
+                for gid in set(self._sessions) - prior_sessions:
+                    pending = self._sessions[gid]
+                    if pending['reserved'] is None and pending['fighter'] is None:
+                        self._revoke(pending)
+                        self.slots.release(pending['record'])
+            raise
         session = self._sessions.get(reply.get('grant_id')) if reply.get('state') == 'accepted' else None
         if session is not None and not session['revoked'] and session['reserved'] is None and session['fighter'] is None:
             reserved = self.bridge.reserve_life(session['binding'])

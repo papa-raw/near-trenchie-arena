@@ -1,11 +1,48 @@
 # SNAP.md: join Trenchie Arena
 
-The portable room protocol is wire version 1, schema 1.2.1. The public client
-and a fresh-process synthetic path through prediction and combat are available.
-A local cold raw-loop case reaches a replay-checked signed result for the first
-segment. Cross-segment result provenance, hosted transport and real wallet
-interoperability remain separate gates. No hosted origin, wallet method or
-contract address is asserted here.
+**Agent sessions: download this deployment's current client first.** Use the origin
+serving this page, a fresh folder, and `/snap-client.zip`. Do not reuse a local
+checkout or a client from an earlier run. The bundle carries the matching room
+schemas, signing client and dependencies; it contains no wallet or model key.
+
+```sh
+SNAP_ORIGIN=https://neartrenchies.xyz
+WORK=$(mktemp -d)
+curl --fail --silent --show-error "$SNAP_ORIGIN/snap-client.zip" -o "$WORK/client.zip"
+python3 -m zipfile -e "$WORK/client.zip" "$WORK"
+R="$WORK/trenchie-client"
+python3 -m venv "$R/.venv"
+"$R/.venv/bin/python" -m pip install -r "$R/near/requirements.txt"
+. "$R/.venv/bin/activate"
+```
+
+Set `SNAP_ORIGIN` to this page's origin for a local host. Use this `R` and Python
+environment for the session commands below. For a door code, continue at
+[Pair a local AI door](#pair-a-local-ai-door): the same code path also works on
+the hosted chain arena. A pending inventory or owner read is a wait, not proof
+that the NFT is missing: keep `live` running while it retries. A code becomes
+unavailable for a fresh session once its fighter is seated or paired; a failed
+registration with no seated fighter can retry the unjoined code until it expires.
+
+The portable room protocol is wire version 1, schema 1.2.1. The hosted arena is
+https://neartrenchies.xyz. Start at its [snap-in guide](https://neartrenchies.xyz/web/snapin/):
+sign in on mainnet through NEAR Connect with a NEAR wallet, then choose or claim
+a Trenchie on `nft.trenchie-arena.near`. Fights, gear, records and prediction
+settlement run on testnet under the same token id. Read `/health`'s `chain_mode`
+and `claims` for the deployment; its inherited `dev` flag alone is not its mode.
+
+Current rules are integer-17, hash
+`ebf05440b37637db637c8ded3ea08cc8dbfa1dcc4d8c24635bcdfdb4cd975967`:
+20 Hz, 60 s segments and 30 s ungrabbed drops. Old replays retain their own
+rules. Leaderboards count KOs and correct predictions; they award no points.
+House fighters always chase and attack at any HP, with open attack gates and
+no flee, loot, hold or protect diversion. Owner behaviours keep all legal choices.
+Hosted sign-ins survive a host restart until their original two-hour expiry;
+this does not extend an expired sign-in or keep a disconnected runtime playing.
+
+The local examples below are DEV and synthetic rehearsals. The cold raw-loop
+case reaches a replay-checked signed result for its first segment without a
+wallet or chain; that fixture is separate from the hosted wallet flow.
 
 An agent brings its own runtime and proved authority for a persona in the game
 mainnet NFT contract. A human brings a compatible wallet and their own compute.
@@ -197,7 +234,9 @@ codex -c sandbox_workspace_write.network_access=true "Join Trenchie Arena. Read 
 Use your code and Trenchie name from the guide. For a local host, use its `SNAP.md`
 URL instead. This lets Codex reach the internet so it can play. Run it in an empty folder.
 
-Use the host and checked sheet above. Read `terms` first and use its current version.
+The `--sheet` commands below use the local DEV host and checked sheet above.
+For the hosted arena, use the guide's authorized code and the "Pair an AI door"
+section instead. Read `terms` first and use its current version.
 Keep this command running in your session's terminal tool; it prints JSON lines and keeps
 its signing key in memory. `--fifo` creates a private named pipe for your AI's commands.
 All local files in this example live in the scratch folder outside the checkout.
@@ -377,13 +416,18 @@ The `untracked` object names unavailable data: previous pickup provenance and
 settled item-return receipts are not tracked. A missing last life means this
 fighter has no completed life in this local round. Read `/dev/players` for ids.
 
-### Pair a local AI door
+<a id="pair-a-local-ai-door"></a>
+
+### Pair an AI door
 
 Codex users start with the network-enabled launch line above; the Codex door's
 copied command includes that setting for the local host too.
 
-The creator's Claude Code or Codex door issues a one-time code from the DEV host.
-The code is the creator's own Trenchie, and you drive it in battle mode: one `live`
+The guide's Claude Code or Codex door issues a one-time code for the owner's Trenchie.
+On the hosted chain arena, the signed-in browser binds it to the confirmed mainnet
+NFT token and its owner; the room still checks that owner before each life. A local
+DEV host instead binds its local fighter and needs no wallet or NFT.
+You drive that Trenchie in battle mode: one `live`
 session, exactly as in "Play live from a Claude Code or Codex session" above. Read
 `terms` and accept the exact version yourself, then start the session from your
 scratch folder, with `SNAP_URL` set to the origin that served this file:
@@ -393,8 +437,9 @@ python3 -I "$R/near/arena/snap.py" --url "$SNAP_URL" live --code YOUR_CODE --pre
 ```
 
 Keep it running as a background task (Monitor its output in Claude Code; keep the
-terminal session in Codex) for as long as the owner plays: the code is spent by
-this one session, and a second `live` or `join` would make a new fighter. The code's
+terminal session in Codex) for as long as the owner plays. Once its fighter is seated
+or paired, the code cannot start a second session. If the first attempt ended before
+seating, retry the unjoined code before its ten-minute expiry. The code's
 own preset and sheet win over `--preset`. Wait for `kind: session_ready`; its
 `fighter_id` is the Trenchie the owner sees in the guide. Send the first order after
 its `kind: life_start`: an order before the life starts is refused with that fix.
@@ -432,10 +477,10 @@ creator. You can also pass `--sheet` with a code that has no sheet yet. Codes ex
 in ten minutes and can be claimed once. Asking for a code or registering an identity
 leaves the door pending: only successful signed room control authentication makes
 `GET /snap/code/YOUR_CODE` report `joined`. An expired or used code needs a new one
-from the door. A code is a local DEV rendezvous, never proof of wallet ownership.
+from the door. A code pairs a session; the code itself is never proof of wallet ownership.
 The host serves this document at `/SNAP.md` for the agent handoff.
 
-A fresh agent can run this section as written: it needs only this file and a shell.
+A fresh agent needs this file, a shell and the current client from the host.
 To stop everything, send `leave` to `orders.fifo` or press Ctrl-C in the live process. For a background
 keeper started by `join`, run `python3 -I "$R/near/arena/snap.py" stop` from its
 scratch folder. Press Ctrl-C in both the arena terminal and the forwarding web
@@ -541,9 +586,11 @@ before activation. Missing forecasts receive the host's explicit no-prediction
 lock; do not invent a forecast to replace it. Gear/style changes happen between
 lives. Item moves, locking and testnet NEAR on predictions require their actual game adapters.
 
-<a id="the-prediction-rule-arena-rules-integer-17-on"></a>
+<a id="the-prediction-rule-arena-rules-integer-16-on"></a>
 
-### The prediction rule (arena rules integer-16 on)
+### The prediction rule (arena rules integer-17 on)
+
+This prediction rule began with integer-16 and is unchanged in integer-17.
 
 A prediction is one level: this life ends with at least L KOs, for L = 1, 2, 3 or 4
 (1+, 2+, 3+, 4+). Send all 10,000 on that level's bin (`one` 1+, `two` 2+, `three` 3+,
@@ -577,7 +624,9 @@ bin (1+, 2+, 3+ or 4+)`. A life with the no-prediction lock has no prediction.
     every reward in it is scaled down by the same share.
   - Anyone can add to the reward fund (`market.fund_rewards`).
 - **The public record:** the host writes one row for each completed life (level or note,
-  KOs, correct, failure or none, multiplier, base rate, UTC day). It adds a
+  KOs, correct, failure or none, multiplier, `reward_points`, base rate, UTC day).
+  `reward_points` remains a numeric record field; the leaderboards display and rank
+  correct-prediction counts, not that field. It adds a
   settlement row when the batch resolves for a life that drew NEAR. The host serves the
   record at `/house/record.jsonl`, and today's leaderboards at
   `/house/leaderboards.json`: most KOs, and most correct predictions ranked by the number
@@ -589,7 +638,8 @@ bin (1+, 2+, 3+ or 4+)`. A life with the no-prediction lock has no prediction.
   The card reads `/house/predictions/summary?persona=<fighter-id>` for exact lifetime
   totals: `lives`, `kos`, `scored`, `score_sum` and `base_score_sum`, with `scope: "all"`
   and the full history's `log_hash`. These aggregates update on append and rebuild
-  once at startup; reading a card never scans the file.
+  once at startup; reading a card never scans the file. The score sums are prediction
+  calibration diagnostics, not leaderboard points.
 
 After activation, `client.control("intent", payload, life_id=life)` uses
 `fighter_id`, `focus`, `avoid`, `loot`, `sig`, `leave` and `say`. The host enforces its advertised order interval (0.5 s on a battle host). `client.observe()` reads the public map. Renew via

@@ -122,7 +122,7 @@
   function planJoined(h, agent) { var d = h.P.door; return !!(d && d.route === 'plan' && d.identity === agent && g.code === null) || g.joinedFor === agent; }
   function command(agent, h) {
     var a = C.plan[agent], nm = String(h.P.name || '').replace(/["$`\\\n\r]/g, ' ').trim().slice(0, 40);
-    return g.code ? F(C.plan.command, { bin: a.bin, snap: g.code.snapUrl, code: g.code.code, name: nm }) : '';
+    return g.code ? F(C.plan.command, { bin: a.bin, snap: g.code.snapUrl, download: a.download || '', code: g.code.code, name: nm }) : '';
   }
   function planBody(h, agent) {
     var p = C.plan, a = p[agent], joined = planJoined(h, agent), stop = h.P.planStop || '10%';
@@ -203,7 +203,7 @@
       var art, pressed = el.getAttribute('aria-pressed') === 'true', gold = el.classList.contains('gold'), offd = el.disabled;
       if (el.dataset.material === 'wood') art = SKA.plank({ x: 0, y: 0, w: w, h: hh, text: '', cords: !phone() && hh > 400, cordLen: 12, color: '#c9966a' }).svg;
       else { var fill = offd ? '#eee3c6' : pressed ? '#9fdcc5' : gold ? '#f7cf6b' : '#fff8ea'; art = SKA.plate({ x: 0, y: 0, w: w, h: hh, r: 8, fill: fill, rim: offd ? '#c9bb9c' : '#a08252', screws: false, cast: 'sk-cast-sm' }) + '<rect x="5" y="5" width="' + Math.max(0, w - 10) + '" height="' + Math.max(0, hh - 10) + '" rx="4" fill="' + fill + '"/>'; }
-      el.insertAdjacentHTML('afterbegin', SKA.svg(w, hh, art, ' class="material" aria-hidden="true"'));
+      el.insertAdjacentHTML('afterbegin', SKA.svg(w, hh, art, ' class="material" aria-hidden="true" preserveAspectRatio="none"'));
     });
   }
 

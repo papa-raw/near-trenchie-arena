@@ -49,10 +49,11 @@
     plan: {
       'Claude Code': { title: 'Claude Code, on your plan', bin: 'claude', perms: 'Claude Code', planName: 'Claude', agent: 'claude-code' },
       'Codex': { title: 'Codex, on your plan', bin: 'codex -c sandbox_workspace_write.network_access=true', perms: 'Codex', planName: 'ChatGPT', agent: 'codex',
+        download: ' Download the current client from the same site’s /snap-client.zip into a fresh folder first; do not use a local checkout.',
         networkNote: 'This lets Codex reach the internet so it can play. Run it in an empty folder.' },
       line: 'Your own {agent} session plays your Trenchie. It uses your {plan} plan, not a key.',
       copyH: 'Copy this line.', copy: 'Copy', copied: 'Copied',
-      command: '{bin} "Join Trenchie Arena. Read {snap} and follow it. Code {code}, Trenchie {name}."',
+      command: '{bin} "Join Trenchie Arena. Read {snap} and follow it.{download} Code {code}, Trenchie {name}."',
       paste: 'Paste it into a terminal, in an empty folder.', keepOpen: 'Keep this page open.',
       waiting: 'Waiting for your session · the code ends in {left}', joined: '✓ Your {agent} session joined.',
       expired: '✗ The code ran out before your session joined.', newCode: 'Get a new code', asking: 'Asking the arena for a code…',
@@ -64,7 +65,7 @@
     check: { title: 'Check your Trenchie', change: 'Change', setIt: 'Set it', notSet: 'Not set', answered: 'answered', joined: 'joined',
       rows: { wallet: 'Wallet', fighter: 'Fighter', name: 'Name', personality: 'Personality', ai: 'AI', cap: 'Hourly cap', stop: 'Weekly limit' },
       rulesH: 'Arena rules', orders: 'Orders', ordersV: 'one every {s} s', rounds: 'Rounds', roundsV: '{s} s, replayable',
-      gear: 'Gear', gearV: 'A KO drops one item. A rival can grab it; ungrabbed for 60 s, it is gone.',
+      gear: 'Gear', gearV: 'A KO drops one item. A rival can grab it; ungrabbed for 30 s, it is gone.',
       notice: 'This is a testnet game. Your Trenchie’s name and lines are public. Your AI key stays in your browser and only goes to your AI provider.',
       snap: 'Snap in', needsCap: 'Needs an hourly cap', needsAI: 'Needs an AI', needsName: 'Needs a name', needsWallet: 'Needs a wallet', needsRules: 'Reading the arena rules…',
       joining: 'Snapping in…' }

@@ -185,12 +185,12 @@ For reviewers and AI screeners. Run from a fresh clone, with Python 3.10 or late
    (cd near && make rehearsal)
    ```
 
-   You should see exactly these five lines: `make` echoes the command, then the demo prints four. The parentheses keep your shell in the repository root. The hash is the same on every run:
+   You should see exactly these five lines: `make` echoes the command, then the demo prints four. The parentheses keep your shell in the repository root. The hash is the same on every run with this checkout's integer-17 rules:
 
    ```
    python3 -B web/demo.py --output ".demo"
    Synthetic local run: no model, wallet, hosted service or chain.
-   Replay checked locally: 3389d99aee780812f8366c1cfa958bc1c0e217643732c24e7b5e87f22b9ea98e
+   Replay checked locally: 7d553fd306bb3c5de6e0d169975d04ffc3cad514da60169e8d30ee9ebc9e1a40
    Chain check pending. Public full forecast and score remain pending.
    Open the desk: (cd near && make desk)
    ```
