@@ -29,7 +29,7 @@ from urllib.parse import unquote, urlsplit
 
 NEAR = Path(__file__).resolve().parents[2]  # near/
 sys.path.insert(0, str(NEAR.parent))
-from near.arena.client_bundle import build_client_bundle
+from near.arena.client_bundle import get_client_bundle
 PASS_GET = ("/room", "/room/", "/dev/clock", "/dev/players", "/dev/health", "/dev/terms", "/dev/corner", "/snap/code/", "/house/")
 PASS_POST = ("/room/", "/dev/identity", "/snap/code")
 KEEP_HEADERS = ("content-type", "x-dev-now", "x-dev-paused")
@@ -152,7 +152,7 @@ def make_handler(arena: str, port_box: list, public_host: str | None = None):
                 return self.reply(302, b"", "text/plain", {"Location": "/web/arena.html"})
             if path == "/snap-client.zip":
                 try:
-                    data = build_client_bundle()
+                    data = get_client_bundle()
                 except (OSError, ValueError):
                     return self.fail(503, "client download unavailable; try again shortly")
                 return self.reply(200, data, "application/zip", {"Cache-Control": "no-store"})

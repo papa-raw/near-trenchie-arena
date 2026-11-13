@@ -1,6 +1,7 @@
 """The public terminal client, assembled from a fixed source/data allowlist; no runtime state or credentials."""
 from io import BytesIO
 from pathlib import Path
+from threading import Lock
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 CLIENT_FILES = (
@@ -16,6 +17,18 @@ CLIENT_FILES = (
     'room/__init__.py', 'room/ledger.py', 'room/policy.py', 'room/protocol.py',
     'room/protocol.schema.json', 'room/requirements.txt',
 )
+
+_bundle: bytes | None = None
+_bundle_lock = Lock()
+
+
+def get_client_bundle() -> bytes:
+    """Build once per deployment process, including concurrent first requests. Restart on source changes."""
+    global _bundle
+    with _bundle_lock:
+        if _bundle is None:
+            _bundle = build_client_bundle()
+        return _bundle
 
 
 def build_client_bundle(root: Path | None = None) -> bytes:

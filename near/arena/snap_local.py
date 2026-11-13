@@ -622,8 +622,8 @@ class DevRoom:
         row = payload["loadout"]["menu_row"]
         return dict(battle_preset(row, self.round.arena.sim.rules)["loadout"])
 
-    def create_identity(self, name: str, preset: str, public_key: str, *, sheet: dict | None = None, code: str | None = None, look: dict | None = None) -> dict:
-        pairing = self.code_status(code, claim=True) if code else None
+    def create_identity(self, name: str, preset: str, public_key: str, *, sheet: dict | None = None, code: str | None = None, look: dict | None = None, address: str | None = None) -> dict:
+        pairing = self.code_status(code, claim=True, address=address) if code else None
         if pairing is not None:
             sheet = pairing.get("sheet") or sheet
             look = pairing.get("look") or look
@@ -666,6 +666,7 @@ class DevRoom:
             rec["name"], rec["persona"] = persona["name"], persona
         if pairing is not None:
             pairing["claimed_by"] = token
+            pairing["claim_address"] = address
             rec["pair_code"] = code
         rec["name_check"] = name_check
         self.identities[token] = rec
@@ -761,16 +762,18 @@ class DevRoom:
                             ' --fifo "$PWD/orders.fifo"',
                     state="pending")
 
-    def code_status(self, code: str, *, claim: bool = False) -> dict:
+    def code_status(self, code: str, *, claim: bool = False, address: str | None = None) -> dict:
         if not isinstance(code, str):
             raise ValueError("code must be text; copy a fresh code from the AI door")
         row = self.codes.get(code)
         if row is None or time.time() >= row["expires_at"]:
             raise ValueError("code expired or unknown; ask the AI door for a new code")
-        # Registration can precede the first inventory/owner read. An unseated, unauthenticated attempt
-        # may restart with a new session key; a seated or paired fighter never gives this code back.
+        # Registration can precede the first inventory/owner read. The original address can recover an
+        # unseated attempt with a fresh process/key; a seated or paired fighter never gives this code back.
         if claim and row["claimed_by"] is not None and (row["joined"] or row["claimed_by"] in self.round.arena.members):
             raise ValueError("code already used; ask the AI door for a new code")
+        if claim and row["claimed_by"] is not None and row.get("claim_address") != address:
+            raise ValueError("this code belongs to another client address; retry from its original address or ask the AI door for a new code")
         return row
 
     def mark_paired(self, token: str) -> None:
@@ -992,7 +995,7 @@ class DevRoom:
                     raise ValueError("identity needs a JSON object with name, preset and public_key")
                 if args.get("op") == "rejoin":
                     return 200, self.rejoin_identity(args)
-                return 200, self.create_identity(str(args.get("name", "")), str(args.get("preset", "")), str(args.get("public_key", "")), sheet=args.get("sheet"), code=args.get("code"), look=args.get("look"))
+                return 200, self.create_identity(str(args.get("name", "")), str(args.get("preset", "")), str(args.get("public_key", "")), sheet=args.get("sheet"), code=args.get("code"), look=args.get("look"), address=ip)
             if path == "/snap/code" and method == "POST":
                 return 200, self.issue_code(json.loads(body or b"{}"))
             if path.startswith("/snap/code/") and path.endswith("/log") and method == "GET":
@@ -1135,9 +1138,9 @@ class DevRoom:
             data = (ROOT / "near/SNAP.md").read_bytes()
             status, ctype = 200, "text/markdown; charset=utf-8"
         elif method == "GET" and path == "/snap-client.zip" and status == 404:
-            from client_bundle import build_client_bundle
+            from near.arena.client_bundle import get_client_bundle
             try:
-                data = build_client_bundle()
+                data = get_client_bundle()
                 status, ctype, extra = 200, "application/zip", "Cache-Control: no-store\r\n"
             except (OSError, ValueError):
                 status = 503

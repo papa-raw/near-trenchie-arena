@@ -22,7 +22,10 @@ environment for the session commands below. For a door code, continue at
 the hosted chain arena. A pending inventory or owner read is a wait, not proof
 that the NFT is missing: keep `live` running while it retries. A code becomes
 unavailable for a fresh session once its fighter is seated or paired; a failed
-registration with no seated fighter can retry the unjoined code until it expires.
+registration with no seated fighter can retry the unjoined code until it expires,
+from the original client address. A restarted client at that address may generate
+a fresh session key; no key file is needed. A different address needs a new code
+from the guide.
 
 The portable room protocol is wire version 1, schema 1.2.1. The hosted arena is
 https://neartrenchies.xyz. Start at its [snap-in guide](https://neartrenchies.xyz/web/snapin/):
@@ -439,7 +442,8 @@ python3 -I "$R/near/arena/snap.py" --url "$SNAP_URL" live --code YOUR_CODE --pre
 Keep it running as a background task (Monitor its output in Claude Code; keep the
 terminal session in Codex) for as long as the owner plays. Once its fighter is seated
 or paired, the code cannot start a second session. If the first attempt ended before
-seating, retry the unjoined code before its ten-minute expiry. The code's
+seating, a restarted client at the original address can retry with a fresh key
+before the code's ten-minute expiry. A different address needs a new code. The code's
 own preset and sheet win over `--preset`. Wait for `kind: session_ready`; its
 `fighter_id` is the Trenchie the owner sees in the guide. Send the first order after
 its `kind: life_start`: an order before the life starts is refused with that fix.

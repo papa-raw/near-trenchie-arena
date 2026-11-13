@@ -191,7 +191,7 @@ def install(settings, writer, desk, *, house_on_identity=False):
             code = args.get("code")
             if code is not None:
                 self.desk.limit(ip, "register")
-                row = self.code_status(code, claim=True)
+                row = self.code_status(code, claim=True, address=ip)
                 chain = row.get("chain")
                 if chain is None:
                     raise identity.IdentityError("that code was not made by a signed-in wallet")
@@ -210,12 +210,12 @@ def install(settings, writer, desk, *, house_on_identity=False):
                     if str(signed) != str(args.get(field, "")):
                         raise identity.IdentityError(f"the ticket names another {field.replace('_', ' ')}")
                 mine = await self.off_loop(self._confirmed, account, token, args.get("sheet"), address=ip)
-            reply = self.seat_chain(args, mine, code)
+            reply = self.seat_chain(args, mine, code, address=ip)
             if code is None and payload.get("rejoin") is True:
                 self.browser_rejoins.add(mine["token_id"])
             return reply
 
-        def seat_chain(self, args, mine, code):
+        def seat_chain(self, args, mine, code, *, address=None):
             token = mine["token_id"]
             if token in self.round.arena.members:
                 raise identity.IdentityError(f"{token} is seated right now; `stop` that session first")
@@ -223,10 +223,10 @@ def install(settings, writer, desk, *, house_on_identity=False):
             with contextlib.redirect_stdout(quiet):   # DEV's "no wallet, chain or NFT" line is not true here
                 reply = self.create_identity(str(args.get("name", "")), str(args.get("preset", "")),
                                              str(args.get("public_key", "")), sheet=args.get("sheet"),
-                                             code=code, look=args.get("look"))
+                                             code=code, look=args.get("look"), address=address)
             rec = self.identities.pop(reply["nft_token_id"])
             old = self.identities.get(token)
-            if old is not None and old is not rec:
+            if old is not None and old is not rec and self.by_key.get(old["session_public_key"]["public_key"]) is old:
                 self.by_key.pop(old["session_public_key"]["public_key"], None)
             rec.update(nft_token_id=token, account_id=mine["account_id"], persona_digest=mine["persona_digest"],
                        chain=dict(mine))
