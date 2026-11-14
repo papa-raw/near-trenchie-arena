@@ -321,7 +321,11 @@
       out.gate = {};
     }
     if (!continuing) {
+      // A base 'never' that a reflex's own gate opens is the owner's condition ('only fight above half HP'): keep it.
+      var gatedByReflex = out.gate && out.gate.never === true && Array.isArray(out.reflexes) &&
+        out.reflexes.some(function (row) { return row && row.then && row.then.gate && requestedReflex(row, said); });
       requestedGate(out, said);
+      if (gatedByReflex && out.gate) out.gate.never = true;
       if (Array.isArray(out.reflexes)) out.reflexes = out.reflexes.filter(function (row) {
         if (!requestedReflex(row, said)) return false;
         requestedGate(row && row.then, said); return true;
