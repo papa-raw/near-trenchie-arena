@@ -258,7 +258,7 @@
   }
   function plainAttack(said, ring) {
     // Only a complete attack-name sentence is unconditional; other language stays with the model.
-    var m = /^(?:please\s+)?(?:attack|fight|charge|(?:go\s+)?hit)\s+(.+?)[.!]?$/i.exec(said.trim());
+    var m = /^(?:please\s+)?(?:attack|fight|charge|(?:go\s+)?hit|kill|take\s+out|beat|smash|punch|go\s+after|hunt|destroy|finish|wreck|get|tue|tuer|attaque|mata|matar|ataca)\s+(.+?)[.!]?$/i.exec(said.trim());
     if (!m) return false;
     var name = m[1].toLowerCase();
     return ((ring && ring.roster) || []).some(function (f) {
@@ -277,6 +277,36 @@
     var gate = layer && layer.gate;
     if (gate && Array.isArray(gate.target_is) && gate.target_is.length === 1) gate.target_is = gate.target_is[0];
   }
+  function requestedCondition(key, said) {
+    // A model may add a restriction only when the owner asked for that kind of condition.
+    var words = {
+      target_is: /\b(only|just|nobody else|seulement|solo)\b|únicamente/i,
+      target_is_not: /\b(don.t|not|leave|spare|except|never|ne|pas|sauf|no|excepto)\b/i,
+      never: /\b(never|pacifist|don.t fight|don.t attack|do not fight|do not attack|no fighting|only fight|only attack when|only attack if|flee|run|run away|avoid|escape|retreat|hide|keep away|stay away|survive|fuis|fuir|fuyez|huye|huir|corre|jamais|nunca)\b/i,
+      rival: /\b(rival|rivals|grudge|grudges)\b/i,
+      hp: /\b(low|weak|weakest|health|hp|finish|below|above|half|under|over|vie|faible|vida|salud)\b|\d+\s*%/i,
+      distance: /\b(close|near|nearby|within|range|radius|proche|cerca)\b/i,
+      target_facing_away: /\b(facing|back|backs|behind|dos|espalda)\b/i,
+      target_busy: /\b(busy|distracted|occupied|distrait|distraído)\b/i,
+      wears_legendary: /\b(legendary|légendaire|legendario)\b/i,
+      hit: /\b(hit|hits|attacks|attacked|attacker|retaliate|defend|defending|defense|defence|frappe|golpea)\b/i,
+      loot: /\b(loot|drop|drops|item|items|gear|legendary|butin|botín)\b/i,
+      no_target: /\b(no target|nobody|no enemy|aucune cible|sin objetivo)\b/i
+    };
+    var family = /hp/.test(key) ? 'hp' : /within|distance/.test(key) ? (key === 'loot_within' ? 'loot' : 'distance')
+      : /hit_by|hit_recently/.test(key) ? 'hit' : key === 'legendary_on_floor' ? 'loot' : key;
+    return key === 'always' || !!(words[family] && words[family].test(said));
+  }
+  function requestedGate(layer, said) {
+    if (!layer || !layer.gate) return;
+    Object.keys(layer.gate).forEach(function (key) {
+      if (key !== 'match' && !requestedCondition(key, said)) delete layer.gate[key];
+    });
+  }
+  function requestedReflex(row, said) {
+    if (!row || !row.if) return true; // Leave malformed input to the host validator.
+    return Object.keys(row.if).every(function (key) { return requestedCondition(key, said); });
+  }
   function ownerBehaviour(b, said, current, ring) {
     var out = JSON.parse(JSON.stringify(b));
     if (out.clear === true) return out;
@@ -289,6 +319,19 @@
     if (!continuing && plainAttack(said, ring)) {
       delete out.reflexes;
       out.gate = {};
+    }
+    if (!continuing) {
+      requestedGate(out, said);
+      if (Array.isArray(out.reflexes)) out.reflexes = out.reflexes.filter(function (row) {
+        if (!requestedReflex(row, said)) return false;
+        requestedGate(row && row.then, said); return true;
+      });
+    }
+    var pursue = plainAttack(said, ring) || /\b(go after|hunt|chase|get)\b/i.test(said);
+    var stay = /\b(don.t|do not|never)\s+(?:chase|pursue|move)|\b(hold|stay|stand)\s+(?:here|still|ground)\b/i.test(said);
+    var drives = out.drives || {}, moving = ['chase', 'loot', 'protect', 'keep_away', 'hold'].some(function (key) { return drives[key] > 0; });
+    if (pursue && !stay && !moving) {
+      out.drives = Object.assign({}, drives, { chase: 10 }); // integer-19 hunt-weakest preset
     }
     // A bare stance request has no drive overrides. An all-zero expansion must not cancel berserk's chase.
     if (/^(?:(?:please|pls)\s+)?(?:go\s+)?berserk(?:\s+mode)?(?:\s+(?:please|pls))?[.!]?$/i.test(said.trim()) && out.stance === 'berserk') {

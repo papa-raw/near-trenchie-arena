@@ -4,13 +4,10 @@
 // approved panel art's (hud-art/hud-art.js, frozen), cloned per body. Everything that follows a body is placed every frame
 // from the projected feet, so it never lags a moving trenchie; the rest is DOM that changes only when its data does.
 import * as THREE from 'three';
-import { placeQuirkPanel } from './hover.mjs';
 import { isDev, shortName } from './names.mjs';
 import { placeBanner, placeReplayStatus } from './layout.mjs';
 import { HudPanelCache } from './hud-cache.mjs';
 import { rosterLabels } from './roster.mjs';
-import { quirkText } from './quirks.mjs';
-import { styleWord } from './style.mjs';
 import { circlesModel, circlesNode, circlesKey } from './pips.mjs';
 import { Feed, nameColour } from './feed.mjs';
 import { Corner } from './corner.mjs';
@@ -213,21 +210,16 @@ export class Hud {
       // the circles: alive fighters with a counted prediction for this life
       const life = lives ? lives.get(id) : null, m = q.state === 'alive' && life ? circlesModel(life.level, life.kos) : null, key = circlesKey(m), circ = el.querySelector('.circ');
       if (circ.dataset.key !== key) { circ.dataset.key = key; circ.replaceChildren(...(m ? [Object.assign(document.createElement('span'), { className: 'sep' }), circlesNode(document, m)] : [])); }
-      const row = this.rowOf(id), word = styleWord(this.styles.get(id) || (row && row.fightStyle));
-      let style = el.querySelector('.style-word');
-      if (!style) { style = document.createElement('span'); style.className = 'style-word'; el.appendChild(style); }
       let focus = el.querySelector('.focus-mark');
       if (!focus) { focus = document.createElement('span'); focus.className = 'focus-mark'; el.appendChild(focus); }
       focus.textContent = isDev(id) && q.f.target ? '→ ' + shortName(this.nameRoster(), q.f.target) : '';
+      const row = this.rowOf(id);
       let notice = el.querySelector('.name-notice');
       if (!notice) { notice = document.createElement('span'); notice.className = 'name-notice'; el.appendChild(notice); }
       notice.textContent = row?.nameNotice || '';
-      let quirk = el.querySelector('.quirk-line');
-      if (!quirk) { quirk = document.createElement('span'); quirk.className = 'quirk-line'; el.appendChild(quirk); }
-      const text = quirkText(q.f, this.details?.rules);
-      quirk.textContent = text ? shortName(this.nameRoster(), id) + ' · ' + text : '';
-      style.textContent = word ? ' · ' + word : ''; el.tabIndex = 0; el.style.pointerEvents = 'auto';
-      el.title = (row ? row.name : this.nameOf(id)) + (word ? ' · ' + word : ''); el.setAttribute('aria-label', el.title + (m ? ' · predicts ' + m.n + '+ KOs, ' + (m.filled + m.extra) + ' so far' : '') + (text ? ' · ' + text : ''));
+      el.tabIndex = 0; el.style.pointerEvents = 'auto';
+      el.removeAttribute('title');
+      el.setAttribute('aria-label', shortName(this.nameRoster(), id) + (m ? ' · predicts ' + m.n + '+ KOs, ' + (m.filled + m.extra) + ' so far' : ''));
       seen.add(id); items.push({ id, el, q, m, x: sp.x, y: sp.y, landing: !!this.prejump && this.prejump.active(id, nowMs) });
     }
     for (const [id, el] of this.tags) if (!seen.has(id)) { el.remove(); this.tags.delete(id); }
@@ -243,13 +235,6 @@ export class Hud {
       it.el.style.transform = 'translate(' + r.x.toFixed(1) + 'px,' + r.y.toFixed(1) + 'px)';
     }
     this.tagRects = placed;
-    for (const it of items) {
-      const panel = it.el.querySelector('.quirk-line');
-      if (!panel?.textContent || !it.el.matches?.(':hover, :focus-within')) continue;
-      const anchor = placed.find((rect) => rect.id === it.id); if (!anchor) continue;
-      const box = placeQuirkPanel(anchor, { w: panel.offsetWidth || 230, h: panel.offsetHeight || 60 }, placed, this.w, this.h, this.cardRects || []);
-      panel.style.left = (box.x - anchor.x) + 'px'; panel.style.top = (box.y - anchor.y) + 'px';
-    }
   }
   // ---- the legendary floor signs ------------------------------------------------------------------------------------
   // Each sign keeps its pin on the item and takes the first clear spot around it (legend-place.mjs): clear of the bodies,
