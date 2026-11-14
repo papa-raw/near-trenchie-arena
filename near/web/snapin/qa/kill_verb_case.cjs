@@ -4,7 +4,7 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
 const B = require('../brain.js');
 const rules = require('../../../arena/rules/integer-19.json');
 const roster = [{id:'tommy-leeth',name:'Tommy Leeth',tag:'Leeth'}, {id:'sailor',name:'Sailor',tag:'Sailor'}];
-function host(plan, damage = false) {
+function host(plan, damage = false, actorHP = 1000) {
   const script = `import json,sys
 sys.path.insert(0,sys.argv[1])
 from near.arena import behaviour,sim
@@ -19,11 +19,12 @@ if sys.argv[2]=='damage':
   f.update(x=i*700,y=0,hp=1000,max_hp=1000,shield_until=0,attack_at=0,sig_at=99999,direction=0,target=None)
   f['equipped']['weapon']='c-swing'
   g._set_behaviour(f,behaviour.normalise({'v':1,'gate':{'never':True}},g.rules,f['id'])[0])
+ g.state['fighters']['me']['hp']=int(sys.argv[3])
  g._set_behaviour(g.state['fighters']['me'],ack['behaviour'])
  g._policy();g._attacks();g._projectiles();g._damage()
  ack['victim_hp']=g.state['fighters']['sailor']['hp']
 print(json.dumps(ack))`;
-  const r = spawnSync('python3',['-I','-c',script,path.resolve(__dirname,'../../../..'),damage?'damage':'ack'],{input:JSON.stringify(plan),encoding:'utf8',timeout:10000});
+  const r = spawnSync('python3',['-I','-c',script,path.resolve(__dirname,'../../../..'),damage?'damage':'ack',String(actorHP)],{input:JSON.stringify(plan),encoding:'utf8',timeout:10000});
   assert.ifError(r.error); assert.equal(r.status,0,r.stderr); return JSON.parse(r.stdout);
 }
 async function order(said, plan) {
@@ -38,7 +39,27 @@ async function order(said, plan) {
 }
 (async()=>{
  const failures=[];
- async function check(name,fn){try{await fn();process.stdout.write('PASS '+name+'\n');}catch(e){failures.push(name+': '+e.message);}}
+ async function check(name,fn){if(process.argv[2] && !name.includes(process.argv[2]))return;try{await fn();process.stdout.write('PASS '+name+'\n');}catch(e){failures.push(name+': '+e.message);}}
+ await check('conditional-never preserves attack switches and fleeing',async()=>{
+  for(const [said,plan] of [
+   ['Only fight above half HP.',{v:1,gate:{never:true},reflexes:[{if:{self_hp_above_pct:50},then:{gate:{},stance:'berserk'}}]}],
+   ['Run away from everyone.',{v:1,stance:'flee',gate:{never:true}}],
+   ['Flee.',{v:1,stance:'flee',gate:{never:true}}],
+   ['Avoid fighting.',{v:1,gate:{never:true}}],
+   ['Fight only when above half HP.',{v:1,gate:{never:true},reflexes:[{if:{self_hp_above_pct:50},then:{gate:{},stance:'berserk'}}]}],
+   ['Only attack above half HP.',{v:1,gate:{never:true},reflexes:[{if:{self_hp_above_pct:50},then:{gate:{},stance:'berserk'}}]}],
+   ['Fight only above half HP.',{v:1,gate:{never:true},reflexes:[{if:{self_hp_above_pct:50},then:{gate:{},stance:'berserk'}}]}],
+   ['When your HP is low, stop attacking.',{v:1,reflexes:[{if:{self_hp_below_pct:50},then:{gate:{never:true}}}]}]
+  ]) {
+   const b=await order(said,plan);
+   assert.equal(host(b,true,400).victim_hp,1000,said+' must deal zero damage below half HP');
+   if(plan.gate?.never)assert.equal(b.gate.never,true,said+' keeps its base attack ban');
+   if(plan.reflexes)assert.ok(host(b,true,800).victim_hp<1000,said+' allows damage above half HP');
+  }
+  const b=await order('kill Sailor',{v:1,target:'sailor',gate:{never:true},reflexes:[{if:{self_hp_below_pct:20},then:{gate:{}}}]});
+  assert.equal(b.gate.never,undefined,'plain attack still removes invented attack ban');
+  assert.equal(b.reflexes.length,0,'plain attack still removes invented switches');
+ });
  await check('ordinary attack synonyms remove invented identity and HP gates',async()=>{
   for(const verb of ['kill','take out','beat','smash','punch','go after','hunt','destroy','finish','wreck','attack','fight','charge','hit','tue','tuer','attaque','mata','matar','ataca']) {
    const name=verb==='take out'?'Sailor':'Leeth',id=name==='Sailor'?'sailor':'tommy-leeth';

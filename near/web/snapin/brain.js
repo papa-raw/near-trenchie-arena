@@ -282,7 +282,7 @@
     var words = {
       target_is: /\b(only|just|nobody else|seulement|solo)\b|únicamente/i,
       target_is_not: /\b(don.t|not|leave|spare|except|never|ne|pas|sauf|no|excepto)\b/i,
-      never: /\b(never|pacifist|don.t fight|don.t attack|do not fight|do not attack|no fighting|only fight|only attack when|only attack if|flee|run|run away|avoid|escape|retreat|hide|keep away|stay away|survive|fuis|fuir|fuyez|huye|huir|corre|jamais|nunca)\b/i,
+      never: /\b(never|pacifist|don.t fight|don.t attack|do not fight|do not attack|no fighting|flee|run|avoid|jamais|nunca)\b|\bonly\s+(?:fight|attack)\s+(?:when|if|above|below|under|over)\b|\b(?:fight|attack)\s+only\s+(?:when|if|above|below|under|over)\b/i,
       rival: /\b(rival|rivals|grudge|grudges)\b/i,
       hp: /\b(low|weak|weakest|health|hp|finish|below|above|half|under|over|vie|faible|vida|salud)\b|\d+\s*%/i,
       distance: /\b(close|near|nearby|within|range|radius|proche|cerca)\b/i,
@@ -297,10 +297,10 @@
       : /hit_by|hit_recently/.test(key) ? 'hit' : key === 'legendary_on_floor' ? 'loot' : key;
     return key === 'always' || !!(words[family] && words[family].test(said));
   }
-  function requestedGate(layer, said) {
+  function requestedGate(layer, said, attackSwitch) {
     if (!layer || !layer.gate) return;
     Object.keys(layer.gate).forEach(function (key) {
-      if (key !== 'match' && !requestedCondition(key, said)) delete layer.gate[key];
+      if (key !== 'match' && !(key === 'never' && attackSwitch) && !requestedCondition(key, said)) delete layer.gate[key];
     });
   }
   function requestedReflex(row, said) {
@@ -321,15 +321,13 @@
       out.gate = {};
     }
     if (!continuing) {
-      // A base 'never' that a reflex's own gate opens is the owner's condition ('only fight above half HP'): keep it.
-      var gatedByReflex = out.gate && out.gate.never === true && Array.isArray(out.reflexes) &&
-        out.reflexes.some(function (row) { return row && row.then && row.then.gate && requestedReflex(row, said); });
-      requestedGate(out, said);
-      if (gatedByReflex && out.gate) out.gate.never = true;
-      if (Array.isArray(out.reflexes)) out.reflexes = out.reflexes.filter(function (row) {
-        if (!requestedReflex(row, said)) return false;
-        requestedGate(row && row.then, said); return true;
+      if (Array.isArray(out.reflexes)) out.reflexes = out.reflexes.filter(function (row) { return requestedReflex(row, said); });
+      // A requested reflex may open or close attacks; never is then part of that switch.
+      var attackSwitch = Array.isArray(out.reflexes) && out.reflexes.some(function (row) {
+        return row && row.then && (row.then.gate || row.then.stance);
       });
+      requestedGate(out, said, attackSwitch);
+      if (Array.isArray(out.reflexes)) out.reflexes.forEach(function (row) { requestedGate(row && row.then, said, attackSwitch); });
     }
     var pursue = plainAttack(said, ring) || /\b(go after|hunt|chase|get)\b/i.test(said);
     var stay = /\b(don.t|do not|never)\s+(?:chase|pursue|move)|\b(hold|stay|stand)\s+(?:here|still|ground)\b/i.test(said);
