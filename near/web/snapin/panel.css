@@ -214,3 +214,9 @@ body.has-panel #snapin-cta,body.has-panel #order-mini{display:none!important}
 .b1p .leave-armed .leave{flex:1;min-width:0}
 .b1p .leave-armed .ib{flex-shrink:0}
 .b1p.w390 .ph.leave-armed{grid-template-columns:40px minmax(0,1fr)}
+
+/* The identity explorer sits beside the Trenchie in the Gear header. */
+.b1p .gear-identity{display:flex;align-items:center;gap:6px;padding:4px 16px}
+.b1p .gear-identity b{overflow-wrap:anywhere;min-width:0}
+.b1p .gear-explorer.link{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:36px;min-height:36px}
+.b1p.w390 .gear-identity{padding:4px 12px}

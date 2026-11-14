@@ -250,7 +250,7 @@
       // the call to action and the small order box step aside
       var css = document.createElement('link'); css.rel = 'stylesheet'; css.href = './snapin/panel.css'; document.head.appendChild(css);
       var load = function (src) { return new Promise(function (ok) { var e = document.createElement('script'); e.src = src; e.onload = ok; e.onerror = ok; document.body.appendChild(e); }); };
-      load('./snapin/art/ska.js').then(function () { return load('./snapin/guide-copy.js'); }).then(function () { return load('./snapin/panel.js'); }).then(function () {
+      load('./snapin/art/ska.js').then(function () { return load('./snapin/guide-copy.js'); }).then(function () { return load('./snapin/identity.js'); }).then(function () { return load('./snapin/panel.js'); }).then(function () {
         // page markers for the arena's own HUD: has-panel while the trenchie panel or its tab is on screen, panel-open while
         // the panel itself is open (460 px on the right at 12 px from the edge; a bottom sheet at 390)
         addEventListener('snappanel', function (e) { var d = e.detail || {}; document.body.classList.toggle('has-panel', !!d.shown); document.body.classList.toggle('panel-open', !!(d.shown && d.open)); place(); });

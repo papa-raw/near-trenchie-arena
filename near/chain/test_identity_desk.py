@@ -246,9 +246,11 @@ class SignIn(unittest.TestCase):
         with self.assertRaisesRegex(identity.IdentityError, "not signed by the page that signed in"):
             d.route("permit", page.env("permit", {"preset": "looter-lob", "sheet": {"name": "Pebble"}}, key=thief))
         env = page.env("permit", {"preset": "looter-lob", "sheet": {"name": "Pebble"}})
-        d.route("permit", env)
-        with self.assertRaisesRegex(identity.IdentityError, "already used"):
-            d.route("permit", env)                                           # a replay is refused
+        first = d.route("permit", env)
+        permitted, claimed = dict(d.permitted), set(d.claimed)
+        self.assertEqual(d.route("permit", env), first)                        # exact resend gets the first reply
+        self.assertEqual(d.permitted, permitted, 'a resend creates no second paid permit')
+        self.assertEqual(d.claimed, claimed)
         for variant in (env["sig"] + "==", env["sig"][:-1] + chr(ord(env["sig"][-1]) ^ 1)):   # padding; a spare bit
             with self.assertRaises(identity.IdentityError):
                 d.route("permit", dict(env, sig=variant))                     # a re-encoded signature is no new step
@@ -265,7 +267,13 @@ class ClaimAndMint(unittest.TestCase):
         inv = inventory()
         state = tempfile.mkdtemp()
         d, idc, invc, _ = desk(nft, inv, {PLAYER: {pk}}, state_dir=state)
-        out = Page(d, sk, pk).do("claim", {"preset": "hunter-lunge"})
+        page = Page(d, sk, pk)
+        envelope = page.env("claim", {"preset": "hunter-lunge"})
+        out = d.route("claim", envelope)
+        claimed, sends = set(d.claimed), (len(idc.calls), len(invc.calls))
+        self.assertEqual(d.route("claim", envelope), out)
+        self.assertEqual((len(idc.calls), len(invc.calls)), sends, 'a claim resend never mints or shadows twice')
+        self.assertEqual(d.claimed, claimed)
         tok = out["token_id"]
         self.assertIn(tok, ("hunter-lunge-00", "hunter-lunge-01"))      # any held copy of the chosen option
         self.assertEqual(nft.tokens[tok]["owner"], PLAYER)
@@ -362,7 +370,7 @@ class ConfirmAfterAWalletMint(unittest.TestCase):
 
 
 class FailClosed(unittest.TestCase):
-    def test_a_failed_owner_read_refuses_the_claim_and_a_restart_keeps_the_claim_record(self):
+    def test_a_failed_owner_read_refuses_the_claim_and_a_restart_allows_another_claim(self):
         sk, pk = wallet_key()
         nft = premint_nft(("preset-2-00", "preset-2"), ("preset-2-01", "preset-2"))
         state = tempfile.mkdtemp()
@@ -378,9 +386,11 @@ class FailClosed(unittest.TestCase):
         left = ({"preset-2-00", "preset-2-01"} - {got}).pop()
         nft.tokens[got]["owner"] = "elsewhere.testnet"                    # it gave the token away
         d2, *_ = desk(nft, inventory(), {PLAYER: {pk}}, state_dir=state)   # a restart of the host
-        with self.assertRaisesRegex(identity.IdentityError, "one per account"):
-            Page(d2, sk, pk).do("claim", {"preset": "hunter-lunge"})
-        self.assertEqual(nft.tokens[left]["owner"], "custody.id-test.testnet")
+        self.assertIn(PLAYER, d2.claimed)                                # the history survives without limiting new claims
+        second = Page(d2, sk, pk).do("claim", {"preset": "hunter-lunge"})
+        self.assertEqual(second["token_id"], left)
+        self.assertEqual(nft.tokens[left]["owner"], PLAYER)
+        self.assertEqual(nft.tokens[got]["owner"], "elsewhere.testnet")
 
     def test_two_claims_at_once_give_one_token(self):
         sk, pk = wallet_key()

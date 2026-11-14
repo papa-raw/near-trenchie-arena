@@ -58,8 +58,12 @@ def apply_behaviour(bridge, binding, message):
     rules, tick, who = arena.sim.rules, arena.sim.state['tick'], binding['nft_token_id']
     member = bridge._member(binding)
     last = None if member is None else member['last_receive'] + rules['input_delay']
+    roster = (arena.target_roster() if hasattr(arena, 'target_roster') else
+              [dict(id=name, name=row['profile']['public_name'], tag=row['profile']['public_name'])
+               for name, row in sorted(arena.members.items()) if not row['released']])
     ack = checked_ack(message.get('payload'), rules, who, int(message['sequence']), tick,
-                      last_order_tick=last, present=arena.sim._live(), rules_hash=arena.context['rules_hash'])
+                      last_order_tick=last, present=arena.sim._live(), rules_hash=arena.context['rules_hash'],
+                      roster=roster)
     if member is None or member['released']:
         return refuse(ack, rules, 'stale_slot', 'Rejoin with the current grant before sending a behaviour.')
     key = sim.digest([arena.context, binding['grant_id'], binding['session_key_id'], message['sequence']])

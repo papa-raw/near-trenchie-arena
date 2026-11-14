@@ -6,7 +6,7 @@
 
 export const GLYPH = { ko: '▼', pred: '◎', res: '✓', leg: '◆', escape: '✚' };   // ebb97a0's line marks: KO red, legendary gold, escape green
 export const LINES = { wide: 5, narrow: 3 };
-// A phone's feed box never grows past this (three two-line slips, 3 x 46 + 2 x 6 gaps, and the autopilot chip, 24): when
+// A phone's feed box never grows past this reserved height: when
 // the newest slips would, the oldest drops out whole (no slip is ever cut). The call to action reserves exactly this
 // height above the feed (arena.html, data-reserve), so it keeps one spot through a fight.
 export const PHONE_MAX = 176;
@@ -61,12 +61,10 @@ export class Feed {
     this.box = doc.createElement('div'); this.box.className = 'b2-slips'; this.box.dataset.panel = 'feed';
     this.list = doc.createElement('ul'); this.list.className = 'feed slipfeed';
     this.list.setAttribute('role', 'log'); this.list.setAttribute('aria-label', 'Arena feed: who said what, KOs, predictions and legendaries');
-    // the house's autopilot (no model key, or its budget stopped) is said once over the feed, not on every house line
-    this.chip = doc.createElement('span'); this.chip.className = 'chip'; this.chip.textContent = 'House on autopilot'; this.chip.hidden = true;
-    this.box.append(this.chip, this.list); root.appendChild(this.box);
+    this.box.appendChild(this.list); root.appendChild(this.box);
   }
   push(item) {
-    if (item.kind === 'say' && item.status === 'autopilot') { item = { ...item, status: null, autopilot: true }; }
+    if (item.kind === 'say' && item.status === 'autopilot') { item = { ...item, status: null }; }
     this.items.push({ ...item, seq: ++this.seq }); if (this.items.length > 24) this.items.splice(0, this.items.length - 24); this.render(); }
   // a KO line becomes a legendary line when the item it knocked loose is a legendary (one slip per KO)
   upgradeKo(victim, item) {
@@ -81,7 +79,6 @@ export class Feed {
   shown() { return this.items.slice(-(this.narrow ? LINES.narrow : LINES.wide)); }
   render() {
     const d = this.doc;
-    this.chip.hidden = !this.shown().some((it) => it.autopilot);
     this.list.replaceChildren(...this.shown().map((item) => {
       const s = slip(item, this.name), li = d.createElement('li');
       if (!s) return li;

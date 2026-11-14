@@ -20,6 +20,7 @@ import argparse
 import http.client
 import mimetypes
 import posixpath
+import re
 import socket
 import sys
 import threading
@@ -80,6 +81,9 @@ def passes(method: str, path: str) -> bool:
 def static_file(path: str) -> Path | None:
     """A file under near/ for this URL path, or None. No dotfiles, no traversal, no directory listings."""
     clean = posixpath.normpath(unquote(path))
+    portrait = re.fullmatch(r"/nft/(brawler-swing|hunter-lunge|survivor-beam|looter-lob|brawler-zap)-[0-9]{2}\.png", clean)
+    if portrait:
+        clean = f"/nft/v1/{portrait[1]}.png"
     parts = [p for p in clean.split("/") if p]
     if not parts or any(p.startswith(".") or p == ".." for p in parts):
         return None
@@ -110,10 +114,11 @@ def make_handler(arena: str, port_box: list, public_host: str | None = None):
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", (extra or {}).get("Cache-Control", "no-store"))
             self.send_header("X-Content-Type-Options", "nosniff")
             for k, v in (extra or {}).items():
-                self.send_header(k, v)
+                if k.lower() != "cache-control":
+                    self.send_header(k, v)
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(body)
@@ -159,7 +164,8 @@ def make_handler(arena: str, port_box: list, public_host: str | None = None):
             f = static_file(path)
             if f is None:
                 return self.reply(404, b"not found", "text/plain")
-            self.reply(200, f.read_bytes(), TYPES.get(f.suffix) or mimetypes.guess_type(f.name)[0] or "application/octet-stream")
+            extra = {"Cache-Control": "public, max-age=31536000, immutable"} if path.startswith("/nft/v1/") else None
+            self.reply(200, f.read_bytes(), TYPES.get(f.suffix) or mimetypes.guess_type(f.name)[0] or "application/octet-stream", extra)
 
         do_HEAD = do_GET
 

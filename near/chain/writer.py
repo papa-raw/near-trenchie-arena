@@ -25,6 +25,10 @@ period's lives and resolves its one stake batch. `post_batch` is retried with th
     and retried at the next cycle. Nothing is dropped and nothing is reported applied that was not.
 Batch ids carry a per-run prefix, so a restart never reuses an id with different content.
 
+Gear serials keep a durable per-item high-water mark, seeded from historical filings for older writer states.
+Each new round records that floor in its initial replay state; seals retain allocations even when no bag still
+holds the copy. Inactive owners and retired copies therefore cannot have their numbers reissued by a fresh round.
+
 Stakes (F80). After a batch's record exists, the resolver key posts `market.resolve` for the market's
 open stake batch, with the results `resolver.compute` gives from the batch's lives. It refuses to post
 (and says why) when the market holds open stakes the server cannot attribute to an account it knows.
@@ -33,6 +37,7 @@ open stake batch, with the results `resolver.compute` gives from the batch's liv
 import collections
 import copy
 import json
+import math
 import os
 import secrets
 import threading
@@ -42,12 +47,12 @@ from pathlib import Path
 from . import batch as fmt, resolver, rpc as rpclib
 from .model import Panic
 
-POST_TGAS = 300
-# G0 on b1a2f6d (2026-11-11): arena ~7 + 0.36 per segment; nft ~2.22 per bag-rewrite row (worst case),
+POST_MIN_TGAS = 60
+# Measured gas in Tgas: arena ~7 + 0.36 per segment; nft ~2.22 per bag-rewrite row (worst case),
 # ~1.38 per pure add; on_apply ~1.7. A batch whose worst-case estimate passes SAFE_TGAS is held, never sent to
-# run out of gas; the split rule is Pat's G0 pick.
+# run out of gas; the configured split rule bounds each transaction.
 SAFE_TGAS = 270
-# The G0 options on the board for Pat (r4a-g0-and-price-2026-11-11.md); his pick is one of these settings.
+# Supported batch sizes and split counts; the host selects one configuration.
 G0_OPTIONS = {
     "A": {"batch_segments": 60, "parts": 1, "max_rows": 100},   # hourly, 1 tx; extra rows wait an hour
     "B": {"batch_segments": 60, "parts": 2, "max_rows": 107},   # hourly in 2 parts of 30 segments
@@ -58,6 +63,17 @@ G0_OPTIONS = {
 
 def estimate_tgas(segments: int, rows: int) -> float:
     return round(7 + 0.36 * segments + 2.22 * rows + 1.7 + 3, 1)
+
+
+def post_tgas(segments: int, rows: int) -> int:
+    # Keep the G0 worst-case estimate below 90% of the attached gas, as at the 270/300 cap.
+    # Add 25 Tgas for receipt overhead and the static 10 Tgas on_apply reserve, which is
+    # withheld from the NFT hop even though the callback itself measured only ~1.7 Tgas.
+    # Small live batches use ~12 Tgas; a 60 Tgas floor leaves room for the cross-contract hop
+    # without requiring the operator to prepay 300 Tgas on every retry.
+    return min(300, max(POST_MIN_TGAS, math.ceil(estimate_tgas(segments, rows) / 0.9) + 25))
+
+
 COMMIT_TGAS = 30
 ACTUALS_WINDOW = 2000      # lives the trailing base rate is taken over (resolver.next_base_rate)
 RESOLVES_KEPT = 4          # the last base rates, each with when it landed: a level is rewarded at the one before its lock
@@ -140,6 +156,18 @@ class ChainWriter:
         if problems:
             raise WriterError("the inventory row registry does not match the released rules tables: " + "; ".join(problems))
         self.rules_items = None            # the serving arena's rules items (set at its first segment)
+        self.serial_arena = None          # the preceding round may have allocated copies since its last seal
+        if "serials" not in self.state:
+            self.state["serials"] = {}
+            for b in self.settled_batches() + self.state["batches"]:
+                for row in b["rows"]:
+                    self._remember_bag_serials(row["bag"])
+        for bag in self.state["bags"].values():
+            self._remember_bag_serials(bag)
+        for base in self.state["bases"].values():
+            self._remember_bag_serials(base["bag"])
+            self._remember_bag_serials(base["arena"])
+        self.serial_floor = dict(self.state["serials"])
         self.bag_reads = collections.deque()  # tokens whose inventory bag a first life here is waiting for
         self.bag_bases = {t: (b["bag"], b["arena"]) for t, b in self.state["bases"].items()}   # arena-thread copy
 
@@ -248,6 +276,33 @@ class ChainWriter:
 
     def _unused(self):
         return self._pool_len() - max(self.state["cursor"], self.bound)
+
+    def _remember_bag_serials(self, bag: list) -> None:
+        """Reserve every historical copy, including items no current fighter carries."""
+        for entry in bag:
+            row = int(entry["row"])
+            if not 0 <= row < len(self.item_rows):
+                continue  # Unknown chain rows stay in their bag but cannot seed this registry.
+            name = self.item_rows[row]
+            self._remember_serials({name: int(entry["serial"])})
+
+    def _remember_serials(self, counters: dict) -> None:
+        with self.pool_lock:
+            for name, value in counters.items():
+                self.state["serials"][name] = max(self.state["serials"].get(name, 0), value)
+                if hasattr(self, "serial_floor"):
+                    self.serial_floor[name] = max(self.serial_floor.get(name, 0), value)
+
+    def initial_serials(self, arena) -> dict:
+        """New-round serial floors, recorded in its initial replay state; no released rule changes."""
+        with self.pool_lock:
+            if self.serial_arena is not None:
+                for name, value in self.serial_arena.sim.state["serials"].items():
+                    self.serial_floor[name] = max(self.serial_floor.get(name, 0), value)
+            self.serial_arena = arena
+            floor = dict(self.serial_floor)
+        self.inbox.append({"kind": "serial_floor", "serials": floor})
+        return floor
 
     def _recover_commit(self):
         """A commit whose outcome was never seen: adopt it if it landed, else resend the same secret."""
@@ -537,6 +592,7 @@ class ChainWriter:
                                                             "final_state_hash", "predictions_log_hash", "lives",
                                                             "nft_token_ids")},
                 "picks": picks, "bags": bags, "accounts": accounts, "rows": rows,
+                "serials": dict(arena.sim.state["serials"]),
                 "levels": arena.sim.rules.get("predict") is not None,
                 "house_log": getattr(arena, "prediction_log_hashes", {}).get(segment_id),
                 "local": str(arena.store.segments / (segment_id.replace(":", "-") + ".json")),
@@ -565,9 +621,12 @@ class ChainWriter:
                          why="the identity NFT has no such token (never minted, or burned): no new life")
             elif e["kind"] == "inventory_loaded":
                 self.state["bases"][e["token"]] = {"bag": e["bag"], "arena": e["arena"], "at": "load"}
+                self._remember_bag_serials(e["bag"])
                 if e["kept"]:
                     self.log("inventory_rows_kept", token=e["token"], rows=[k["row"] for k in e["kept"]],
                              why="rows this rules table cannot put in a bag stay on the chain untouched; never re-pointed or dropped")
+            elif e["kind"] == "serial_floor":
+                self._remember_serials(e["serials"])
             elif e["kind"] == "saved_bag_reloaded":
                 self.log("saved_bag_reloaded", token=e["token"], saved=e["from"], now=e["to"],
                          why="the chain moved since this arena's base: the next life starts from the chain plus this arena's own moves")
@@ -598,6 +657,9 @@ class ChainWriter:
             if life_id not in done:
                 self.state["lock_seen"].setdefault(life_id, at)
         self.state["bags"].update(e["bags"])
+        for bag in e["bags"].values():
+            self._remember_bag_serials(bag)
+        self._remember_serials(e.get("serials", {}))
         lives = []
         rows = e.get("rows", {})
         for life in s["lives"]:
@@ -855,7 +917,8 @@ class ChainWriter:
     def _post(self, b):
         args = {"batch_id": b["batch_id"], "segments": b["segments"], "rows": b["rows"], "manifest": b["manifest"]}
         for attempt in range(1, self.attempts + 1):
-            out = self.sender.call("operator", self.cfg.arena, "post_batch", args, POST_TGAS)
+            out = self.sender.call("operator", self.cfg.arena, "post_batch", args,
+                                   post_tgas(len(b["segments"]), len(b["rows"])))
             if out.get("landed") is None and out.get("tx"):
                 seen = self.sender.tx_status(out["tx"], "operator")
                 if seen is not None:

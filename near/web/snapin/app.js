@@ -27,7 +27,7 @@
 
   // ------------------------------------------------------------------ state
   var DEF = { preset: 'Brawler Swing', slots: { weapon: 'Bonk', head: 'Cap', body: 'Tee', trinket: 'Roll' }, look: null, lookEdited: false, temper: 'sunny', quirks: [], name: '', voice: '', wallet: null, door: null, agreed: false, resume: null,
-              spread: [40, 30, 20, 10], zeroKo: 0, stake: false, move: false, lock: false };
+              spread: [40, 30, 20, 10], zeroKo: 0, stake: false, move: false, lock: false, newFighter: false };
   var P = Object.assign({}, DEF, U.store.json(SAVE, {}));
   P.slots = Object.assign({}, DEF.slots, P.slots || {});
   if (root.SnapSheet && !root.SnapSheet.TEMPERAMENTS.some(function (x) { return x.id === P.temper; })) P.temper = 'sunny';   // saved before the six real names
@@ -49,6 +49,10 @@
   function go(step, replace) {
     if (step === 'watch') return backToArena();
     step = allowed(step);
+    if (step === 'wallet' && V.step !== 'wallet' && /^(checking|error|missing)$/.test(V.returnState || '')) {
+      if (V.returnState === 'missing') P.wallet = null;
+      V.returnAttempt = (V.returnAttempt || 0) + 1; V.returnState = 'wallet';
+    }
     if (step !== 'agree' && step !== 'ring') V.ticks = {};   // after a change, the terms are agreed again
     V.closed = false; V.step = step; V.msg = ''; V.flash = ''; V.confirmNew = false; P.step = step; save();
     try { root.history[replace ? 'replaceState' : 'pushState']({ step: step }, '', stepURL(step)); } catch (e) { /* file: or sandboxed: no history */ }
@@ -86,30 +90,43 @@
     if (capSet()) k.push('your hourly cap');
     return k.length ? 'Kept: ' + k.join(', ').replace(/, ([^,]*)$/, ' and $1') + '.' : '';
   }
+  function freshPrompt(nm) {
+    if (fixedPersona()) return nm + ' stays yours. Claim another preset free while premints are left, or build your own with a paid mint. Start a new draft?';
+    return 'This forgets ' + nm + ': its name, look, temperament, quirks and voice' + (P.claim ? ', and its premint claim' : '') + '. Keep it or start fresh?';
+  }
   // the control asks once, in place: what it forgets, what happens to a trenchie in the ring, what it keeps
   function newButton(cls) {
     if (!V.confirmNew) return btn('Make a new Trenchie', 'new-trenchie', cls || 'textlink');
     var nm = draftName(), kept = keptWords();
-    return '<div class="confirm-new" role="group" aria-label="Make a new Trenchie"><div class="sub"><b>' + esc('This forgets ' + nm + ': its name, look, temperament, quirks and voice' + (P.claim ? ', and its premint claim' : '') + '. Keep it or start fresh?') + '</b></div>' +
+    return '<div class="confirm-new" role="group" aria-label="Make a new Trenchie"><div class="sub"><b>' + esc(freshPrompt(nm)) + '</b></div>' +
       (mineDriven() ? '<div class="sub">' + esc(nm + ' swims home first: this browser drives one Trenchie at a time.') + '</div>' : '') + (kept ? '<div class="sub">' + esc(kept) + '</div>' : '') +
       '<div class="row">' + btn('Start fresh', 'new-trenchie-yes', 'secondary') + btn('Keep ' + esc(nm), 'new-trenchie-no', 'textlink') + '</div></div>';
   }
   async function newTrenchie() {
-    var st = mineDriven(), nm = draftName(), swim = null; V.confirmNew = false;
+    var st = mineDriven(), nm = draftName(), swim = null, build = V.newBuild, owned = fixedPersona(); V.confirmNew = false; V.newBuild = false;
     if (st && st.phase === 'joining') return say('Wait for the snap-in to finish, then make a new Trenchie.', true);
     if (st) { V.flash = nm + ' is swimming home…'; render(); swim = { id: st.fighter.id, at: Date.now() }; try { await root.SnapRoom.leave(); } catch (e) { /* the lease sends it home */ } }
-    freshDraft(); if (swim) { P.swimming = swim; save(); }   // kept across a reload: the next join waits for that swim home
-    go(P.wallet ? 'presets' : 'wallet');
-    V.flash = 'A new Trenchie: ' + nm + ' is forgotten. ' + keptWords(); render();
+    freshDraft(); P.newFighter = !!CHAIN; if (swim) P.swimming = swim; save();   // the next join waits for that swim home
+    if (build) P.fighterChosen = true;
+    go(P.wallet ? (build ? 'personality' : 'presets') : 'wallet');
+    V.flash = (owned ? nm + ' stays yours. Presets are free while premints are left; your own fighter is a paid mint. ' : 'A new Trenchie: ' + nm + ' is forgotten. ') + keptWords(); render();
     try { root.scrollTo(0, 0); } catch (e) { /* no window */ }
+  }
+  function buildFighter() {
+    if (fixedPersona()) { V.newBuild = true; V.confirmNew = true; render(); return; }
+    P.fighterChosen = true; P.claim = null; P.newFighter = !!CHAIN; save(); go('personality');
   }
   // the trenchie this browser put in the ring is out of it (the arena restarted, every page was closed until the seat ran
   // out, or the browser lost its key): only the seat is gone. The draft stays, and the guide offers the two ways on.
   var ENDED = { context_mismatch: 'the arena restarted', not_found: 'the arena restarted', 'no-key': 'this browser no longer holds its key' };
   function seatEnded(f, code) { P.ended = { name: f.name, why: ENDED[code] || 'no page was open to keep it', at: Date.now() }; P.fighter = null; save(); render(); }
+  function fighterPrefix() {
+    var identity = root.SnapIdentity && root.SnapIdentity.state();
+    return !CHAIN && identity && identity.modeKnown && !identity.mode ? 'DEV ' : '';
+  }
   function endedLine() {
     if (!P.ended || V.mode !== 'flow' || V.step === 'ring' || mineDriven()) return '';
-    return '<div class="in-banner" role="status">' + esc('DEV ' + P.ended.name + ' is out of the arena (' + P.ended.why + '). Your Trenchie is kept.') + ' ' +
+    return '<div class="in-banner" role="status">' + esc(fighterPrefix() + P.ended.name + ' is out of the arena (' + P.ended.why + '). Your Trenchie is kept.') + ' ' +
       btn('Snap ' + esc(P.ended.name) + ' back in', 'rejoin', 'textlink') + newButton() + '</div>';
   }
 
@@ -157,7 +174,7 @@
   // "Restore <name>" on the Personality step brings the premint persona back when the player wants it.
   function claimedHere() { return !!(P.claim && P.claim.digest && P.claim.preset === P.preset); }
   async function claimOption() {
-    if (CHAIN && P.wallet && P.wallet.chain && P.wallet.chain.owned.length) { await bindOwnedPersona(); return go('personality'); }
+    if (CHAIN && !P.newFighter && P.wallet && P.wallet.chain && P.wallet.chain.owned.length) { await bindOwnedPersona(); return go('personality'); }
     if (claimedHere()) return go('personality');
     await loadPremint(true);   // pressed before the premint personas arrived (or after a failed read): wait for them rather than fail
     var id = presetId(), e = premintFor(id), SS = root.SnapSheet;
@@ -179,7 +196,7 @@
   }
   function fixedPersona() {
     var ch = P.wallet && P.wallet.chain;
-    return !!(CHAIN && ch && P.minted && P.minted.account === P.wallet.accountId &&
+    return !!(CHAIN && !P.newFighter && ch && P.minted && P.minted.account === P.wallet.accountId &&
       ch.owned.some(function (t) { return t.token_id === P.minted.token; }));
   }
   async function originalSheet(token, candidates) {
@@ -198,18 +215,20 @@
     if (!sheet || await SS.digest(sheet) !== token.persona_digest) throw new Error('This Trenchie’s original persona sheet is not saved in this browser. Restore that sheet before continuing.');
     return { sheet: sheet, option: option, meta: meta };
   }
-  async function bindOwnedPersona() {
+  async function bindOwnedPersona(tokenHint, active) {
     var ch = P.wallet && P.wallet.chain;
-    if (!CHAIN || !ch || !ch.owned.length) return;
+    if (!CHAIN || P.newFighter || !ch || (!ch.owned.length && !tokenHint)) return;
     var SS = root.SnapSheet, draft = buildSheet(), dg = draft && !draft.error ? await SS.digest(draft) : '';
-    var ids = ch.token ? [{ token_id: ch.token }] : ch.owned, tokens = [], token = null;
+    var ids = tokenHint ? [{ token_id: tokenHint }] : ch.token ? [{ token_id: ch.token }] : ch.owned, tokens = [], token = null;
     for (var i = 0; i < ids.length; i++) {
       var t = await root.SnapIdentity.inspectOwned(ids[i].token_id); tokens.push(t);
+      if (active && !active()) return false;
       if (t.persona_digest === dg) token = t;
     }
     token = token || (tokens.length === 1 ? tokens[0] : null);
     if (!token) throw new Error('Choose the original persona of one of your owned Trenchies before continuing.');
     var found = await originalSheet(token, [draft, P.sheet, P.claim && P.claim.sheet, P.minted && P.minted.sheet]);
+    if (active && !active()) return false;
     var preset = SS.PRESETS.filter(function (p, ix) { return p.id === (found.option || token.preset_id) || 'preset-' + (ix + 1) === token.preset_id; })[0];
     if (!preset) throw new Error('This Trenchie’s battle option is not available in this guide.');
     P.minted = { account: P.wallet.accountId, token: token.token_id, digest: token.persona_digest, sheet: JSON.parse(JSON.stringify(found.sheet)) };
@@ -217,7 +236,35 @@
     var temper = SS.TEMPERAMENTS.filter(function (t) { return t.name === found.sheet.game.temperament; })[0];
     if (temper) P.temper = temper.id;
     if (found.meta) { P.quirks = found.meta.quirks.slice(); P.voice = found.meta.voice; }
-    ch.token = token.token_id; save();
+    if (!ch.owned.some(function (t) { return t.token_id === token.token_id; })) ch.owned.push({ token_id: token.token_id });
+    ch.token = token.token_id; save(); return true;
+  }
+
+  // The remembered card is a choice; only a fresh signed ownership read enables its continuation.
+  function returnProfile() {
+    var m = P.minted;
+    if (P.newFighter || !m || !m.sheet || !m.sheet.game) return null;
+    return { name: m.sheet.game.name, short: m.sheet.game.name.split(' ')[0], portrait: portraitURL(),
+      preset: P.preset, token: m.token, state: V.returnState || (fixedPersona() ? 'verified' : 'wallet') };
+  }
+  async function verifyReturning() {
+    var profile = returnProfile(); if (!profile) return;
+    if (!P.wallet || !P.wallet.chain) return connectWallet('choose');
+    var attempt = V.returnAttempt = (V.returnAttempt || 0) + 1;
+    var active = function () { return V.returnAttempt === attempt && !P.newFighter; };
+    V.returnState = 'checking'; go('presets');
+    try {
+      await bindOwnedPersona(profile.token, active);
+      if (active()) V.returnState = 'verified';
+    } catch (e) {
+      if (active()) V.returnState = /owned by|not by|another wallet|not owned/i.test(e.message) ? 'missing' : 'error';
+    }
+    if (active()) render();
+  }
+  function newReturningFighter() {
+    V.returnAttempt = (V.returnAttempt || 0) + 1;
+    freshDraft(); P.newFighter = true; V.returnState = ''; V.busy = false;
+    go(P.wallet ? 'presets' : 'wallet');
   }
 
   // ------------------------------------------------------------------ pieces
@@ -328,13 +375,13 @@
     }
     if (st.phase === 'in' && f) {
       var lp = f.lastPick, took = P.timing && P.timing.wallet && P.timing.ring ? elapsed(P.timing.ring - P.timing.wallet) : '';
-      return { head: 'In the arena', content: '<div class="split ring-split"><div>' + hero() + receipt('<div class="eyebrow">' + (CHAIN ? 'Arena' : 'DEV arena') + ' · life ' + esc(f.lives || 1) + '</div><h2>' + (CHAIN ? '' : 'DEV ') + esc(f.name) + '</h2><div class="notice" style="margin-top:12px">Fight. Fall. Respawn.</div>' +
+      return { head: 'In the arena', content: '<div class="split ring-split"><div>' + hero() + receipt('<div class="eyebrow">' + (CHAIN ? 'Arena' : 'DEV arena') + ' · life ' + esc(f.lives || 1) + '</div><h2>' + fighterPrefix() + esc(f.name) + '</h2><div class="notice" style="margin-top:12px">Fight. Fall. Respawn.</div>' +
         (CHAIN && P.wallet && P.wallet.chain && P.wallet.chain.token ? U.line('Trenchie', esc(P.wallet.chain.token) + ' · owned by ' + esc(shortAcct(P.wallet.accountId)) + ' on ' + esc(NETWORK)) + (P.wallet.chain.tx ? U.line('Mint', esc(String(P.wallet.chain.tx).slice(0, 10)) + '…') : '') : '') +
         U.line('Battle option', esc(P.preset)) + U.line('Persona', claimIntact() ? esc(P.claim.name) + ' (premint, ' + esc(P.claim.digest.slice(0, 8)) + '…)' : 'your own') + U.line('Prediction for this life', esc(U.pickLine(lp))) +
         U.line('AI', esc(P.door ? P.door.identity + (brainOn() ? '' : ' (saved, not driving yet)') : 'none yet')) + (took ? U.line('Wallet to the ring', esc(took)) : '') +
         '<div class="sub" id="brain-chip">' + esc(brainLine()) + '</div><div class="sub">' + (st.keyPersisted === false ? 'This browser keeps your Trenchie only on this page (it cannot store the key): closing this page sends your Trenchie home.' : 'Keep this page or the arena page open: closing every tab sends your Trenchie home.') + '</div>' +
         (st.message ? '<div class="sub" role="status">' + esc(st.message) + '</div>' : '')) +
-        '</div><div>' + (root.SnapChat ? receipt(root.SnapChat.html({ name: (CHAIN ? '' : 'DEV ') + f.name, card: true })) : '') + '</div></div>' + (st.keyPersisted === false ? '' : btn('Watch your Trenchie', 'watch-mine', 'main-action')) + '<div class="row">' + btn('Change next life', 'corner', 'textlink') + btn('Leave the arena', 'leave', 'textlink') + '</div>' + newButton() };
+        '</div><div>' + (root.SnapChat ? receipt(root.SnapChat.html({ name: fighterPrefix() + f.name, card: true })) : '') + '</div></div>' + (st.keyPersisted === false ? '' : btn('Watch your Trenchie', 'watch-mine', 'main-action')) + '<div class="row">' + btn('Change next life', 'corner', 'textlink') + btn('Leave the arena', 'leave', 'textlink') + '</div>' + newButton() };
     }
     if (st.phase === 'elsewhere') return { head: 'In the arena', content: receipt('<div class="sub" role="status">' + esc(st.message) + '</div>') + btn('Watch the arena', 'step:watch', 'main-action') };
     if (st.phase === 'error') {
@@ -348,7 +395,7 @@
     if (st.phase === 'offline') return { head: 'Reconnecting', content: receipt('<h2>' + esc(name) + ' is waiting</h2><div class="sub" role="alert">' + esc(st.message) + '</div><div class="sub">Your Trenchie keeps its seat while its lease lasts (about 30 s).</div>') +
         btn('Try again', 'resume', 'main-action') + btn('Keep watching', 'step:watch', 'textlink') + newButton() };
     if (st.phase === 'leaving') return { head: 'Leaving', content: receipt('<h2>' + esc(name) + '</h2><div class="sub" role="status">' + esc(st.message) + '</div>') };
-    if (P.ended) return { head: 'Seat ended', content: hero() + receipt('<h2>' + esc('DEV ' + P.ended.name + ' is out of the arena') + '</h2><div class="sub" role="status">' + esc('Its seat ended: ' + P.ended.why + '. Your Trenchie is kept in this browser: its name, look, voice and battle option.') + '</div>') +
+    if (P.ended) return { head: 'Seat ended', content: hero() + receipt('<h2>' + esc(fighterPrefix() + P.ended.name + ' is out of the arena') + '</h2><div class="sub" role="status">' + esc('Its seat ended: ' + P.ended.why + '. Your Trenchie is kept in this browser: its name, look, voice and battle option.') + '</div>') +
         btn('Snap ' + esc(P.ended.name) + ' back in', 'rejoin', 'main-action') + btn('Keep watching', 'step:watch', 'textlink') + newButton() };
     if (st.phase === 'ended') return { head: 'Swam home', content: receipt('<h2>' + esc(name) + ' left the ring</h2><div class="sub" role="status">' + esc(st.message) + '</div>') +
         btn('Snap in again', 'join', 'main-action') + btn('Keep watching', 'step:watch', 'textlink') + newButton() };
@@ -372,10 +419,11 @@
       var ch = P.wallet && P.wallet.chain;
       if (!ch) { joining = false; say('Sign in with your wallet first (step 1).', true); return; }
       try {
-        say(ch.owned && ch.owned.length ? 'Checking ' + ch.owned[0].token_id + ' is still yours…' : ch.offer && ch.offer.kind === 'claim' && claimIntact() ? 'Claiming your free Trenchie on ' + NETWORK + '…' : 'Approve the paid mint in your wallet (' + yoctoNear(ch.offer && ch.offer.cost_yocto) + ' NEAR)…');
+        say(!P.newFighter && ch.owned && ch.owned.length ? 'Checking your Trenchie’s ownership…' : ch.offer && ch.offer.kind === 'claim' && claimIntact() ? 'Claiming your free Trenchie on ' + NETWORK + '…' : mintApproval(ch));
         if (!sh || sh.error) throw new Error((sh && sh.error) || 'the persona sheet could not be built');
-        var t = await root.SnapIdentity.getTrenchie({ preset: presetId(), sheet: sh, claim: claimIntact() });
+        var t = await root.SnapIdentity.getTrenchie({ preset: presetId(), sheet: sh, claim: claimIntact(), newFighter: P.newFighter });
         ch.token = t.token_id; ch.tx = t.tx || null; ch.owned = [{ token_id: t.token_id }]; save();
+        P.minted = { account: P.wallet.accountId, token: t.token_id, digest: await root.SnapSheet.digest(sh), sheet: sh }; P.newFighter = false; save();
         var spk = await root.SnapRoom.sessionKey();   // the room's session key, made now so the ticket names it
         chain = { ticket: await root.SnapIdentity.ticket(t.token_id, { session_public_key: spk, name: P.name || 'Newcomer', preset: presetId() }),
                   nft_token_id: t.token_id, network: NETWORK, session_public_key: spk };
@@ -574,7 +622,7 @@
       head = 'Fighter presets';
       content += '<div class="row"><span class="chip mint">5 battle options</span><span class="chip">' + (CHAIN ? esc(chainSupply()) : 'DEV · free to try') + '</span></div>' + presetGrid() + (inventoryNote()) +
         claimLine() +
-        '<div class="sub">' + (CHAIN ? (P.wallet && P.wallet.chain && P.wallet.chain.offer && P.wallet.chain.offer.kind === 'claim' ? 'Use this preset to claim its premint for free (one per wallet, first come); a fighter you build is a paid mint.' : 'Every free premint is claimed: a new Trenchie is a paid mint your wallet signs when you enter the arena.') : 'The onchain premint (5 presets × 10 copies, first come) is not deployed yet; a DEV claim is kept in this browser only.') + '</div>' +
+        '<div class="sub">' + (CHAIN ? (P.wallet && P.wallet.chain && P.wallet.chain.offer && P.wallet.chain.offer.kind === 'claim' ? 'Claim presets free while premints are left; a fighter you build is a paid mint.' : 'Every free premint is claimed: a new Trenchie is a paid mint your wallet signs when you enter the arena.') : 'The onchain premint (5 presets × 10 copies, first come) is not deployed yet; a DEV claim is kept in this browser only.') + '</div>' +
         btn(claimedHere() ? 'Next: personality' : 'Use this preset', 'claim', 'main-action') + btn('Build a fighter', 'step:build', 'textlink');
     } else if (s === 'claimed') {
       head = 'Preset supply';
@@ -610,7 +658,7 @@
     if (V.mode !== 'flow' || !live || !live.fighter || !/^(in|joining|offline)$/.test(live.phase)) return '';
     // on the first screen the banner also carries the way to a new trenchie (one place names the trenchie, not two)
     var first = V.step === 'wallet' ? newButton() : '';
-    return '<div class="in-banner" role="status">' + esc((CHAIN ? '' : 'DEV ') + live.fighter.name) + ' is in the arena now. ' + btn('Back to your Trenchie', 'back-ring', 'textlink') + first + '</div>';
+    return '<div class="in-banner" role="status">' + esc(fighterPrefix() + live.fighter.name) + ' is in the arena now. ' + btn('Back to your Trenchie', 'back-ring', 'textlink') + first + '</div>';
   }
   function viewLogin() {
     var v = D.view({ returning: !!root.SnapUI.store.get('trenchie.snapin.lastdoor'), walletChip: aiChip(), onContinue: V.mode === 'flow' ? 'Next: the arena rules' : 'Back to the arena' });
@@ -665,14 +713,15 @@
   function newLink() {
     if (!V.confirmNew) return bl('new-trenchie', 'Make a new Trenchie');
     var nm = draftName(), kept = keptWords();
-    return '<b>' + esc('This forgets ' + nm + ': its name, look, temperament, quirks and voice' + (P.claim ? ', and its premint claim' : '') + '. Keep it or start fresh?') + '</b> ' +
+    return '<b>' + esc(freshPrompt(nm)) + '</b> ' +
       (mineDriven() ? esc(nm + ' swims home first: this browser drives one Trenchie at a time.') + ' ' : '') + (kept ? esc(kept) + ' ' : '') + bl('new-trenchie-yes', 'Start fresh') + ' · ' + bl('new-trenchie-no', 'Keep ' + esc(nm));
   }
   function returningLine() {
+    if (V.confirmNew) return newLink();
     if (V.flash) return esc(V.flash);
     var live = mineDriven();
-    if (live) return esc('DEV ' + live.fighter.name + ' is in the arena now.') + ' ' + bl('back-ring', 'Back to your Trenchie') + ' · ' + newLink();
-    if (P.ended) return esc('DEV ' + P.ended.name + ' is out of the arena (' + P.ended.why + '). Your Trenchie is kept.') + ' ' + bl('rejoin', 'Snap ' + esc(P.ended.name) + ' back in') + ' · ' + newLink();
+    if (live) return esc(fighterPrefix() + live.fighter.name + ' is in the arena now.') + ' ' + bl('back-ring', 'Back to your Trenchie') + ' · ' + newLink();
+    if (P.ended) return esc(fighterPrefix() + P.ended.name + ' is out of the arena (' + P.ended.why + '). Your Trenchie is kept.') + ' ' + bl('rejoin', 'Snap ' + esc(P.ended.name) + ' back in') + ' · ' + newLink();
     if (V.step === 'wallet' && hasDraft()) return esc('Your Trenchie: ' + draftName() + ', saved in this browser.') + ' ' + newLink();
     return '';
   }
@@ -686,8 +735,12 @@
   function chainInfo() {
     var ch = P.wallet && P.wallet.chain;
     var signed = !CHAIN || !ch ? '' : 'Signed in. ' + (ch.owned && ch.owned.length ? 'Your Trenchie: ' + ch.owned[0].token_id + '.' : ch.offer && ch.offer.kind === 'claim' ? 'A free Trenchie is waiting for you (' + ch.offer.held + ' left).' : 'A new Trenchie is a paid mint: ' + yoctoNear(ch.offer && ch.offer.cost_yocto) + ' NEAR, signed in your wallet when you enter the arena.');
-    var fighter = !CHAIN ? '' : ch && ch.offer && ch.offer.kind === 'claim' ? 'Use this preset to claim its premint for free (one per wallet, first come); a fighter you build is a paid mint.' : 'Every free premint is claimed: a new Trenchie is a paid mint your wallet signs when you enter the arena.';
+    var fighter = !CHAIN ? '' : ch && ch.offer && ch.offer.kind === 'claim' ? 'Claim presets free while premints are left; a fighter you build is a paid mint.' : 'Every free premint is claimed: a new Trenchie is a paid mint your wallet signs when you enter the arena.';
     return { known: !!(root.SnapIdentity && root.SnapIdentity.state().modeKnown), retrying: !!V.modeRetrying, on: !!CHAIN, network: NETWORK, signed: signed, fighter: fighter };
+  }
+  function mintApproval(ch) {
+    var cost = ch.offer && ch.offer.kind === 'paid' ? ' (' + yoctoNear(ch.offer.cost_yocto) + ' NEAR)' : '';
+    return 'Approve the paid mint in your wallet' + cost + '…';
   }
   // board 1: Snap in lands on the trenchie panel in the arena (SPEC state 'fight'), when the session can cross pages (its
   // key kept in this browser's storage); a browser that cannot keep it stays here, where the trenchie is safe while this
@@ -695,11 +748,28 @@
   async function snapIn() {
     // a plan door: the player's own agent session joined with the door's code; this page sends no join of its own, it
     // goes to the arena, where the panel reads the session's log by the code
-    if (P.door && P.door.route === 'plan' && P.planCode) { save(); root.location.href = arenaURL(); return; }
-    var cur = root.SnapRoom.status(); if (cur.fighter && /^(in|joining|offline)$/.test(cur.phase)) { go('ring'); return; }   // already in: no second join
+    if (P.door && P.door.route === 'plan') {
+      if (P.planCode && !P.ended && !P.left) { save(); root.location.href = arenaURL(); return; }
+      return rejoin();
+    }
+    var cur = root.SnapRoom.status(); if (!P.newFighter && cur.fighter && /^(in|joining|offline)$/.test(cur.phase)) { go('ring'); return; }   // already in: no second join
     P.left = 0; go('ring'); await startJoin();
     var st = root.SnapRoom.status();
     if (st.phase === 'in' && st.fighter && st.keyPersisted !== false && V.step === 'ring') { save(); root.location.href = arenaURL() + (WS ? '&' : '?') + 'follow=' + encodeURIComponent(st.fighter.id); }
+  }
+  async function rejoin() {
+    if (joining) return;
+    if (!P.wallet) return go('wallet');
+    // A plan session belongs to the external agent. Pair that runtime again instead of silently
+    // replacing it with a browser-controlled fighter (or reusing the old session's expired code).
+    if (P.door && P.door.route === 'plan') {
+      if (!root.SnapGuide) return say('The AI guide did not load. Reload this page to reconnect your session.', true);
+      P.pick = { route: 'plan', door: P.door.identity || P.door.door };
+      P.planCode = null; save();
+      return root.SnapGuide.rejoinPlan(guideHost);
+    }
+    if (!P.agreed) return go('agree');
+    return snapIn();
   }
   function devWallet() {
     var NA = root.NearApi; if (!NA || !NA.KeyPairEd25519) return say('The wallet library did not load. Reload the page.', true);
@@ -716,10 +786,11 @@
     await bindOwnedPersona();
     var sh = buildSheet();
     if (!sh || sh.error) throw new Error((sh && sh.error) || 'the persona sheet could not be built');
-    say(ch.owned && ch.owned.length ? 'Checking ' + ch.owned[0].token_id + ' is still yours…' : ch.offer && ch.offer.kind === 'claim' && claimIntact() ? 'Claiming your free Trenchie on ' + NETWORK + '…' : 'Approve the paid mint in your wallet (' + yoctoNear(ch.offer && ch.offer.cost_yocto) + ' NEAR)…');
+    say(!P.newFighter && ch.owned && ch.owned.length ? 'Checking your Trenchie’s ownership…' : ch.offer && ch.offer.kind === 'claim' && claimIntact() ? 'Claiming your free Trenchie on ' + NETWORK + '…' : mintApproval(ch));
     try {
-      var token = await root.SnapIdentity.getTrenchie({ preset: presetId(), sheet: sh, claim: claimIntact() });
+      var token = await root.SnapIdentity.getTrenchie({ preset: presetId(), sheet: sh, claim: claimIntact(), newFighter: P.newFighter });
       ch.token = token.token_id; ch.tx = token.tx || ch.tx || null; ch.owned = [{ token_id: token.token_id }]; P.sheet = sh; save();
+      P.minted = { account: P.wallet.accountId, token: token.token_id, digest: await root.SnapSheet.digest(sh), sheet: sh }; P.newFighter = false; save();
       var payload = { agent: args.agent, name: args.name || null, plan_stop_pct: args.planStop > 0 ? args.planStop : null,
                       preset: presetId(), sheet: sh, look: root.SnapSheet.lookFile(sheetState()) };
       var envelope = await root.SnapIdentity.codeRequest(payload, token.token_id);
@@ -727,11 +798,11 @@
     } finally { say(''); }
   }
   var guideHost = { P: P, V: V, go: function (s) { go(s); }, save: function () { save(); }, render: function () { render(); }, say: function (m, e) { say(m, e); }, backToArena: function () { backToArena(); },
-    fixedPersona: fixedPersona,
+    fixedPersona: fixedPersona, buildFighter: buildFighter, returnProfile: returnProfile, retryReturning: verifyReturning, newReturning: newReturningFighter, rejoin: rejoin,
     devWallet: function () { devWallet(); }, connectWallet: function (id) { connectWallet(id); }, setPreset: function (n) { setPreset(n); }, claim: function () { return claimOption(); },
     requestCode: requestPlanCode,
     ringNames: ringNames, loadTerms: function () { loadTerms(); }, chain: chainInfo, loadPremint: function () { return loadPremint(); }, shortAcct: function (a) { return shortAcct(a); }, snapIn: function () { snapIn(); }, returning: returningLine };
-  function say(m, err) { V.msg = m; V.msgErr = !!err; var fb = doc.querySelector('#feedback'); if (fb) { fb.textContent = m; fb.classList.toggle('err', !!err); } else render(); }
+  function say(m, err) { V.msg = m; V.msgErr = !!err; var fb = doc.querySelector('#feedback'); if (fb) { fb.textContent = m; fb.classList.toggle('err', !!err); fb.classList.toggle('bad', !!err); fb.classList.toggle('ok', !err); } else render(); }
 
   // ------------------------------------------------------------------ actions
   function download(name, text) {
@@ -739,21 +810,24 @@
   }
   async function connectWallet(id) {
     var W = root.SnapWallet; if (!W) return say('The wallet module did not load. Reload the page.', true);
-    V.busy = true; say('Opening wallet chooser…');
+    var returning = returnProfile(); V.returnAttempt = (V.returnAttempt || 0) + 1;
+    V.busy = true; if (returning) { V.returnState = 'waiting'; render(); } else say('Opening wallet chooser…');
     try {
       var r = await W.connect(id === 'choose' ? null : id, { network: NETWORK });
       if (r && (r.ok !== false) && (r.accountId || r.account) && CHAIN) {
-        say('Sign the sign-in message in ' + (r.walletName || 'your wallet') + ' (a message, not a transaction: no cost)…');
+        if (!returning) say('Sign the sign-in message in ' + (r.walletName || 'your wallet') + ' (a message, not a transaction: no cost)…');
         try {
           var si = await root.SnapIdentity.signIn();
-          P.wallet = { id: r.walletId, name: r.walletName, accountId: si.account, network: si.network, chain: { owned: si.owned, offer: si.offer } }; P.timing = { wallet: Date.now() }; await bindOwnedPersona(); go('presets');
-        } catch (e2) { P.wallet = null; say('Not signed in: ' + e2.message + '. Try again, or keep watching.', true); }
+          P.wallet = { id: r.walletId, name: r.walletName, accountId: si.account, network: si.network, chain: { owned: si.owned, offer: si.offer } }; P.timing = { wallet: Date.now() };
+          if (returning && !P.newFighter) await verifyReturning(); else { await bindOwnedPersona(); go('presets'); }
+        } catch (e2) { P.wallet = null; if (returning && !P.newFighter) { V.returnState = /cancel|reject|declin/i.test(e2.message) ? 'cancelled' : 'error'; render(); } else say('Not signed in: ' + e2.message + '. Try again, or keep watching.', true); }
       }
       else if (r && (r.ok !== false) && (r.accountId || r.account)) { P.wallet = { id: r.walletId, name: r.walletName, accountId: r.accountId || r.account, network: r.network || NETWORK }; P.timing = { wallet: Date.now() }; go('presets'); }
-      else if (r && (r.kind === 'no-list' || r.kind === 'framed')) say(r.message, true);   // said whole: no wallet was tried
+      else if (r && (r.kind === 'no-list' || r.kind === 'framed')) { if (returning && !P.newFighter) { V.returnState = 'error'; render(); } else say(r.message, true); }   // no wallet was tried
+      else if (returning && !P.newFighter) { V.returnState = /cancel|reject|declin/i.test((r && (r.kind || '') + ' ' + (r.message || r.reason || '')) || '') ? 'cancelled' : 'error'; render(); }
       else say('Wallet not connected: ' + ((r && (r.message || r.reason)) || 'no answer') + '. Keep watching, or try another wallet.', true);
-    } catch (e) { say('Wallet not connected: ' + (e && e.message ? e.message : 'the wallet did not answer') + '. Keep watching, or try another wallet.', true); }
-    V.busy = false;
+    } catch (e) { if (returning && !P.newFighter) { V.returnState = /cancel|reject|declin/i.test(e.message) ? 'cancelled' : 'error'; render(); } else say('Wallet not connected: ' + (e && e.message ? e.message : 'the wallet did not answer') + '. Keep watching, or try another wallet.', true); }
+    V.busy = false; if (returning) render();
   }
   async function onClick(e) {
     var b = e.target.closest('[data-act],button'); if (!b || b.disabled) return;
@@ -786,11 +860,11 @@
     else if (a === 'wallet-forget') { P.wallet = null; save(); render(); }
     else if (a === 'claim') await claimOption();
     else if (a === 'claim-restore') { if (P.claim) { P.preset = P.claim.preset; adoptClaim(); render(); } }
-    else if (a === 'join') startJoin();
+    else if (a === 'join') { if (P.door && P.door.route === 'plan') await rejoin(); else startJoin(); }
     else if (a === 'new-trenchie-yes') await newTrenchie();
     else if (a === 'new-trenchie') { V.confirmNew = true; render(); var c = app.querySelector('.confirm-new'); if (c && c.scrollIntoView) c.scrollIntoView({ block: 'nearest' }); }
-    else if (a === 'new-trenchie-no') { V.confirmNew = false; render(); }
-    else if (a === 'rejoin') { go('ring'); startJoin(); }
+    else if (a === 'new-trenchie-no') { V.confirmNew = false; V.newBuild = false; render(); }
+    else if (a === 'rejoin') await rejoin();
     else if (a === 'resume') { if (root.SnapRoom) await root.SnapRoom.resume(); render(); }
     else if (a === 'watch-mine') { var st = root.SnapRoom && root.SnapRoom.status(); save(); root.location.href = arenaURL() + (st && st.fighter ? (WS ? '&' : '?') + 'follow=' + encodeURIComponent(st.fighter.id) : ''); }
     else if (a === 'corner') openCorner();

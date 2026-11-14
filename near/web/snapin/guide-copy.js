@@ -7,13 +7,23 @@
     eyebrow: 'Snap in · step {n} of 5',
     steps: ['Wallet', 'Fighter', 'Personality', 'AI', 'Snap in'],
     back: '← Back', keepWatching: 'Keep watching', close: 'Close',
+    returning: { walletTitle: 'Your Trenchie', fighterTitle: 'Your fighter', eyebrow: 'Snap in',
+      continue: 'Continue with {name}', connect: 'Connect wallet', new: 'Make a new Trenchie',
+      note: '{name} stays yours. Free while premints last.', free: 'Free while premints last.',
+      waiting: 'Check your wallet', approve: 'Approve sign-in', cancelled: 'Sign-in cancelled.', checking: 'Checking…',
+      verified: '{name} is yours.', error: 'Couldn’t check {name}.', missing: '{name} belongs to another wallet.',
+      retry: 'Try again', changeWallet: 'Change wallet', walletHelp: 'Wallet help', fighterHelp: 'Fighter details',
+      walletLine: 'Use a NEAR wallet to continue.', network: 'Your identity is on {network}. Fights and gear run on testnet.',
+      supply: 'Free presets are available while supplies last. Your wallet can claim more than one.',
+      custom: 'A fighter with a custom personality is a paid mint.',
+      fixed: '{name} keeps the personality and battle option you chose.' },
     wallet: { title: 'Connect a NEAR wallet', line: 'Your wallet owns your Trenchie, a NEAR NFT. Its fights and gear are on testnet.',
       // the right column is the host's identity network (TESTNET in the rehearsal, MAINNET after the deploy), filled in by
       // guide.js; the throwaway account is not offered in chain mode (it cannot own the NFT)
       rows: [['choose', 'Connect wallet', '{network}'], ['dev-throwaway', 'Throwaway account', 'NO WALLET']],
       connected: 'Connected: {wallet}', other: 'Use another wallet', none: 'No wallet yet?', get: 'Find a wallet ↗', getUrl: 'https://wallet.near.org/',
       next: 'Next: fighter', needs: 'Connect a wallet' },
-    fighter: { title: 'Pick your fighter', line: 'Five starter fighters. Free on testnet.', kit: 'Its starter kit', move: 'Weapon move', sig: 'Signature',
+    fighter: { title: 'Pick your fighter', line: 'Five starter fighters. Free while premints are left.', kit: 'Its starter kit', move: 'Weapon move', sig: 'Signature',
       use: 'Use this preset', build: 'Build a fighter',
       // what each move and signature does, in the board's words (Swing and Shockwave are drawn; the rest follow them)
       moves: { Swing: 'Swing: hits every foe in an arc in front of you.', Lunge: 'Lunge: dashes to the target and hits on arrival.', Beam: 'Beam: winds up, then hits along a line.',
@@ -72,7 +82,7 @@
   };
   // the trenchie panel on the arena page (board 1's fight, thinking, changecap, capped, bench, agent and closed states)
   C.panel = {
-    life: 'Life {life} · {source}', session: '{agent} session', hp: 'HP', leave: 'Leave', leaveConfirm: 'Leave the arena? This life ends', leaving: '{name} is swimming home…', leaveFailed: 'Could not leave: {why}. Try Leave again.', leaveAgent: 'Ask your agent to leave the arena from its session.', close: 'Close panel',
+    life: 'Life {life} · {source}', session: '{agent} session', hp: 'HP', leave: 'Leave', leaveConfirm: 'Leave the arena? This life ends', leaving: '{name} is swimming home…', leaveFailed: 'Could not leave: {why}. Try Leave again.', leaveSignin: 'Sign in again', leaveAgent: 'Ask your agent to leave the arena from its session.', close: 'Close panel',
     states: { fight: 'Fighting', thinking: 'Thinking…', bench: 'Bench · held', benchDown: 'Bench', capped: 'Own tactics' },
     gearH: 'Equipped', bag: 'Bag · {n}', bagHint: 'Swap on the bench.', slots: { head: 'Head', body: 'Body', weapon: 'Weapon', trinket: 'Trinket' },
     money: { hour: 'This hour {spent} of your {cap} cap', visit: 'This visit {visit}', rate: 'About $0.10 an hour', change: 'Change cap', resets: 'Resets at {time}', set: 'Set cap', caps: ['$0.10', '$0.20', '$0.50', '$1.00'] },

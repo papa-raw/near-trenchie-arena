@@ -77,7 +77,7 @@ SIGNIN_PERMISSION_TTL_S = 60   # only sign-in permission is cached; life owner r
 SIGNIN_BAD_KEY_COOL_OFF_S = 600
 PER_ADDRESS_INFLIGHT = 2        # identity steps one client address may have running at once
 # Per client address, per step: at most N calls in a sliding window of W seconds (the host's own limits; nginx adds its own).
-LIMITS = {"challenge": (20, 60), "signin": (10, 60), "claim": (3, 3600), "permit": (10, 3600), "confirm": (30, 60), "inspect": (30, 60),
+LIMITS = {"challenge": (20, 60), "signin": (10, 60), "claim": (20, 3600), "permit": (10, 3600), "confirm": (30, 60), "inspect": (30, 60),
           "register": (20, 60), "code": (10, 60), "rejoin": (20, 60)}
 TX_HASH = __import__("re").compile(r"[1-9A-HJ-NP-Za-km-z]{43,44}")
 URL = __import__("re").compile(r"(?:https?|wss?)://\S+")
@@ -361,6 +361,7 @@ class IdentityDesk:
         self.used = {}             # (signin, signature bytes) -> expires: each signed step is accepted once
         self.permitted = {}        # paid token id -> (account, expires): the only tokens a confirm waits for
         self.busy = set()          # accounts with a step running: one at a time
+        self.replies = {}          # (signin, signature text) -> (expires, answer): a resent step gets its first answer
         self.reserving = set()     # accounts with a claim in flight
         self.shadows = []          # times of the host's inventory mints (SHADOW_PER_HOUR)
         self.alarm = None          # the shadow minter's low float or cap, for /health
@@ -474,7 +475,9 @@ class IdentityDesk:
                 self.calls = {k: v for k, v in self.calls.items() if v}
             seen = [t for t in self.calls.get((key, step), []) if t > now - window]
             if len(seen) >= n:
-                raise IdentityError(f"too many {step} requests from this address; wait {int(seen[0] + window - now) + 1} s")
+                left = int(seen[0] + window - now) + 1
+                wait = f"{left} seconds" if left < 60 else f"{(left + 59) // 60} minute{'s' if left > 60 else ''}"
+                raise IdentityError(f"too many {step} requests from this address; try again in {wait}")
             seen.append(now)
             self.calls[(key, step)] = seen
 
@@ -605,15 +608,14 @@ class IdentityDesk:
 
     # ---- the free claim
     def claim(self, account: str, args: dict) -> dict:
-        """A held premint of the chosen option, to this account. One per account, recorded on disk; the account is
-        reserved under the lock before anything is sent, so two claims at once give one token."""
+        """A held premint of the chosen option, to this account. Claims are recorded on disk;
+        the account is reserved before sending, so concurrent claims give one token."""
         with self.lock:
-            if account in self.claimed or account in self.reserving:
-                raise IdentityError("this account already has a Trenchie; the free claim is one per account")
+            if account in self.reserving:
+                raise IdentityError("a claim for this account is still running; wait for it to finish")
             self.reserving.add(account)
         try:
-            if self.owned(account, strict=True):
-                raise IdentityError("this account already has a Trenchie; the free claim is one per account")
+            self.owned(account, strict=True)   # a failed ownership read still refuses; existing tokens do not limit claims
             st = self.state()
             preset = contract_preset(str(args.get("preset", "")), st["presets"], self.names)
             held = self.view("nft_tokens_for_owner", {"account_id": st["custodian"], "limit": 100}) or []
@@ -820,13 +822,22 @@ class IdentityDesk:
         if op == "signin":
             return self.signin(args)
         if op in ("claim", "permit", "confirm", "inspect"):
+            key, now = (str(args.get("signin", "")), str(args.get("sig", ""))), self.clock()
+            with self.lock:
+                self.replies = {k: v for k, v in self.replies.items() if v[0] > now}
+                done = self.replies.get(key)
+            if done is not None:   # the page resent a step that already went through: answer as the first time
+                return done[1]
             account, payload = self.opened(op, args)
             with self.lock:
                 if account in self.busy:
                     raise IdentityError("a step for this account is still running; wait for it")
                 self.busy.add(account)
             try:
-                return {"claim": self.claim, "permit": self.permit, "confirm": self.confirm, "inspect": self.inspect}[op](account, payload)
+                out = {"claim": self.claim, "permit": self.permit, "confirm": self.confirm, "inspect": self.inspect}[op](account, payload)
+                with self.lock:
+                    self.replies[key] = (now + 2 * ENVELOPE_SKEW_MS / 1000, out)
+                return out
             finally:
                 with self.lock:
                     self.busy.discard(account)

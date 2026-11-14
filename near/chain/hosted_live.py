@@ -15,7 +15,7 @@ What it adds to snap_local's DEV arena (snap_local itself is used as it is, as n
   * every binding names the identity NFT, so every life of a player waits for an owner read on that NFT (the writer's
     owner_ok) and a sale moves the trenchie; the host's house account and fixed roster are admitted without one
     (TRENCHIE_HOUSE_ON_IDENTITY=on makes the house wait for its own identity tokens too, as the rehearsals did);
-  * POST /dev/identity with "op" runs the identity desk (challenge, signin, claim, permit, confirm); without "op" it
+  * POST /dev/identity with "op" runs the identity desk (challenge, signin, claim, permit, confirm) and wallet-owner Leave; without "op" it
     registers a fighter only for a signed-in account and a token it owns, re-read at that moment;
   * /dev/health says CHAIN MODE with the networks and contracts, never DEV's "no wallet, chain or NFT".
 """
@@ -159,6 +159,8 @@ def install(settings, writer, desk, *, house_on_identity=False):
                     return 200, await self.chain_code(args, ip)
                 if args.get("op") == "challenge":    # no RPC: answered on the loop, never queued behind slow steps
                     return 200, self.desk.route("challenge", args, ip)
+                if args.get("op") == "leave":
+                    return 200, await self.owner_leave(args, ip)
                 if args.get("op") == "rejoin":
                     # a live session back after a round restart (snap_local's rejoin_identity): it answers with the
                     # identity its session key already holds, registers nothing and restarts no round; the reply is
@@ -184,6 +186,29 @@ def install(settings, writer, desk, *, house_on_identity=False):
                 raise identity.IdentityError(f"that sheet is not {token}'s persona; play the persona the Trenchie was "
                                              "minted with")
             return mine
+
+        async def owner_leave(self, args: dict, ip: str) -> dict:
+            """A wallet-authorized page can end its token's seat regardless of which runtime holds it."""
+            self.desk.limit(ip, "register")
+            account, payload = self.desk.opened("leave", args)
+            token = payload.get("nft_token_id")
+            if not isinstance(token, str) or not token:
+                raise identity.IdentityError("choose your Trenchie before leaving")
+            owner = await self.off_loop(self.desk.owner, token, address=ip)
+            if owner != account:
+                raise identity.IdentityError("only this Trenchie's current wallet owner can send it home")
+            # Back on the arena loop: retire grants and pending joins, then remove the old key's proof/rejoin
+            # authority and every pairing for this token. A live agent must obtain a new wallet-made code.
+            self.round.host.service.release_owner(token)
+            rec = self.identities.pop(token, None)
+            if rec is not None:
+                key = rec["session_public_key"]["public_key"]
+                if self.by_key.get(key) is rec:
+                    self.by_key.pop(key, None)
+            self.codes = {code: row for code, row in self.codes.items()
+                          if row.get("chain", {}).get("token_id") != token and row.get("claimed_by") != token}
+            self.browser_rejoins.discard(token)
+            return {"state": "home", "fighter_id": token}
 
         async def register_chain(self, args, ip):
             """The browser's join: a ticket signed by the signed-in page key names the token; the agent door's join

@@ -10,7 +10,7 @@ Trenchie Arena is an arena for AI fighters washed ashore after the Great Rug. Ea
 
 <a id="what-it-is-and-the-problem"></a>
 
-Sign in with a mainnet wallet. Your Trenchie is an NFT on **`nft.trenchie-arena.near`**; fights, gear, records and prediction settlement run on **testnet**, under the same token id. Watching needs no wallet or key.
+Sign in with a mainnet wallet. Your Trenchie is an NFT on **`nft.trenchies.trenchie-arena.near`**; fights, gear, records and prediction settlement run on **testnet**, under the same token id. Watching needs no wallet or key.
 
 ![How your AI, the arena, mainnet identity and testnet game records connect](docs/readme/architecture.svg)
 
@@ -71,7 +71,7 @@ Before each life, the AI predicts at least 1, 2, 3 or 4 KOs (1+ to 4+). The pred
 - **Optional testnet NEAR.** Each life can use 0.01 from the player's `market` balance. Correct predictions draw rewards; failures leave their 0.01 in the reward fund. Settlement runs hourly. Unused NEAR returns in full; if rewards exceed the fund, all rewards that hour shrink by the same share.
 - **Public record.** The [prediction log](https://neartrenchies.xyz/house/predictions.jsonl) shows predicted and actual KOs. Two leaderboards count KOs and correct predictions today, with players and house listed separately.
 
-The exact rule is in [SNAP.md](near/SNAP.md#the-prediction-rule-arena-rules-integer-17-on).
+The exact rule is in [SNAP.md](near/SNAP.md#the-prediction-rule-arena-rules-integer-19-on).
 
 **Try it:** watch a Trenchie in the [arena](https://neartrenchies.xyz). Its name tag shows one circle per predicted KO, filling as it earns KOs. The feed announces predictions and correct results. Step 17 reads those records without a wallet.
 
@@ -200,12 +200,12 @@ For reviewers and AI screeners. Run from a fresh clone, with Python 3.10 or late
    (cd near && make rehearsal)
    ```
 
-   You should see exactly these five lines: `make` echoes the command, then the demo prints four. The parentheses keep your shell in the repository root. The hash is the same on every run with this checkout's integer-17 rules:
+   You should see exactly these five lines: `make` echoes the command, then the demo prints four. The parentheses keep your shell in the repository root. The replay hash is deterministic for this checkout's integer-19 rules; `<replay hash>` below stands for the 64 hexadecimal characters printed by your run:
 
    ```
    python3 -B web/demo.py --output ".demo"
    Synthetic local run: no model, wallet, hosted service or chain.
-   Replay checked locally: 7d553fd306bb3c5de6e0d169975d04ffc3cad514da60169e8d30ee9ebc9e1a40
+   Replay checked locally: <replay hash>
    Chain check pending. Public full forecast and score remain pending.
    Open the desk: (cd near && make desk)
    ```
@@ -390,16 +390,16 @@ Steps 15 to 17 read the hosted arena at <https://neartrenchies.xyz>. It uses mai
     EOF
     ```
 
-    Captured on 2026-11-13 at 13:34 UTC. Tick and segment advance; contract ids may change after deployment:
+    Historical capture from 2026-11-13 at 13:34 UTC, under integer-17. Tick and segment advance; contract ids may change after deployment:
 
     ```
-    identity: mainnet nft.trenchie-arena.near
+    identity: mainnet nft.trenchies.trenchie-arena.near
     arena: testnet | failed: False | rules: ebf05440b376
-    CHAIN MODE: trenchies on nft.trenchie-arena.near (mainnet); results and gear filed on nft.trenchie-r4b-20261111.testnet (testnet) by arena.trenchie-r4b-20261111.testnet. Every player life waits for an owner read on the identity NFT.
+    CHAIN MODE: trenchies on nft.trenchies.trenchie-arena.near (mainnet); results and gear filed on nft.trenchie-r4b-20261111.testnet (testnet) by arena.trenchie-r4b-20261111.testnet. Every player life waits for an owner read on the identity NFT.
     tick: 427 | segment: segment:0
     ```
 
-    `rules: ebf05440b376` is arena rules integer-17 ([near/arena/rules/integer-17.json](near/arena/rules/integer-17.json)), the same rules `make play` (step 12) runs. Ungrabbed dropped items disappear after 30 s (600 ticks at 20 Hz). The prediction rule introduced in integer-16 is unchanged; old segments still replay under their own archived rules table.
+    The historical `rules: ebf05440b376` above is [integer-17](near/arena/rules/integer-17.json). The current checkout and `make play` (step 12) use [integer-19](near/arena/rules/integer-19.json), hash `7eb774f4d69d2d7a4d6ed42990486fbc16f71e18ea419a68a04fe4ee5d623604`; a host on those rules prints `rules: 7eb774f4d69d`. Read the live response to confirm its deployment. A newly named target is set before reflexes are checked. A facing-only attack order admits enemies facing more than 90° away; fighting another fighter alone does not qualify. Protection spares the ally, including area damage. Named target exclusions spare every listed fighter; named-HP reflexes watch that fighter independently of the current target. A named target off the floor yields to the nearest allowed enemy; an exclusive target order loots and keeps clear until it returns. Orders accept a fighter's name or nickname as well as its id. Ungrabbed dropped items still disappear after 30 s (600 ticks at 20 Hz). The prediction rule introduced in integer-16 is unchanged; old segments still replay under their own archived rules table.
 
     The inherited `dev: true` flag does not describe this deployment. Read `chain_mode` and `claims` for its actual networks and contracts.
 
@@ -468,7 +468,7 @@ Everything in this repository was built during the hackathon window. See the **[
 
 Live on the hosted arena, with mainnet identity and testnet game state:
 
-- The persona NFT on mainnet at `nft.trenchie-arena.near`, as the Trenchie's identity. Fights, loot, inventory and records are written on testnet in hourly batches under its mainnet token id, so whoever owns the token controls the Trenchie and its gear, and a sale carries them. The current contract ids and networks are published in [health](https://neartrenchies.xyz/health).
+- The persona NFT on mainnet at `nft.trenchies.trenchie-arena.near`, as the Trenchie's identity. Fights, loot, inventory and records are written on testnet in hourly batches under its mainnet token id, so whoever owns the token controls the Trenchie and its gear, and a sale carries them. The current contract ids and networks are published in [health](https://neartrenchies.xyz/health).
 - A testnet NEAR ledger for predictions. Capped function-call keys name one receiver and carry a daily limit.
 - The house runs its model on NEAR AI Cloud. No privacy or attestation claim is made.
 

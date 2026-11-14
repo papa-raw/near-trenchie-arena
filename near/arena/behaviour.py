@@ -16,7 +16,7 @@ VERSION = 1
 DRIVE_WEIGHTS = ("loot", "keep_away", "chase", "protect", "hold")
 DRIVE_KEYS = DRIVE_WEIGHTS + ("keep_away_radius", "protect_ally", "hold_at", "hold_radius")
 GATE_KEYS = ("match", "never", "target_hp_below_pct", "target_busy", "distance_under", "rival", "wears_legendary")
-GATE_FLAGS = ("target_busy", "rival", "wears_legendary")
+GATE_FLAGS = ("target_busy", "target_facing_away", "rival", "wears_legendary")
 TARGET_MODES = ("auto", "nearest", "weakest", "attacker")
 CONDITIONS = ("self_hp_below_pct", "self_hp_above_pct", "enemy_within", "enemies_at_least", "hit_recently",
               "ally_hit_recently", "loot_within", "legendary_on_floor", "target_hp_below_pct", "no_target")
@@ -146,15 +146,20 @@ def _drives(raw, path, report, rules, fighter_id):
     return out
 
 
-def _gate(raw, path, report, rules):
+def _gate(raw: object, path: str, report: _Report, rules: Mapping, fighter_id: str) -> dict | None:
     """Normalised gate: the match word plus only the conditions that are on."""
     lim = _limits(rules)
     if not isinstance(raw, Mapping):
         report.refuse(path, "not_object", "gate must be an object; {} lets any target through")
         return None
-    if _unknown(raw, GATE_KEYS, path, report):
+    allowed = GATE_KEYS + tuple(key for key in ("target_is", "target_is_not", "target_facing_away") if lim.get(key, False))
+    if _unknown(raw, allowed, path, report):
         return None
     out = {"match": "all"}
+    if "target_is" in raw:
+        out["target_is"] = _ident(raw["target_is"], f"{path}.target_is", "target_is", report, rules, fighter_id)
+    if "target_is_not" in raw:
+        out["target_is_not"] = _excluded(raw["target_is_not"], f"{path}.target_is_not", report, rules, fighter_id)
     if "match" in raw:
         if raw["match"] not in ("all", "any"):
             report.refuse(f"{path}.match", "bad_match", "match must be \"all\" or \"any\"")
@@ -174,6 +179,17 @@ def _gate(raw, path, report, rules):
             report.notes.append(f"{path}.never: the fighter attacks no one, so the other gate conditions are dropped")
         return {"match": "all", "never": True}
     return out
+
+
+def _excluded(raw: object, path: str, report: _Report, rules: Mapping, fighter_id: str) -> list[str] | None:
+    """An explicit bounded exclusion list, sorted and deduplicated for replay."""
+    cap = rules["capacity"] - 1
+    if not isinstance(raw, list) or len(raw) > cap:
+        report.refuse(path, "bad_exclusions", f"target_is_not takes a list of at most {cap} fighter ids")
+        return None
+    names = [_ident(value, f"{path}[{index + 1}]", "target_is_not", report, rules, fighter_id)
+             for index, value in enumerate(raw)]
+    return sorted(set(names)) if all(name is not None for name in names) else None
 
 
 def _target(raw, path, report, rules, fighter_id):
@@ -198,14 +214,17 @@ def _stance(name, path, report, rules):
 
 def _condition(raw, path, report, rules):
     lim = _limits(rules)
+    allowed = CONDITIONS + (("fighter_hp_below_pct",) if lim.get("fighter_hp_below_pct", False) else ())
     if not isinstance(raw, Mapping) or len(raw) != 1:
-        report.refuse(path, "one_condition", f"if must hold exactly one condition, one of {', '.join(CONDITIONS)}")
+        report.refuse(path, "one_condition", f"if must hold exactly one condition, one of {', '.join(allowed)}")
         return None
     (key, value), = raw.items()
-    if key not in CONDITIONS:
-        report.refuse(path, "unknown_condition", f"unknown condition {key!r}; use one of {', '.join(CONDITIONS)}")
+    if key not in allowed:
+        report.refuse(path, "unknown_condition", f"unknown condition {key!r}; use one of {', '.join(allowed)}")
         return None
     where = f"{path}.{key}"
+    if key == "fighter_hp_below_pct":
+        return _fighter_hp(value, where, report, rules)
     if key in CONDITION_FLAGS:
         if value is not True:
             report.refuse(where, "flag_true", f"{key} takes true")
@@ -231,6 +250,16 @@ def _condition(raw, path, report, rules):
         radius = _ranged(value["radius"], 1, lim["radius_max_tiles"], where + ".radius", "radius", report, " tiles")
         out = None if count is None or radius is None else {"count": count, "radius": radius}
     return None if out is None else {key: out}
+
+
+def _fighter_hp(value: object, path: str, report: _Report, rules: Mapping) -> dict | None:
+    """Observe one named fighter, independently of the current target."""
+    if not isinstance(value, Mapping) or set(value) != {"who", "pct"}:
+        report.refuse(path, "bad_fighter_hp", 'fighter_hp_below_pct takes {"who": <fighter id>, "pct": 1-99}')
+        return None
+    who = _who(value["who"], path + ".who", report, rules, ())
+    pct = _ranged(value["pct"], 1, 99, path + ".pct", "pct", report, "%")
+    return None if who is None or pct is None else {"fighter_hp_below_pct": {"who": who, "pct": pct}}
 
 
 def _who(value, path, report, rules, words):
@@ -281,7 +310,7 @@ def _then(raw, path, report, rules, fighter_id):
         return None
     preset = _stance(raw["stance"], path + ".stance", report, rules) if "stance" in raw else None
     drives = _drives(raw["drives"], path + ".drives", report, rules, fighter_id) if "drives" in raw else {}
-    gate = _gate(raw["gate"], path + ".gate", report, rules) if "gate" in raw else None
+    gate = _gate(raw["gate"], path + ".gate", report, rules, fighter_id) if "gate" in raw else None
     target = _target(raw["target"], path + ".target", report, rules, fighter_id) if "target" in raw else None
     out = _expand(raw.get("stance") if preset else None, preset, drives, gate, target)
     if not out["drives"]:
@@ -347,7 +376,7 @@ def _check_allies(body, stance, report):
                           "this reflex protects but no ally is named: add drives.protect_ally to the behaviour")
 
 
-def _add_notes(body, present, report):
+def _add_notes(body: dict, present, report: _Report, rules: Mapping) -> None:
     """Applied as sent, but worth saying: an absent ally or target, or every drive at 0."""
     d = body["drives"]
     if present is not None:
@@ -355,7 +384,11 @@ def _add_notes(body, present, report):
         if d.get("protect_ally") is not None and d["protect_ally"] not in names:
             report.notes.append(f"protect_ally {d['protect_ally']} is not in the ring now; protect waits for it")
         if body["target"] not in TARGET_MODES and body["target"] not in names:
-            report.notes.append(f"target {body['target']} is not in the ring now; the target waits for it")
+            action = "the target waits for it"
+            if rules["behaviour"].get("target_away", False):
+                action = ("loot and keep clear until it returns" if body["gate"].get("target_is")
+                          else "fight the nearest allowed enemy until it returns")
+            report.notes.append(f"target {body['target']} is off the floor; {action}")
     if not any(d[k] for k in DRIVE_WEIGHTS):
         report.notes.append("every drive is 0: the fighter stands its ground and fights what the gate lets into reach")
 
@@ -376,15 +409,67 @@ def _envelope(raw, report, lim):
     return True
 
 
-def normalise(raw, rules, fighter_id, present=None):
+def _resolve_names(raw: Mapping, roster: list[dict], report: _Report) -> dict:
+    """Resolve public aliases before schema validation; only canonical ids enter the journal."""
+    out = _plain(raw)
+    ids: dict[str, set[str]] = {}
+    aliases: dict[str, set[str]] = {}
+    for row in roster:
+        ids.setdefault(row['id'].casefold(), set()).add(row['id'])
+        for text in (row['id'], row['name'], row['tag']):
+            aliases.setdefault(text.casefold(), set()).add(row['id'])
+    valid = ', '.join(f"{row['name']} ({row['id']})" for row in roster)
+
+    def resolve(layer: dict, path: str) -> None:
+        slots = [(layer, 'target', path + 'target')]
+        if isinstance(layer.get('drives'), dict):
+            slots.append((layer['drives'], 'protect_ally', path + 'drives.protect_ally'))
+        if isinstance(layer.get('gate'), dict):
+            slots.append((layer['gate'], 'target_is', path + 'gate.target_is'))
+            excluded = layer['gate'].get('target_is_not')
+            if isinstance(excluded, list):
+                slots.extend((excluded, index, path + f'gate.target_is_not[{index + 1}]')
+                             for index in range(len(excluded)))
+        cond = layer.get('if')
+        if isinstance(cond, dict) and isinstance(cond.get('fighter_hp_below_pct'), dict):
+            slots.append((cond['fighter_hp_below_pct'], 'who', path + 'if.fighter_hp_below_pct.who'))
+        for holder, key, where in slots:
+            value = holder[key] if isinstance(holder, list) else holder.get(key)
+            if not isinstance(value, str):
+                continue
+            folded = value.casefold()
+            if key == 'target' and folded in TARGET_MODES:
+                holder[key] = folded
+                continue
+            matches = ids.get(folded, aliases.get(folded, set()))
+            if len(matches) != 1:
+                report.refuse(where, 'unknown_fighter' if not matches else 'ambiguous_fighter',
+                              'Choose a unique fighter id or name. Valid names: ' + valid)
+            else:
+                holder[key] = next(iter(matches))
+
+    resolve(out, '')
+    reflexes = out.get('reflexes', [])
+    for index, row in enumerate(reflexes if isinstance(reflexes, list) else []):
+        if isinstance(row, dict):
+            resolve(row, f'reflexes[{index + 1}].')
+            if isinstance(row.get('then'), dict):
+                resolve(row['then'], f'reflexes[{index + 1}].then.')
+    return out
+
+
+def normalise(raw, rules, fighter_id, present=None, roster=None):
     """Return (behaviour or None, clipped, refused, notes).
 
     `present` is an optional collection of the fighter ids in the ring now; it only adds notes. A behaviour with
-    any refusal is None: nothing changes and the previous behaviour keeps running.
+    any refusal is None: nothing changes and the previous behaviour keeps running. With a public `roster`,
+    targets and protected allies also accept unique full names and tags, folded without regard to case.
     """
     report = _Report()
     if not _envelope(raw, report, _limits(rules)):
         return None, report.clipped, report.refused, report.notes
+    if roster is not None:
+        raw = _resolve_names(raw, roster, report)
     _unknown(raw, TOP_KEYS, "", report)
     if raw.get("v") != VERSION or type(raw.get("v")) is not int:
         report.refuse("v", "version", "set \"v\": 1")
@@ -395,7 +480,7 @@ def normalise(raw, rules, fighter_id, present=None):
         return out, report.clipped, report.refused, report.notes
     preset = _stance(raw["stance"], "stance", report, rules) if "stance" in raw else None
     drives = _drives(raw["drives"], "drives", report, rules, fighter_id) if "drives" in raw else {}
-    gate = _gate(raw["gate"], "gate", report, rules) if "gate" in raw else None
+    gate = _gate(raw["gate"], "gate", report, rules, fighter_id) if "gate" in raw else None
     target = _target(raw["target"], "target", report, rules, fighter_id) if "target" in raw else None
     body = _expand(raw.get("stance") if preset else None, preset, drives, gate, target)
     body["drives"] = {**_defaults(rules), **body["drives"]}
@@ -407,7 +492,7 @@ def normalise(raw, rules, fighter_id, present=None):
     _check_allies(body, raw.get("stance"), report)
     if report.refused:
         return None, report.clipped, report.refused, report.notes
-    _add_notes(body, present, report)
+    _add_notes(body, present, report, rules)
     return {"v": VERSION, **body}, report.clipped, report.refused, report.notes
 
 
@@ -444,15 +529,22 @@ def _gate_text(gate):
         parts.append(f"hp below {gate['target_hp_below_pct']}%")
     if gate.get("target_busy"):
         parts.append("busy")
+    if gate.get("target_facing_away"):
+        parts.append("facing away")
     if "distance_under" in gate:
         parts.append(f"within {gate['distance_under']} tiles")
     if gate.get("rival"):
         parts.append("rival")
     if gate.get("wears_legendary"):
         parts.append("wears a legendary")
+    restrictions = [f"only {gate['target_is']}"] if 'target_is' in gate else []
+    if gate.get('target_is_not'):
+        restrictions.append("except " + ", ".join(gate['target_is_not']))
+    only = "; ".join(restrictions)
     if not parts:
-        return "any target"
-    return (" and " if gate.get("match", "all") == "all" else " or ").join(parts)
+        return only or "any target"
+    conditions = (" and " if gate.get("match", "all") == "all" else " or ").join(parts)
+    return f"{only}; {conditions}" if only else conditions
 
 
 def _at_text(at):
@@ -510,6 +602,8 @@ def _cond_text(cond):
     if key == "enemy_within" and isinstance(value, Mapping):
         who = {"rival": "a rival", "ally_attacker": "the ally's attacker"}.get(value["who"], value["who"])
         return f"{who} within {value['radius']} tiles"
+    if key == "fighter_hp_below_pct":
+        return f"{value['who']} hp < {value['pct']}%"
     if key == "hit_by":
         who = {"any": "anyone", "rival": "a rival"}.get(value["who"], value["who"])
         return f"hit by {who} in the last 3 s"
@@ -551,7 +645,7 @@ def summary(behaviour, clipped, refused, notes, apply_tick, receive_tick, rules)
     return "New behaviour recorded: " + " · ".join(parts)
 
 
-def ack(raw, rules, fighter_id, seq, receive_tick, last_order_tick=None, present=None, rules_hash=None):
+def ack(raw, rules, fighter_id, seq, receive_tick, last_order_tick=None, present=None, rules_hash=None, roster=None):
     """The host's ACK frame for one behaviour order (the host adds its signature).
 
     `last_order_tick` is the apply tick of this fighter's last accepted order (behaviour or intent); the engine
@@ -564,7 +658,13 @@ def ack(raw, rules, fighter_id, seq, receive_tick, last_order_tick=None, present
             import sim
         rules_hash = sim.digest(rules)
     apply_tick = receive_tick + rules["input_delay"]
-    behaviour, clipped, refused, notes = normalise(raw, rules, fighter_id, present)
+    behaviour, clipped, refused, notes = normalise(raw, rules, fighter_id, present, roster)
+    if behaviour is not None and not behaviour.get('clear') and roster is not None:
+        names = {row['id']: row['name'] for row in roster}
+        named = {behaviour['target'], behaviour['drives'].get('protect_ally')}
+        for row in behaviour['reflexes']:
+            named.update((row['then'].get('target'), row['then'].get('drives', {}).get('protect_ally')))
+        notes += [f"resolved fighter: {names[name]} ({name})" for name in sorted(named - {None}) if name in names]
     if last_order_tick is not None and apply_tick - last_order_tick < rules["intent_interval"]:
         ready = last_order_tick + rules["intent_interval"] - rules["input_delay"]
         ms = rules["intent_interval"] * rules["milliseconds_per_second"] // rules["tick_hz"]

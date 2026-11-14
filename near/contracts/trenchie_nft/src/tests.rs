@@ -1079,7 +1079,19 @@ fn m1_paid_mint_metadata_is_the_permits_name_only() {
     e.call("player.testnet", MINT_COST);
     nft.paid_mint(good.clone(), sign(&good, &permit_key()));
     let md = nft.nft_token("paid-n1".into()).unwrap().metadata;
-    assert_eq!(md, TokenMetadata { title: Some("Pebble".into()), ..Default::default() });
+    assert_eq!(md.title.as_deref(), Some("Pebble"));
+    assert_eq!(md.issued_at, Some((T0 / 1_000_000).to_string()));
+    // Synthetic aliases are one-based in options.json insertion order, as in
+    // prepare_nft_metadata.py; keep this oracle independent of media.rs.
+    let preset_table = ["brawler-swing", "hunter-lunge", "survivor-beam", "looter-lob", "brawler-zap"];
+    let preset_index: usize = good.preset_id.strip_prefix("preset-").unwrap().parse().unwrap();
+    let expected_media = format!("https://neartrenchies.xyz/nft/v1/{}.png",
+        preset_table[preset_index - 1]);
+    assert_eq!(md.media.as_deref(), Some(expected_media.as_str()));
+    // The only persisted caller-supplied metadata is still the signed permit's name.
+    assert_eq!(nft.token("paid-n1").metadata, TokenMetadata {
+        title: Some("Pebble".into()), issued_at: Some((T0 / 1_000_000).to_string()), ..Default::default()
+    });
 }
 
 /// Any batch resets the 48 h exit, so an owner's own request lifts the
@@ -1408,4 +1420,97 @@ fn migrate_reads_the_first_inventory_layout_too() {
     let out = apply(&mut up, &mut e, "v0-1", vec![row("paid-v0", vec![], None)]);
     assert_eq!(out.created, vec!["paid-v0".to_string()]);
     std::mem::forget(up);
+}
+
+// nft-media: legacy premints must acquire wallet metadata without a replacement token.
+#[test]
+fn nft_media_legacy_upgrade_keeps_identity_and_fills_wallet_metadata() {
+    let (mut nft, mut e) = setup();
+    nft.arena = None;
+    nft.presets = vec!["hunter-lunge".into()];
+    nft.metadata.icon = None;
+    e.call("minter.testnet", 0);
+    nft.premint("hunter-lunge".into(), digest(77), 1);
+    let mint_log: serde_json::Value = serde_json::from_str(get_logs()[0].strip_prefix("EVENT_JSON:").unwrap()).unwrap();
+    assert_eq!(mint_log["data"][0]["owner_id"], "custody.testnet");
+    assert_eq!(mint_log["data"][0]["token_ids"][0], "hunter-lunge-00");
+    // Model bytes from the currently deployed layout, including its empty metadata.
+    let mut legacy = nft.token("hunter-lunge-00");
+    legacy.metadata = TokenMetadata::default();
+    legacy.record.kos = 7;
+    legacy.bag = vec![entry(3, 9)];
+    legacy.approvals.insert(acc("market.testnet"), 12);
+    nft.tokens.insert("hunter-lunge-00".into(), legacy.clone());
+    nft.flush();
+    env::state_write(&nft);
+    std::mem::forget(nft);
+    e.call("nft.testnet", 0);
+    let up = TrenchieNft::migrate(None);
+    let view = up.nft_token("hunter-lunge-00".into()).unwrap();
+    assert_eq!(view.metadata.title.as_deref(), Some("Pike Pennywhistle"));
+    assert!(view.metadata.media.as_deref().unwrap().starts_with("https://neartrenchies.xyz/nft/v1/"));
+    assert_eq!(near_sdk::base64::engine::general_purpose::STANDARD.decode(view.metadata.media_hash.as_ref().unwrap()).unwrap().len(), 32);
+    assert!(view.metadata.reference.is_some());
+    assert!(view.metadata.reference_hash.is_some());
+    assert!(view.metadata.issued_at.is_none(), "an unknown historic date must not be fabricated");
+    assert!(up.nft_metadata().icon.unwrap().starts_with("data:image/svg+xml;base64,"));
+    assert_eq!(up.token("hunter-lunge-00"), legacy, "all stored state stays intact");
+    assert_eq!(up.nft_total_supply().0, 1);
+    assert_eq!(up.nft_tokens_for_owner(acc("custody.testnet"), None, None)[0].metadata, view.metadata);
+}
+
+#[test]
+fn nft_media_seller_settlement_preserves_authority_and_event_shapes() {
+    let (mut nft, mut e) = setup();
+    nft.arena = None;
+    e.call("minter.testnet", 0);
+    nft.mint_trenchie("coral".into(), acc("a.testnet"), "preset-2".into(), digest(78),
+        Some(TokenMetadata { title: Some("Coral Compass".into()), ..Default::default() }));
+    let md = nft.nft_token("coral".into()).unwrap().metadata;
+    assert_eq!(md.title.as_deref(), Some("Coral Compass"));
+    assert_eq!(md.issued_at, Some((T0 / 1_000_000).to_string()));
+    let logs = get_logs();
+    let mint: serde_json::Value = serde_json::from_str(logs[0].strip_prefix("EVENT_JSON:").unwrap()).unwrap();
+    assert_eq!((mint["standard"].as_str(), mint["version"].as_str(), mint["event"].as_str()), (Some("nep171"), Some("1.2.0"), Some("nft_mint")));
+    assert_eq!(mint["data"][0]["owner_id"], "a.testnet");
+    let price = U128(u128::MAX);
+    assert_eq!(nft.nft_payout("coral".into(), price, None).payout, BTreeMap::from([(acc("a.testnet"), price)]));
+    e.call("a.testnet", 1);
+    assert!(refused(&e, &mut nft, |n| n.nft_transfer_payout(acc("b.testnet"), "coral".into(), None, None, price, Some(0))).contains("max_len_payout"));
+    assert_eq!(nft.token("coral").owner_id, acc("a.testnet"));
+    e.call("other.testnet", 1);
+    assert!(refused(&e, &mut nft, |n| n.nft_transfer_payout(acc("b.testnet"), "coral".into(), None, None, price, Some(1))).contains("not the owner or approved"));
+    e.call("a.testnet", NEAR / 10);
+    nft.nft_approve("coral".into(), acc("market.testnet"), None);
+    e.call("market.testnet", 1);
+    let payout = nft.nft_transfer_payout(acc("b.testnet"), "coral".into(), Some(0), Some("sale".into()), price, Some(1));
+    assert_eq!(payout.payout, BTreeMap::from([(acc("a.testnet"), price)]));
+    assert!(nft.token("coral").approvals.is_empty());
+    let transfer: serde_json::Value = serde_json::from_str(get_logs()[0].strip_prefix("EVENT_JSON:").unwrap()).unwrap();
+    assert_eq!(transfer["event"], "nft_transfer");
+    assert_eq!(transfer["data"][0]["old_owner_id"], "a.testnet");
+    assert_eq!(transfer["data"][0]["new_owner_id"], "b.testnet");
+    assert_eq!(transfer["data"][0]["authorized_id"], "market.testnet");
+    assert_eq!(transfer["data"][0]["token_ids"], json!(["coral"]));
+    e.call("b.testnet", 1);
+    nft.nft_burn("coral".into());
+    let burn: serde_json::Value = serde_json::from_str(get_logs()[0].strip_prefix("EVENT_JSON:").unwrap()).unwrap();
+    assert_eq!(burn["event"], "nft_burn");
+    assert_eq!(burn["data"][0]["owner_id"], "b.testnet");
+    assert_eq!(burn["data"][0]["token_ids"], json!(["coral"]));
+    assert!(nft.nft_token("coral".into()).is_none());
+}
+
+#[test]
+fn nft_media_enumeration_omitted_limit_returns_more_than_fifty() {
+    let (mut nft, mut e) = setup();
+    for n in 0..55 {
+        mint(&mut nft, &mut e, &format!("coral-{n}"), "a.testnet", n);
+    }
+    assert_eq!(nft.nft_total_supply().0, 55);
+    assert_eq!(nft.nft_supply_for_owner(acc("a.testnet")).0, 55);
+    assert_eq!(nft.nft_tokens(None, None).len(), 55);
+    assert_eq!(nft.nft_tokens_for_owner(acc("a.testnet"), None, None).len(), 55);
+    assert_eq!(nft.nft_tokens(Some(U128(50)), Some(2)).len(), 2);
+    assert_eq!(nft.nft_tokens(Some(U128(u128::MAX)), None).len(), 0);
 }

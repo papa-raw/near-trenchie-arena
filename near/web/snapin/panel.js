@@ -43,12 +43,13 @@
   function draft() { try { return JSON.parse(ls.get(SAVE) || '{}') || {}; } catch (e) { return {}; } }
 
   var S = { open: ls.get(OPEN_STORE) !== '0', tab: 'chat', capEdit: false, capPick: null, raisePick: null, corner: null, codeLog: null, brain: null, draft: '', sending: false,
-            note: '', turns: [], visit: Date.now(), timer: null, el: null, room: null, swapMsg: '', leaving: false, leaveMsg: '', leaveUntil: 0, leaveFor: '', leaveTimer: null };
+            targetStatus: '', note: '', turns: [], visit: Date.now(), timer: null, el: null, room: null, swapMsg: '', leaving: false, leaveMsg: '', leaveSigninFor: '', leaveUntil: 0, leaveFor: '', leaveTimer: null, explorerFor: '', explorerHref: '' };
 
   // ------------------------------------------------------------------ who is mine, from which source
   function mine() {
     var R = root.SnapRoom, st = R && R.status(), P = draft(), door = P.door || {};
     if (door.route === 'plan' && P.planCode && S.codeLog && S.codeLog.joined) {
+      if (S.codeLog.state === 'home') return null;
       var L = S.codeLog; return { id: L.fighter_id, name: P.name || L.name, preset: P.preset, life: L.life, agent: door.identity === 'Codex' ? 'Codex' : 'Claude Code', plan: true };
     }
     if (st && st.fighter && /^(in|joining|offline|leaving)$/.test(st.phase)) {
@@ -76,8 +77,8 @@
     var hpRow = hp != null && max ? '<div class="hprow"><span class="hpl">' + C.hp + '</span><div class="hp grow" role="img" id="pn-hpbar" aria-label="HP ' + hp + ' of ' + max + '"><i style="width:' + Math.max(0, Math.min(100, Math.round(100 * hp / max))) + '%"></i></div><span class="hpn" id="pn-hpn">' + hp + '/' + max + '</span><span class="state' + st[1] + '">' + C.states[st[0]] + '</span></div>' : '';
     var source = m.plan ? F(C.session, { agent: m.agent }) : m.door;
     var room = root.SnapRoom, rs = room && room.status(), remote = m.plan && !(rs && rs.fighter && rs.fighter.id === m.id);
-    var busy = S.leaving || (rs && /^(joining|leaving)$/.test(rs.phase));
-    var leave = '<button type="button" class="plate leave" data-pn="leave"' + (busy || remote || !room || !room.leave ? ' disabled' : '') + (remote ? ' title="' + C.leaveAgent + '"' : '') + '>' + (S.leaveUntil ? C.leaveConfirm : C.leave) + '</button>';
+    var busy = S.leaving || (!remote && rs && /^(joining|leaving)$/.test(rs.phase));
+    var leave = '<button type="button" class="plate leave" data-pn="leave"' + (busy || !leaveAction(m) ? ' disabled' : '') + '>' + (S.leaveUntil ? C.leaveConfirm : C.leave) + '</button>';
     return '<div class="ph' + (S.leaveUntil ? ' leave-armed' : '') + '"><img src="' + avatar(m) + '" alt=""><div class="ph-mid"><h2>' + esc(m.name) + '</h2><div class="sub">' + esc(F(C.life, { life: m.life || 1, source: source }).replace(/ · $/, ''))   /* no AI door: no source after the dot */ + '</div>' + hpRow + '</div>' +
       '<div class="ph-r"><div class="icons">' + leave + '<button type="button" class="ib plate" data-pn="close" aria-label="' + C.close + '">×</button></div></div></div>';
   }
@@ -88,6 +89,31 @@
     var eq = equipped(); if (!eq.length) return '';
     return '<div class="gearrow"><span class="gh">' + C.gearH + '</span>' + eq.map(function (g) { return '<span class="gi" title="' + esc(C.slots[g.slot] || g.slot) + '">' + ico(g.slot, 26) + '<span>' + esc(g.name) + '</span></span>'; }).join('') +
       '<a href="#" class="link bagl" title="' + C.bagHint + '" data-pn="bag">' + F(C.bag, { n: bag().length }) + '</a></div>';
+  }
+  function explorerLink(m) {
+    if (S.explorerFor !== m.id || !S.explorerHref) return '';
+    return '<div class="gear-identity"><b>' + esc(m.name) + '</b><a class="link ib gear-explorer" href="' + esc(S.explorerHref) + '" target="_blank" rel="noopener" aria-label="NearBlocks" title="NearBlocks"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4L10 14M10 4H4v16h16v-6"/></svg></a></div>';
+  }
+  // /dev/players labels distinguish minted players from DEV identities; fighter names alone grant no link.
+  async function readExplorer(m) {
+    if (!m || !m.id || S.explorerFor === m.id || !root.SnapIdentity || !root.SnapIdentity.mode) return;
+    S.explorerHref = '';
+    try {
+      var mode = await root.SnapIdentity.mode();
+      if (!mode || !mode.identity_nft) {
+        // A known DEV host has no minted identity; an unavailable health read must be retried.
+        if (root.SnapIdentity.state && root.SnapIdentity.state().modeKnown) S.explorerFor = m.id;
+        return;
+      }
+      var network = mode.identity_network || mode.network;
+      if (network !== 'mainnet' && network !== 'testnet') return;
+      var r = await root.fetch('/dev/players', { cache: 'no-store' });
+      if (!r.ok) return;
+      var players = await r.json();
+      var minted = Array.isArray(players) && players.some(function (p) { return p.fighter_id === m.id && p.label === network.toUpperCase(); });
+      S.explorerFor = m.id;
+      if (minted) S.explorerHref = 'https://' + (network === 'mainnet' ? '' : 'testnet.') + 'nearblocks.io/nft-token/' + encodeURIComponent(mode.identity_nft) + '/' + encodeURIComponent(m.id);
+    } catch (e) { /* unavailable identity data: omit the link and retry on the next poll */ }
   }
   function spendRows() { try { var r = JSON.parse(ls.get(SPEND_STORE) || '[]'); return Array.isArray(r) ? r.filter(function (x) { return x && typeof x.at === 'number' && typeof x.usd === 'number'; }) : []; } catch (e) { return []; } }
   // The cap is the stored one: the brain reads that same key at every step (≤ 5 s), so a cap just set shows at once instead of
@@ -180,6 +206,26 @@
     var conv = S.brain && S.brain.conversation || [], t = conv.filter(function (x) { return x && x.who === 'trenchie' && x.text; }).pop();
     return t ? t.text : '';
   }
+  // Existing status space only. Names/timers come from the public roster; a held timer is never a countdown.
+  // Complexity ceiling: 12 per helper.
+  async function readTargetStatus(m) {
+    var active = root.SnapBrain && root.SnapBrain.active, plan = !m || m.plan ? null : active && active.behaviour;
+    var room = root.SnapRoom, only = plan && plan.gate && plan.gate.target_is;
+    var ids = typeof only === 'string' ? [only] : [];
+    if (plan && plan.target) ids = ids.concat([plan.target]);
+    S.targetStatus = '';
+    if (!ids.length || !room || typeof room.roster !== 'function') return;
+    try {
+      var rows = await room.roster();
+      S.targetStatus = rows.filter(function (row) { return ids.indexOf(row.id) >= 0 && row.state === 'bench'; }).map(targetStatusLine).join(' · ');
+    } catch (e) { /* No current roster: omit the status instead of promising a stale return time. */ }
+  }
+  function targetStatusLine(row) {
+    var line = row.name + ' is off the floor';
+    if (row.held) return line + '; return paused';
+    return typeof row.respawn_in_ms === 'number' && row.respawn_in_ms >= 0
+      ? line + ', back in ' + Math.ceil(row.respawn_in_ms / 1000) + ' s' : line + '; return time unavailable';
+  }
   function html(m) {
     if (!S.open) return closedTab(m);
     var bench = !m.plan && onBench(), g = phone() ? 'left:0;right:0;top:290px;bottom:0' : 'right:12px;top:12px;bottom:12px;width:460px';
@@ -187,10 +233,15 @@
     var tabs = '<div class="pn-tabs" role="tablist" aria-label="Your Trenchie">' +
       '<button type="button" class="plate" id="pn-tab-chat" role="tab" aria-controls="pn-chat" aria-selected="' + chat + '" tabindex="' + (chat ? '0' : '-1') + '" data-pn="tab:chat">Chat</button>' +
       '<button type="button" class="plate" id="pn-tab-gear" role="tab" aria-controls="pn-gear" aria-selected="' + !chat + '" tabindex="' + (chat ? '-1' : '0') + '" data-pn="tab:gear"' + (bench ? ' aria-label="Gear: gear can be changed now"' : '') + '>Gear' + (bench ? ' <span class="gear-ready" aria-hidden="true">●</span>' : '') + '</button></div>';
+    var recovery = '';
+    if (S.leaveSigninFor === m.id) {
+      var wallet = new URL(AI_STEP, root.location.href); wallet.searchParams.set('step', 'wallet');
+      recovery = ' <a class="link" href="' + esc(wallet.pathname + wallet.search) + '" target="_blank" rel="noopener">' + esc(C.leaveSignin) + '</a>';
+    }
     // data-arena-panel: the arena HUD keeps clear of this box while it is open (agreed with board 2's HUD); closed, it is not drawn
-    return '<div class="sign pnl' + (bench ? ' onbench' : '') + '" data-arena-panel data-material="wood" style="' + g + '"><div class="face">' + head(m) + (S.leaveMsg ? '<div class="leave-msg" role="status">' + esc(S.leaveMsg) + '</div>' : '') + money(m) + tabs +
-      '<div class="pn-pane chat-pane" id="pn-chat" role="tabpanel" aria-labelledby="pn-tab-chat"' + (chat ? '' : ' hidden') + '>' + logEntries(m) + orderBox(m) + '</div>' +
-      '<div class="pn-pane gear-pane" id="pn-gear" role="tabpanel" aria-labelledby="pn-tab-gear" tabindex="0"' + (chat ? ' hidden' : '') + '>' + (gear || '<div class="readonly">Gear will appear here when the arena reports it.</div>') + '</div></div></div>';
+    return '<div class="sign pnl' + (bench ? ' onbench' : '') + '" data-arena-panel data-material="wood" style="' + g + '"><div class="face">' + head(m) + (S.leaveMsg ? '<div class="leave-msg" role="status">' + esc(S.leaveMsg) + recovery + '</div>' : '') + money(m) + tabs +
+      '<div class="pn-pane chat-pane" id="pn-chat" role="tabpanel" aria-labelledby="pn-tab-chat"' + (chat ? '' : ' hidden') + '>' + (S.targetStatus ? '<div class="readonly" id="pn-target-status" role="status">' + esc(S.targetStatus) + '</div>' : '') + logEntries(m) + orderBox(m) + '</div>' +
+      '<div class="pn-pane gear-pane" id="pn-gear" role="tabpanel" aria-labelledby="pn-tab-gear" tabindex="0"' + (chat ? ' hidden' : '') + '>' + explorerLink(m) + (gear || '<div class="readonly">Gear will appear here when the arena reports it.</div>') + '</div></div></div>';
   }
 
   // ------------------------------------------------------------------ draw, paint, keep focus and the log's place
@@ -240,11 +291,14 @@
         if (id) { var c = await root.fetch('/dev/corner?fighter=' + encodeURIComponent(id), { cache: 'no-store' }); var j = c.ok ? await c.json() : null; S.corner = j && !j.error ? keep(j) : null; }
       }
     } catch (e) { /* the arena away: the parts with no fresh data keep their last reading */ }
+    await readExplorer(mine());
+    await readTargetStatus(mine());
     // redraw only when what the panel shows has changed (a redraw every second replaced the very link being clicked);
     // the running counters change in place
     var sh = shape(); if (sh !== S.lastShape) { S.lastShape = sh; render(); } else { if (logShape() !== S.lastLog) relog(); tickLive(); }
   }
   function tickLive() {
+    var target = doc.getElementById('pn-target-status'); if (target) target.textContent = S.targetStatus;
     var th = doc.getElementById('pn-think'), m = mine();
     if (th && S.brain && S.brain.thinking && m) th.textContent = F(C.thinking, { short: shortOf(m.name), s: ((Date.now() - S.brain.thinking.since) / 1000).toFixed(1) });
     var src = m && m.plan ? S.codeLog : S.corner, bar = doc.getElementById('pn-hpbar'), hpn = doc.getElementById('pn-hpn');
@@ -266,7 +320,7 @@
     var c = S.corner ? Object.assign({}, S.corner, { events: null, hp: S.corner.hp == null ? null : 1, bench: S.corner.bench ? Object.assign({}, S.corner.bench, { respawn_in_ms: S.corner.bench.respawn_in_ms == null ? null : 1, remaining_ms: null }) : null, respawn_at_ms: null }) : null;
     var b = S.brain || {};
     var L = S.codeLog ? Object.assign({}, S.codeLog, { log: null, hp: S.codeLog.hp == null ? null : 1 }) : null;
-    return JSON.stringify([c, L, b.state, !!b.thinking, b.spendHourUsd, b.capUsd, cap(), capped(), (b.conversation || []).length, b.lastOrderTiming, S.turns, S.open, S.tab, S.capEdit, S.capPick, S.raisePick, S.sending, S.note, S.swapMsg, S.leaving, S.leaveMsg, phone()]);
+    return JSON.stringify([c, L, b.state, !!b.thinking, b.spendHourUsd, b.capUsd, cap(), capped(), (b.conversation || []).length, b.lastOrderTiming, S.turns, S.open, S.tab, S.capEdit, S.capPick, S.raisePick, S.sending, S.note, S.swapMsg, S.leaving, S.leaveMsg, S.leaveSigninFor, S.targetStatus.replace(/, back in \d+ s/g, ', back in'), S.explorerFor, S.explorerHref, phone()]);
   }
 
   // ------------------------------------------------------------------ actions
@@ -290,9 +344,15 @@
   function resetLeave() {
     root.clearTimeout(S.leaveTimer); S.leaveTimer = null; S.leaveUntil = 0; S.leaveFor = '';
   }
+  function leaveAction(m) {
+    var R = root.SnapRoom, rs = R && R.status();
+    if (m.plan && root.SnapIdentity && typeof root.SnapIdentity.leave === 'function') return function () { return root.SnapIdentity.leave(m.id); };
+    if (R && R.leave && rs && rs.fighter && rs.fighter.id === m.id && !/^(joining|leaving)$/.test(rs.phase)) return function () { return R.leave(); };
+    return null;
+  }
   function confirmLeave() {
-    var R = root.SnapRoom, rs = R && R.status(), m = mine();
-    if (!m || !R || !R.leave || !rs || !rs.fighter || rs.fighter.id !== m.id || S.leaving || /^(joining|leaving)$/.test(rs.phase)) return;
+    var m = mine();
+    if (!m || !leaveAction(m) || S.leaving) return;
     var now = Date.now(), confirmed = S.leaveFor === m.id && now < S.leaveUntil;
     // A rapid repeat keeps the original confirmation window and timeout.
     if (confirmed && now - (S.leaveUntil - LEAVE_CONFIRM_MS) < LEAVE_CONFIRM_MIN_MS) return;
@@ -303,16 +363,20 @@
     render();
   }
   async function leave() {
-    var R = root.SnapRoom, rs = R && R.status(), m = mine();
-    if (!m || !R || !R.leave || !rs || !rs.fighter || rs.fighter.id !== m.id || S.leaving || /^(joining|leaving)$/.test(rs.phase)) return;
-    S.leaving = true; S.leaveMsg = F(C.leaving, { name: m.name }); render();
+    var m = mine(), action = m && leaveAction(m);
+    if (!action || S.leaving) return;
+    S.leaving = true; S.leaveSigninFor = ''; S.leaveMsg = F(C.leaving, { name: m.name }); render();
     try {
-      await R.leave();
-      var P = draft(); P.left = Date.now(); ls.set(SAVE, JSON.stringify(P));
+      await action();
+      var P = draft(); P.left = Date.now(); if (m.plan) delete P.planCode; ls.set(SAVE, JSON.stringify(P));
       S.codeLog = null;
       var guide = new URL(AI_STEP, root.location.href); guide.searchParams.set('step', 'ring');
       root.location.href = guide.pathname + guide.search;
-    } catch (e) { S.leaveMsg = F(C.leaveFailed, { why: e && e.message || 'the arena did not answer' }); }
+    } catch (e) {
+      var why = e && e.message || 'the arena did not answer';
+      S.leaveMsg = F(C.leaveFailed, { why: why });
+      if (m.plan && /sign in with your wallet first/i.test(why)) S.leaveSigninFor = m.id;
+    }
     S.leaving = false; render();
   }
   function selectTab(tab) {

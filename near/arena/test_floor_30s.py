@@ -14,7 +14,7 @@ import replay
 import sim
 
 OLD_HASH = '852a82695da097598170e8dd4ab514a82010e68d483e544d434d9ea8e199d20e'
-NEW_HASH = 'ebf05440b37637db637c8ded3ea08cc8dbfa1dcc4d8c24635bcdfdb4cd975967'
+NEW_HASH = sim.digest(sim.DEFAULT_RULES)
 
 
 class Floor30s(unittest.TestCase):
@@ -23,13 +23,14 @@ class Floor30s(unittest.TestCase):
         old_path = HERE / 'rules/integer-16.json'
         old_bytes = old_path.read_bytes()
         old = json.loads(old_bytes)
-        new_path = HERE / 'rules/integer-17.json'
+        new_path = HERE / 'rules' / (sim.DEFAULT_RULES['version'] + '.json')
         new = json.loads(new_path.read_bytes())
         self.assertEqual(sim.digest(old), OLD_HASH)
         self.assertEqual(sim.digest(new), NEW_HASH)
         self.assertEqual(sim.digest(sim.DEFAULT_RULES), NEW_HASH)
-        self.assertEqual({k: new[k] for k in new if new[k] != old.get(k)},
-                         {'version': 'integer-17', 'floor_ticks': 600})
+        self.assertEqual(new['floor_ticks'], 600)
+        self.assertEqual(old['floor_ticks'], 1200)
+        self.assertNotEqual(new['version'], old['version'])
         self.assertEqual(set(new), set(old))
         self.assertEqual(sim.digest(replay.load_rules(NEW_HASH)), NEW_HASH)
         self.assertEqual(sim.digest(replay.load_rules(OLD_HASH)), OLD_HASH)

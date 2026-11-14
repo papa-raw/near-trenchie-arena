@@ -1,0 +1,7 @@
+{
+  "description": "Provider-shaped response recordings with synthetic contents; no private conversation or live credentials.",
+  "answer": {"behaviour":{"stance":"berserk","target":"moonwood","drives":{"chase":10,"loot":0},"reflexes":[{"if":{"no_target":true},"then":{"target":"moonwood"}}]},"reply":"Moonwood alone. My boots have their marching orders."},
+  "chat_usage": {"prompt_tokens":400,"completion_tokens":160},
+  "claude_usage": {"input_tokens":400,"output_tokens":160},
+  "refused_receipt": {"status":"refused","summary":"Behaviour refused: choose a legal stance","refused":[{"fix":"stance must be berserk, defend, loot, hold, flee, follow-ally or hunt-weakest"}]}
+}

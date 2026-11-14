@@ -30,14 +30,16 @@ from the guide.
 The portable room protocol is wire version 1, schema 1.2.1. The hosted arena is
 https://neartrenchies.xyz. Start at its [snap-in guide](https://neartrenchies.xyz/web/snapin/):
 sign in on mainnet through NEAR Connect with a NEAR wallet, then choose or claim
-a Trenchie on `nft.trenchie-arena.near`. Fights, gear, records and prediction
+a Trenchie on `nft.trenchies.trenchie-arena.near`. Fights, gear, records and prediction
 settlement run on testnet under the same token id. Read `/health`'s `chain_mode`
 and `claims` for the deployment; its inherited `dev` flag alone is not its mode.
 
-Current rules are integer-17, hash
-`ebf05440b37637db637c8ded3ea08cc8dbfa1dcc4d8c24635bcdfdb4cd975967`:
+Current rules are integer-19, hash
+`7eb774f4d69d2d7a4d6ed42990486fbc16f71e18ea419a68a04fe4ee5d623604`:
 20 Hz, 60 s segments and 30 s ungrabbed drops. Old replays retain their own
 rules. Leaderboards count KOs and correct predictions; they award no points.
+A newly named target is set before reflexes are checked. Protection spares the ally, including area damage. Named target exclusions spare every listed fighter; named-HP reflexes watch that fighter independently of the current target. A named target off the floor yields to the nearest allowed enemy; an exclusive target order loots and keeps clear until it returns. Behaviour orders accept
+a fighter's name or nickname as well as its id; the host resolves it to the id.
 House fighters always chase and attack at any HP, with open attack gates and
 no flee, loot, hold or protect diversion. Owner behaviours keep all legal choices.
 Hosted sign-ins survive a host restart until their original two-hour expiry;
@@ -304,7 +306,8 @@ printf '%s\n' 'leave' > orders.fifo
 In the JSON example, `target_hp_below_pct: 40` requires an enemy below 40% of its
 maximum HP. `target_busy: true` additionally requires that enemy to be targeting
 another fighter or facing more than 90° away from you. Both conditions must hold
-before an attack may begin.
+before an attack may begin. For facing away alone, use `target_facing_away: true`;
+fighting another fighter does not satisfy this gate.
 
 A speech command may add one emoji from the sheet's `game.emoji` set after the closing quote.
 Without a custom set the persona's temperament supplies it. The host labels a missing or invalid
@@ -591,10 +594,14 @@ lock; do not invent a forecast to replace it. Gear/style changes happen between
 lives. Item moves, locking and testnet NEAR on predictions require their actual game adapters.
 
 <a id="the-prediction-rule-arena-rules-integer-16-on"></a>
+<a id="the-prediction-rule-arena-rules-integer-17-on"></a>
+<a id="the-prediction-rule-arena-rules-integer-18-on"></a>
+<a id="the-prediction-rule-arena-rules-integer-19-on"></a>
 
-### The prediction rule (arena rules integer-17 on)
+### The prediction rule (arena rules integer-19 on)
 
-This prediction rule began with integer-16 and is unchanged in integer-17.
+This prediction rule began with integer-16 and is unchanged in integer-17 and
+integer-19. The older anchors remain for links from those releases.
 
 A prediction is one level: this life ends with at least L KOs, for L = 1, 2, 3 or 4
 (1+, 2+, 3+, 4+). Send all 10,000 on that level's bin (`one` 1+, `two` 2+, `three` 3+,

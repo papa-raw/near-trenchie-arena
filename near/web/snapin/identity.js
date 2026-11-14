@@ -1,6 +1,7 @@
 /* identity.js: the hosted arena's chain mode in the guide. Your wallet signs in, and you get a trenchie on the identity NFT.
  *
- * A classic script, loaded after wallet.js; in a page it sets window.SnapIdentity, under node it is module.exports.
+ * A classic script: the guide loads it after wallet.js; the arena restores its saved page key.
+ * In a page it sets window.SnapIdentity, under node it is module.exports.
  * Every step is one POST /dev/identity {"op": ...} to the host (near/chain/hosted_live.py), and nothing here pretends:
  *   mode()         GET /dev/health: the host's chain_mode block (identity network, contracts), or null on a DEV host
  *   signIn()       makes this page's own key (nonextractable WebCrypto Ed25519, kept in IndexedDB), asks
@@ -12,6 +13,7 @@
  *                  plays that premint's persona); else a paid mint the wallet signs itself with the host's permit for the
  *                  sheet the host checked. A mint the wallet sent is confirmed again on retry, never sent twice.
  *   ticket(token)  a signed one-use ticket for the room join (room.js sends it with the registration)
+ *   leave(token)   a signed owner request: release the seat and end its agent pairing, with a fresh host owner read
  */
 (function (root) {
   'use strict';
@@ -26,10 +28,20 @@
   }
 
   async function post(fetchFn, body) {
-    var r = await fetchFn('/dev/identity', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    var data = null; try { data = await r.json(); } catch (e) { /* not JSON */ }
-    if (!r.ok || !data || data.error) throw new Error((data && data.error) || ('the host answered ' + r.status));
-    return data;
+    // Ownership reads can be retried safely. Bound the request and body read so a stalled host
+    // releases the guide's Checking state; wallet approvals and mint submissions keep their own flow.
+    var read = body.op === 'inspect' || body.op === 'confirm';
+    var abort = read && root.AbortController ? new root.AbortController() : null;
+    var timeout = abort ? root.setTimeout(function () { abort.abort(); }, 15000) : null;
+    try {
+      var r = await fetchFn('/dev/identity', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: abort ? abort.signal : undefined });
+      var data = null; try { data = await r.json(); } catch (e) { if (abort && abort.signal.aborted) throw e; /* not JSON */ }
+      if (!r.ok || !data || data.error) throw new Error((data && data.error) || ('the host answered ' + r.status));
+      return data;
+    } catch (e) {
+      if (abort && abort.signal.aborted) throw new Error('The ownership check took too long. Try again; if it keeps happening, sign in again.');
+      throw e;
+    } finally { if (timeout !== null) root.clearTimeout(timeout); }
   }
 
   function make(deps) {
@@ -53,8 +65,8 @@
         tx.onabort = function () { db.close(); reject(tx.error); };
       });
     }
-    async function restoreAuthorization() {
-      if (state.signin && pageKey) return;
+    async function restoreAuthorization(refresh) {
+      if (!refresh && state.signin && pageKey) return;
       var saved = await authorization(false).catch(function () { return null; });
       if (saved && saved.state && saved.pageKey) { state = saved.state; pageKey = saved.pageKey; }
     }
@@ -104,7 +116,7 @@
       return { account: out.account_id, owned: state.owned, offer: out.offer, network: net };
     }
 
-    // o: {preset (battle option slug), sheet (the persona sheet), claim (true: the player plays the premint persona), tokenId}
+    // o: {preset (battle option slug), sheet (the persona sheet), claim, tokenId, newFighter (claim or mint another)}
     async function getTrenchie(o) {
       if (!state.signin) throw new Error('sign in with your wallet first');
       var net = state.mode.identity_network;
@@ -113,7 +125,7 @@
         var was = state.pending; state.pending = null; state.owned = [{ token_id: cp.token_id }];
         return Object.assign({ how: 'paid', tx: was.tx }, cp);
       }
-      var owned = o.tokenId ? [{ token_id: o.tokenId }] : state.owned;
+      var owned = o.newFighter === true ? [] : o.tokenId ? [{ token_id: o.tokenId }] : state.owned;
       if (owned.length) {
         var sheets = root.SnapSheet || (typeof require === 'function' && require('./sheet.js'));
         if (!o.sheet || !sheets) throw new Error('Send the original persona sheet for your owned Trenchie.');
@@ -151,6 +163,8 @@
     async function codeRequest(args, tokenId) { return envelope('code', Object.assign({}, args, { nft_token_id: tokenId })); }
 
     return { mode: mode, signIn: signIn, getTrenchie: getTrenchie, ticket: ticket, codeRequest: codeRequest,
+             // The owner may have renewed the sign-in in another guide tab while this arena stayed open.
+             leave: async function (tokenId) { await restoreAuthorization(true); return step('leave', { nft_token_id: tokenId }); },
              inspectOwned: function (tokenId) { return step('inspect', { token_id: tokenId }); },
              state: function () { return state; } };
   }

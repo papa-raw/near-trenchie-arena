@@ -251,6 +251,7 @@ class Round:
         self.arena.fighter_event = dev.fighter_event
         self.arena.battle_note = dev.post_note
         self.arena.battle_receipt_seen = dev.receipt_seen
+        self.arena.target_roster = dev.target_roster
         house.attach(self.arena) if live else setattr(house, "arena", self.arena)
         self.feed = dev.feed
         apply_intent = self.arena.bridge.apply
@@ -466,6 +467,24 @@ class DevRoom:
         log = getattr(self, "house_log", None)
         return public_log_tail(log.path if log is not None else None)
 
+    def target_roster(self) -> list[dict]:
+        """Public target aliases, including every house fighter and members waiting on the bench."""
+        arena, rows = self.round.arena, {}
+        for who, game in sorted(self.house_games.items()):
+            rows[who] = dict(id=who, name=game['name'], tag=game['tag'])
+        for who, member in sorted(arena.members.items()):
+            if member['released'] or who in rows:
+                continue
+            name = self.identities.get(who, {}).get('name') or member['profile']['public_name']
+            rows[who] = dict(id=who, name=name, tag=name)
+        for who, row in rows.items():
+            fighter = arena.sim.state['fighters'].get(who)
+            row['state'] = 'ring' if fighter is not None and fighter['state'] == 'alive' else 'bench'
+            bench = arena.bridge.bench_view(who) if who in arena.members else {}
+            row['held'] = bool(bench.get('held'))
+            row['respawn_in_ms'] = bench.get('respawn_in_ms') if row['state'] == 'bench' else None
+        return list(rows.values())
+
     # --- DEV adapters -------------------------------------------------------------------------------
     def room_sign(self, body: bytes) -> str:
         return encoded(self.room_key.sign(body))
@@ -585,7 +604,9 @@ class DevRoom:
                  else "held" if bench.get("held") else "bench")
         plan = self.plan_use.get(who, {})
         return dict(joined=True, state=state, fighter_id=who, name=row["name"], agent=row["agent"],
-                    life=None if f is None else f["life_number"], hp=None if f is None else f["hp"],
+                    # Managed sim fighters restart their own counter on each spawn; the member owns life numbering.
+                    life=None if member is None else max(1, member["life_number"] + (0 if bench.get("down") or bench.get("held") else 1)),
+                    hp=None if f is None else f["hp"],
                     max_hp=None if f is None else f["max_hp"],
                     plan=dict(stop_pct=row.get("plan_stop_pct"), week_used_pct=plan.get("week_used_pct"),
                               reported_at_ms=plan.get("reported_at_ms"),
@@ -1032,6 +1053,8 @@ class DevRoom:
                 return 200, self.feed.public(int(query.get("since", "0") or 0))
             if path == "/house/roster":
                 return 200, self.house_roster()
+            if path == "/house/targets":
+                return 200, self.target_roster()
             if path == "/house/record.jsonl":  # bounded public tail; the full record stays on disk
                 rec = self.round.arena.record
                 return 200, (public_log_tail(rec.path), None)

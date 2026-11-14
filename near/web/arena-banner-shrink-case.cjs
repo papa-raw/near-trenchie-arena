@@ -52,7 +52,7 @@ const server = http.createServer(async (req, res) => {
       });
       reports.push(report);
       assert.ok(Math.abs(report.houseScale - 0.64) < 0.005, width + ': the existing 0.8 rope scale shrinks by a further 0.8');
-      assert.deepEqual(report.labels.map((l) => l.text), ['KOs', 'Predictions']);
+      assert.deepEqual(report.labels.map((l) => l.text), ['KOs', 'Player KOs', 'Predictions']);
       assert.ok(report.labels.every((l) => Math.abs(l.scale - 0.8) < 0.015), 'wood labels scale with ropes, portraits and counters');
       assert.equal(report.boards.length, 3, 'house, player and prediction ropes remain');
       assert.ok(report.matches && report.inView && !report.overlaps, 'scaled reservations match drawn panels, on screen and apart');

@@ -284,6 +284,8 @@ class Arena:
         for seed in seeds:
             sim.SplitMix64(seed, rules)
         self.sim = sim.Sim(seeds[0], rules)
+        if chain is not None and hasattr(chain, "initial_serials"):
+            self.sim.state["serials"].update(chain.initial_serials(self))
         self.store = Store(data_dir)
         if self.store.index and not recover:
             raise ValueError("existing journal requires explicit recovery")

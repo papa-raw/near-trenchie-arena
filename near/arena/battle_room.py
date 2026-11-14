@@ -35,6 +35,28 @@ class BattlePolicy(GuestPolicy):
 
 
 class BattleRoomService(RoomService):
+    def life_boundary(self, grant_id: str) -> dict | None:
+        """A disconnected fighter ends at its life boundary if the copied room's slot can no longer advance."""
+        with self._lock:
+            try:
+                return super().life_boundary(grant_id)
+            except SlotError as exc:
+                if exc.code != 'stale_slot':
+                    raise
+                session = self._sessions.get(grant_id)
+                if session is None or session['revoked']:
+                    raise
+                self._retire_member(session)
+                return None
+
+    def release_owner(self, token: str) -> None:
+        """Trusted host only, after a fresh wallet-owner check: retire every session for this token."""
+        with self._lock:
+            self._guard()
+            for session in list(self._sessions.values()):
+                if not session['revoked'] and session['binding']['nft_token_id'] == token:
+                    self._retire_member(session)
+
     def __init__(self, *args, battle_sign, battle_key_id, battle_speech=None, **options):
         self.battle_sign, self.battle_key_id, self.battle_speech = battle_sign, battle_key_id, battle_speech
         limits = deepcopy(options.get('limits') or DEFAULT_LIMITS)

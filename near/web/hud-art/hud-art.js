@@ -341,7 +341,7 @@
   }
   function norm(o) {
     var F = (o.fighters || []).map(function (f, i) {
-      var row = rosterRow(f); return { i: i, x: f.x, y: f.y, row: row, hp: f.hp == null ? 1 : f.hp, tag: f.tag || row.tag || row.name || ('#' + i), kos: f.kos || 0, state: f.state || '', name: f.name || row.name };
+      var row = rosterRow(f); return { i: i, id: f.id || f.trenchieId || row.trenchieId, x: f.x, y: f.y, row: row, hp: f.hp == null ? 1 : f.hp, tag: f.tag || row.tag || row.name || ('#' + i), kos: f.kos || 0, state: f.state || '', name: f.name || row.name };
     });
     function find(k) { if (k == null) return null; if (typeof k === 'object') return F.filter(function (f) { return f.row === k || f.tag === k.tag; })[0] || { tag: k.tag || k.name, row: k }; var hit = F.filter(function (f) { return f.tag === k || f.name === k || f.row.trenchieId === k || f.row.name === k; })[0]; if (hit) return hit; var rr = rosterRow({ tag: k, name: k, trenchieId: k }); return { tag: rr.tag || String(k), row: rr }; }
     var byKo = F.slice().sort(function (a, b) { return b.kos - a.kos || a.i - b.i; });
@@ -696,7 +696,7 @@
         var f = it.f, lead = i === 0, ty = sy + 16 + (i === 1 ? 3 : 0), col = lead ? '#9FDCC5' : '#F7F0DC', rim = lead ? '#3E8E73' : '#9A8F7C';
         var sag = sy + 10 * (1 - Math.pow((x + 8) / (W / 2) - 1, 2));
         s += '<g filter="url(#ha-cast-sea-sm)">' + cord(x + 8, sag, x + th * 0.42 * 0.55, ty + th / 2 - 1, 2) + '</g>';
-        s += '<g transform="translate(' + f1(x) + ' ' + f1(ty) + ') rotate(' + (i === 1 ? 3 : i === 2 ? -2.5 : -1) + ' 0 ' + f1(th / 2) + ')" filter="url(#ha-cast-sea-sm)">';
+        s += '<g' + (f.id ? ' data-fighter-id="' + esc(f.id) + '"' : '') + ' data-tile-width="' + f1(it.w) + '" data-tile-height="' + f1(th) + '" transform="translate(' + f1(x) + ' ' + f1(ty) + ') rotate(' + (i === 1 ? 3 : i === 2 ? -2.5 : -1) + ' 0 ' + f1(th / 2) + ')" filter="url(#ha-cast-sea-sm)">';
         s += '<path d="' + tagShape(it.w, th) + '" fill="' + rim + '" filter="url(#ha-enamel)"/>';
         s += '<path d="' + tagShape(it.w, th) + '" transform="translate(2.2 2.2) scale(' + f1((it.w - 4.4) / it.w * 1000) / 1000 + ' ' + f1((th - 4.4) / th * 1000) / 1000 + ')" fill="' + col + '" filter="url(#ha-enamel)"/>';
         s += flecks(it.w, th, hash(uid + 'f' + i));

@@ -454,6 +454,7 @@
       (async function () { for (var i = 0; i < 4; i++) { try { var r = await call('GET', '/room/result?segment_id=segment%3A0'); if (r && r.type !== 'error') return; } catch (e) { return; } await sleep(1500); } })();
     },
     observe: async function () { return send('GET', '/room/observe'); },
+    roster: async function () { return send('GET', '/house/targets'); },
     _now: now
   };
   var lastLeft = null;
@@ -617,6 +618,7 @@
     speech: function (o) { return ask('speech', o); },
     leave: function () { return ask('leave'); },
     observe: function () { return ask('observe'); },
+    roster: function () { return ask('roster'); },
     now: function () { return ask('_now'); }
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

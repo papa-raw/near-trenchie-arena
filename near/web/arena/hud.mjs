@@ -27,6 +27,7 @@ const BANNER_SCALE = 0.8;   // Shrink the complete existing KOs/predictions stac
 const scaleBannerRects = (rects) => rects.map((r) => ({ ...r, x: r.x * BANNER_SCALE, y: r.y * BANNER_SCALE, w: r.w * BANNER_SCALE, h: r.h * BANNER_SCALE }));
 const REMOUNT_MS = 600;   // the top-left KO banner (as at ebb97a0): redrawn when its content changes, at most this often
 const BANNER_MS = 4200;   // the lead banner shows this long after the leader changes
+const TILE_HINT_MS = 2500;
 
 export class Hud {
   constructor({ stage, actors, KITS, ITEMS, root, status = null, itemRenderer = null, LOOK3 = null }) {
@@ -371,11 +372,12 @@ export class Hud {
     const rank = new Map(rows.map((r, i) => [r.id, i])), byRank = (a, b) => (rank.has(a) ? rank.get(a) : 99) - (rank.has(b) ? rank.get(b) : 99);
     const houseIds = inGame.filter(isHouse).sort(byRank), mainIds = (houseIds.length ? houseIds : inGame).slice(0, this.w < 700 ? 3 : 5);
     this.playerIds = inGame.filter((id) => !isHouse(id));
-    const fighters = mainIds.map((id) => { const f = list.find((q) => q.id === id) || { x: -999, y: -999, hp: 1 }; return { x: f.x, y: f.y, tag: this.tagOf(id), hp: f.hp, kos: rateOf.get(id) || 0, state: '', name: this.tagOf(id) }; });
+    const fighters = mainIds.map((id) => { const f = list.find((q) => q.id === id) || { x: -999, y: -999, hp: 1 }; return { id, x: f.x, y: f.y, tag: this.tagOf(id), hp: f.hp, kos: rateOf.get(id) || 0, state: '', name: this.tagOf(id) }; });
     const o = { concept: 'candle', draft: 'a', w: this.w, h: this.h, fighters, topN: this.w < 700 ? 3 : 5, lead: { tag: this.tagOf(effLead), kos: rateOf.get(effLead) || 0 }, feed: [] };
     this.artCache.mount(this.layerHost, o, { only: ['board', 'banner'] }).then((meas) => {
       const layer = this.layerHost.querySelector(':scope > .ha-layer'); if (!layer) { this.mounting = false; return; }
       layer.style.pointerEvents = 'none';
+      this.bindBoardTiles(layer.querySelector('[data-panel="board"]'), 'KOs');
       this.artRects = {}; for (const r of meas.rects) this.artRects[r.id] = r;
       if (this.artRects.board) { this.bannerRects = this.estimateCards(this.artRects.board, this.playerIds.length > 0, this.correctToday().length > 0); this.applyBanner(); }
       return this.buildCards(this.playerIds, rateOf, o.topN, this.artRects.board).then(() => { this.mounting = false; this.layoutAt = 0; });
@@ -387,20 +389,49 @@ export class Hud {
     const p = placeBanner(N, this.bannerRects || [], this.w); if (p) banner.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
   }
   // The internal layout keeps Nov 12's 80% ropes and wooden labels; BANNER_SCALE shrinks the complete stack together.
-  // ("KOs", "Predictions") in place of the old text labels. Screen layout, top down: the KOs label, the house rope, the
-  // players' rope when any, then the Predictions label and its rope.
+  // ("KOs", "Player KOs", "Predictions") in place of the old text labels. Screen layout, top down: the KOs label, the
+  // house rope, the Player KOs label and rope when any, then the Predictions label and its rope.
   bannerLayout(B) { const narrow = this.w < 600; return { S: 0.8, LH: narrow ? 14 : 17, gap: narrow ? 4 : 6, kc: narrow ? 0.72 : 1 }; }
   // before the other ropes exist, what the banner will cover (for the lead banner's place)
   estimateCards(B, withPlayers, withPredictions = false) {
     const { S, LH, gap } = this.bannerLayout(B), x = B.x * S, rects = [{ x, y: B.y * S, w: 60, h: LH }, { x, y: B.y * S + LH, w: B.w * S, h: B.h * S }];
     let y = B.y * S + LH + B.h * S + gap;
-    if (withPlayers) { rects.push({ x, y, w: Math.max(90, B.w * 0.5) * S, h: B.h * S }); y += B.h * S + gap; }
+    if (withPlayers) { rects.push({ x: x + 10, y, w: 110, h: LH }, { x, y: y + LH, w: Math.max(90, B.w * 0.5) * S, h: B.h * S }); y += LH + B.h * S + gap; }
     if (withPredictions) rects.push({ x, y, w: 110, h: LH }, { x, y: y + LH, w: B.w * S, h: B.h * S });
     return scaleBannerRects(rects);
   }
   ropeLabel(text, x, y) {
     const el = document.createElement('div'); el.className = 'ropelabel' + (this.w < 600 ? ' narrow' : ''); el.textContent = text;
     el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'; this.cardLayer.appendChild(el); return el;
+  }
+  /** Use the art's own tile bounds and fighter ids, which survive its cached text overlay and ranking changes. */
+  bindBoardTiles(board, label) {
+    if (!board) return;
+    board.dataset.tileBoard = label;
+    for (const tile of board.querySelectorAll('[data-fighter-id]')) {
+      const id = tile.dataset.fighterId;
+      tile.classList.add('fighter-tile'); tile.setAttribute('role', 'button'); tile.setAttribute('tabindex', '0');
+      tile.setAttribute('aria-label', 'Follow ' + this.nameOf(id));
+      if (!tile.querySelector('.tile-hit')) {
+        const hit = document.createElementNS('http://www.w3.org/2000/svg', 'rect'); hit.setAttribute('class', 'tile-hit');
+        hit.setAttribute('x', '0'); hit.setAttribute('y', '-3'); // include the ATH ribbon above the tag
+        hit.setAttribute('width', tile.dataset.tileWidth); hit.setAttribute('height', Number(tile.dataset.tileHeight) + 3);
+        tile.appendChild(hit);
+      }
+      tile.onclick = () => this.followTile(id);
+      tile.onkeydown = (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.followTile(id); } };
+    }
+  }
+  followTile(id) {
+    const view = window.ArenaView; if (!view) return;
+    const active = view.follow(id);
+    clearTimeout(this.tileHintTimer);
+    if (active) { if (this.tileHint) this.tileHint.hidden = true; return; }
+    if (!this.tileHint) {
+      this.tileHint = document.createElement('div'); this.tileHint.className = 'tile-follow-hint'; this.tileHint.setAttribute('role', 'status'); this.ui.appendChild(this.tileHint);
+    }
+    this.tileHint.textContent = this.nameOf(id) + ' is on the bench; following when back.'; this.tileHint.hidden = false;
+    this.tileHintTimer = setTimeout(() => { this.tileHint.hidden = true; }, TILE_HINT_MS);
   }
   // the house rope is the main mount's own board (scaled in place); players, if any, get a second rope under it; correct
   // predictions today, when any, one more rope under its own label
@@ -410,17 +441,17 @@ export class Hud {
     const made = [];
     if (playerIds.length) {
       const host = this.playerHost || (this.playerHost = document.createElement('div')); host.style.cssText = 'position:fixed;left:-6000px;top:0;width:' + this.w + 'px;height:' + this.h + 'px;pointer-events:none;'; document.body.appendChild(host);
-      const fighters = playerIds.map((id) => ({ x: -999, y: -999, tag: this.tagOf(id), hp: 1, kos: rateOf.get(id) || 0, name: this.tagOf(id) })), lead = fighters.slice().sort((a, b) => b.kos - a.kos)[0];
+      const fighters = playerIds.map((id) => ({ id, x: -999, y: -999, tag: this.tagOf(id), hp: 1, kos: rateOf.get(id) || 0, name: this.tagOf(id) })), lead = fighters.slice().sort((a, b) => b.kos - a.kos)[0];
       const meas = await this.artCache.mount(host, { concept: 'candle', draft: 'a', w: this.w, h: this.h, fighters, topN, lead: { tag: lead.tag, kos: lead.kos }, feed: [] }, { only: ['board'] });
       const node = this.artCache.panel(host, 'board'), r = meas.rects.find((q) => q.id === 'board'); host.remove();
-      if (node && r) made.push({ node, w: r.w, h: r.h, label: null });
+      if (node && r) made.push({ node, w: r.w, h: r.h, label: 'Player KOs' });
     }
     // correct predictions today: one more rope in the same style (✓ in place of ▲), house and players together, from the
     // live record; hidden while nobody has one
     const preds = this.correctToday().slice(0, topN);
     if (preds.length) {
       const host = this.predHost || (this.predHost = document.createElement('div')); host.style.cssText = 'position:fixed;left:-6000px;top:0;width:' + this.w + 'px;height:' + this.h + 'px;pointer-events:none;'; document.body.appendChild(host);
-      const fighters = preds.map((p) => ({ x: -999, y: -999, tag: this.tagOf(p.id), hp: 1, kos: p.n, name: this.tagOf(p.id) }));
+      const fighters = preds.map((p) => ({ id: p.id, x: -999, y: -999, tag: this.tagOf(p.id), hp: 1, kos: p.n, name: this.tagOf(p.id) }));
       const meas = await this.artCache.mount(host, { concept: 'candle', draft: 'a', w: this.w, h: this.h, fighters, topN, mark: '✓', lead: { tag: fighters[0].tag, kos: fighters[0].kos }, feed: [] }, { only: ['board'] });
       const node = this.artCache.panel(host, 'board'), r = meas.rects.find((q) => q.id === 'board'); host.remove();
       if (node && r) made.push({ node, w: r.w, h: r.h, label: 'Predictions' });
@@ -437,6 +468,7 @@ export class Hud {
       if (m.label) { label = this.ropeLabel(m.label, x + 10, y); rects.push({ x: x + 10, y, w: label.offsetWidth || 90, h: label.offsetHeight || LH }); y += LH; }
       m.node.style.position = 'absolute'; m.node.style.left = '0'; m.node.style.top = '0'; m.node.style.transformOrigin = '0 0';
       m.node.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) scale(' + (kc * S).toFixed(3) + ')'; this.cardLayer.appendChild(m.node);
+      this.bindBoardTiles(m.node, m.label);
       // The art's measured w/h already include its phone scale kc; apply only the remaining rope scale here.
       rects.push({ x, y, w: m.w * S, h: m.h * S }); y += m.h * S + gap;
       this.cardList.push({ node: m.node, label });

@@ -55,7 +55,7 @@ default AI.
 | `keep_away_radius` | 1–12 tiles (default 4) | |
 | `chase` | 0–10 | Walk toward the attack target until it is in weapon reach (from integer-15: full speed outside reach, easing to a stop at three quarters of reach). With no target in view, walk toward the nearest enemy anywhere on the ring that passes the gate (from rules table integer-14, `behaviour.chase_seek`; under integer-13 the fighter stands until an enemy comes into view). |
 | `protect` | 0–10 | Stay within 3 tiles of `protect_ally`; enemies that hit the ally in the last 3 s score higher as targets. Needs `protect_ally`. |
-| `protect_ally` | fighter id | |
+| `protect_ally` | fighter id | From integer-19, positive protection excludes this ally from targets and all damage, including active reflex overrides and area attacks. |
 | `hold` | 0–10 | Walk back into the hold area whenever outside it. |
 | `hold_at` | `"center"`, `"here"`, or `{"x_milli": int, "y_milli": int}` (default `"center"`) | `"here"` is where the fighter stands on the tick the behaviour (or the reflex) takes effect. Coordinates are the same milli-tiles the observe call shows. |
 | `hold_radius` | 1–6 tiles (default 2) | |
@@ -80,9 +80,12 @@ signature passes harmlessly over everyone else.
 | Key | Range | Passes when |
 |---|---|---|
 | `match` | `"all"` (default) or `"any"` | all listed conditions hold, or at least one |
+| `target_is` | fighter id | only this fighter; mandatory regardless of `match` (from integer-19). Accepts the same name/tag aliases as `target`. |
+| `target_is_not` | list of up to 15 fighter ids | exclude these fighters from target selection and every damage path, including area attacks; mandatory regardless of `match` (integer-19). Names/tags accepted, duplicates removed, ids sorted. |
 | `never` | `true` | never: the fighter attacks no one, not even in self-defence (v1.1; other conditions are dropped with a note) |
 | `target_hp_below_pct` | 1–99 | the enemy's hp is below this % of its max |
 | `target_busy` | `true` / `false` | the enemy is fighting someone else (its target is another fighter) or faces away from you (more than 90° off) |
+| `target_facing_away` | `true` / `false` | only enemies facing more than 90° away from you (integer-19); fighting another fighter alone does not qualify. `false` leaves this condition off. |
 | `distance_under` | 1–12 tiles | the enemy is nearer than this |
 | `rival` | `true` / `false` | the enemy is one of the fighter's seeded rivals |
 | `wears_legendary` | `true` / `false` | the enemy wears a legendary item |
@@ -96,7 +99,14 @@ anywhere on the ring, as before):
 
 - `auto`: the style's own scoring, including a `focus` order (rules table focus weight) and the bounty.
 - `nearest`, `weakest` (lowest hp %), `attacker` (whoever hit the fighter last, while that enemy passes the gate).
-- a fighter id: that fighter, while it passes the gate and is in view.
+- a fighter id: that fighter, while it passes the gate; from integer-19 a live named fighter anywhere on the floor is pursued even beyond view. At the host boundary,
+  `target` and `drives.protect_ally` also accept a unique full name or arena tag, without regard
+  to case (for example `Sailor`, `Laser Sailor`, or `laser-sailor`). The host resolves these to
+  ids before logging the plan, including inside reflex actions. The same resolution applies to `gate.target_is`, each `gate.target_is_not` entry and the `who` of `fighter_hp_below_pct`. Unknown or ambiguous names are
+  refused with the valid names; a known fighter on the bench remains a valid target. The signed
+  receipt includes the resolved full name and id. `/house/targets` supplies that public roster.
+
+From integer-19, when a named target is off the floor, an ordinary target order fights the nearest enemy its gate allows and returns to the named target immediately when it is alive, even beyond view. For an exclusive order, set `gate.target_is` to the same id: while that fighter is away, attack nobody else, loot and keep clear. The submitted plan remains unchanged. These rules apply to reflex target and gate overrides too.
 
 Ties break by fighter id. When nothing passes, the fighter has no target and attacks no one.
 
@@ -106,8 +116,11 @@ Each reflex is `{"if": {<one condition>}, "then": {<one or more actions>}}`. Eve
 whose condition holds lays its `then` over the behaviour; when the condition stops holding the
 override goes away. Once a reflex turns on or off it stays that way for at least 1 s, so a condition
 on a boundary cannot flicker. **Reflex 1 has the highest priority**: where two active reflexes set the
-same field, the lower number wins. "The current attack target" in a condition is the one chosen on
-the previous tick.
+same field, the lower number wins. From integer-18 (`behaviour.reflex_target_current`), target
+conditions read the target selected by the current base plan on this tick, before reflex overrides
+are applied. A new plan therefore never checks the previous plan's target HP. All reflex conditions
+read that same selection; overrides then choose the final attack target. Released tables through
+integer-17 retain the previous tick's target for these conditions.
 
 Conditions (exactly one per `if`):
 
@@ -122,6 +135,7 @@ Conditions (exactly one per `if`):
 | `loot_within` | 1–12 tiles | a drop the fighter can grab is nearer than this |
 | `legendary_on_floor` | `true` | a legendary the fighter can grab lies within view |
 | `target_hp_below_pct` | 1–99 | the current attack target's hp is below this % |
+| `fighter_hp_below_pct` | `{"who": <fighter id>, "pct": 1–99}` | that named fighter is alive on the floor and its hp is strictly below this %; independent of the current target, no view limit (integer-19) |
 | `no_target` | `true` | no enemy passes the gate |
 | `always` | `true` | always (v1.1) |
 | `hit_by` | `{"who": "any" \| "rival" \| <id>}` | the fighter was hit by that one in the last 3 s (v1.1) |
@@ -136,6 +150,8 @@ Actions (at least one per `then`):
 | `target` | a target mode | replaces the target mode |
 | `say` | text, at most 80 characters, one line | sent once when the reflex turns on; the host guards it like every feed line, and the 10 s speech limit applies |
 | `repeat` | `true`, only beside `say` | the line is said again every time the fighter's 10 s window opens, for as long as the reflex holds (v1.1) |
+
+A reflex gate replaces the whole gate. To keep an exclusion or exclusive-target restriction while a reflex holds, include `target_is_not` or `target_is` in that reflex gate too.
 
 Every on/off change is reported as an event (at most one per reflex per second, by the 1 s hold); a
 fighter's `say` lines fire at most once per 10 s.
@@ -155,6 +171,18 @@ every time you can"):
 With `never` there is no attack target, so `keep_away` pushes from every enemy. A live AI that writes a
 fresh line each window speaks through the host's speech frame; the 10 s window it waits for is the
 host's feed cap, which the engine does not see, so `speech_ready` is a host event, not an engine one.
+
+### Schema v1.2 (integer-19)
+
+`v` remains `1`; `behaviour.schema_minor` is `2`. Adds `target_is`, `target_is_not` and
+`fighter_hp_below_pct` as advertised by the table's feature flags. Older tables refuse these fields.
+For example, watch one fighter while pursuing another:
+
+```json
+{"v": 1, "target": "laser-sailor", "drives": {"chase": 10},
+ "reflexes": [{"if": {"fighter_hp_below_pct": {"who": "kathie-moonwood", "pct": 30}},
+               "then": {"target": "kathie-moonwood"}}]}
+```
 
 ## 2. Limits
 

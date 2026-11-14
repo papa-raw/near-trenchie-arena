@@ -44,7 +44,7 @@ function shared(sab) {
 
 const SHEET = { game: { name: 'Cap Sprout', temperament: 'Sunny', voice: ['Tide in my fists.'] }, identity: { brief: 'A newcomer.' } };
 const USER = 'Ring: {}\nOne order, please.', MAX = 90;
-const W = B.costUsd('nearai', { in: B.prefix(SHEET, 'Cap Sprout').length + USER.length, out: MAX, cached: 0 });
+const W = B.costUsd('nearai', { in: B.prefix(SHEET, 'Cap Sprout').length + USER.length, out: B.outputAllowance('nearai', MAX), cached: 0 });
 const CAP = 1.5 * W;
 
 if (!isMainThread) {
@@ -71,6 +71,9 @@ if (!isMainThread) {
 (async () => {
   const rounds = Number(process.argv[2]) || 20;
   const sab = new SharedArrayBuffer(32 + STORE_BYTES), { w, store } = shared(sab);
+  store.set(B.constants.SAVE, JSON.stringify({ door: { door: 'NEAR AI Cloud', route: 'key' }, sheet: SHEET, name: 'Cap Sprout' }));
+  store.set(B.constants.KEY_STORE + 'NEAR AI Cloud', 'test-key');
+  store.set(B.constants.CAP_STORE, CAP);
   const tabs = [0, 1].map(() => new Worker(__filename, { workerData: { sab } }));
   const ask = (t) => new Promise((r) => t.once('message', r));
   let pass = 0, fail = 0, over = 0, none = 0, most = 0;

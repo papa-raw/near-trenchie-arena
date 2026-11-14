@@ -125,7 +125,7 @@
     return returning(h) + '<div class="two"><div><div class="eyebrow" style="margin-bottom:10px">' + k.getH + '</div>' + how + '</div><div style="padding-top:26px">' + paste + '</div></div>';
   }
   function left() { if (!g.code) return ''; var s = Math.max(0, Math.ceil((g.code.expiresAt - Date.now()) / 1000)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
-  function planJoined(h, agent) { var d = h.P.door; return !!(d && d.route === 'plan' && d.identity === agent && g.code === null) || g.joinedFor === agent; }
+  function planJoined(h, agent) { var d = h.P.door; return !!(d && d.route === 'plan' && d.identity === agent && h.P.planCode && g.code === null) || g.joinedFor === agent; }
   function command(agent, h) {
     var a = C.plan[agent], nm = String(h.P.name || '').replace(/["$`\\\n\r]/g, ' ').trim().slice(0, 40);
     return g.code ? F(C.plan.command, { bin: a.bin, snap: g.code.snapUrl, download: a.download || '', code: g.code.code, name: nm }) : '';
@@ -173,8 +173,38 @@
   }
 
   // ------------------------------------------------------------------ the sign
+  function returnView(h, r) {
+    var c = C.returning, state = r.state, ch = h.chain(), wallet = /^(wallet|waiting|cancelled)$/.test(state) || (h.V.step === 'wallet' && state === 'verified');
+    var words = { name: r.short }, status = '', primary, waiting = state === 'waiting', checking = state === 'checking', kit = kitOf(h);
+    if (state === 'verified' && !wallet) status = F(c.verified, words);
+    if (state === 'cancelled') status = c.cancelled;
+    if (state === 'error') status = F(c.error, words);
+    if (state === 'missing') status = F(c.missing, words);
+    var sub = '', action = 'g:wallet:choose', label = F(c.continue, words), pending = false;
+    if (waiting) { label = c.waiting; sub = c.approve; pending = true; }
+    else if (checking) { label = c.checking; pending = true; }
+    else if (state === 'error') { label = c.retry; action = 'g:return-retry'; }
+    else if (state === 'missing') label = c.changeWallet;
+    else if (wallet) { if (h.P.wallet && state !== 'cancelled') action = state === 'verified' ? 'g:step:presets' : 'g:return-retry'; else sub = c.connect; pending = !ch.known; }
+    else action = 'g:use';
+    primary = b(action, esc(label) + (sub ? '<span class="action-sub">' + esc(sub) + '</span>' : ''), 'return-primary ' + (pending ? 'plate pending' : 'gold'), pending ? 'disabled' : '');
+    var note = state === 'missing' ? c.free : F(c.note, words);
+    var identity = '<div class="return-identity"><img src="' + esc(r.portrait) + '" alt="' + esc(r.name) + '"><div><h2>' + esc(r.name) + '</h2>' +
+      (status ? '<div class="return-status ' + state + '" role="status">' + esc(status) + '</div>' : '') + '</div></div>';
+    var detail = r.preset.replace(/ (Swing|Lunge|Beam|Lob|Zap)$/, '') + (kit ? ' · ' + kit.move + ' · ' + kit.sig : '');
+    var help = wallet ? '<p>' + esc(c.walletLine) + '</p><a href="' + C.wallet.getUrl + '" target="_blank" rel="noopener noreferrer">' + esc(C.wallet.get) + '</a><p>' + esc(F(c.network, { network: ch.network })) + '</p>' :
+      '<p>' + esc(detail) + '</p><p>' + esc(F(c.fixed, words)) + '</p>';
+    help += '<p>' + esc(c.supply) + '</p><p>' + esc(c.custom) + '</p>';
+    var back = wallet ? lnk('g:watch', C.keepWatching) : lnk('g:step:wallet', C.back);
+    return '<div class="stage dim"></div><main class="sign return-sign" data-material="wood"><div class="face"><header class="face-head"><div><div class="eyebrow">' + c.eyebrow + '</div><h1>' + (wallet ? c.walletTitle : c.fighterTitle) + '</h1></div>' +
+      b('g:close', '×', 'close plate', 'aria-label="' + C.close + '"') + '</header><section class="face-body">' + identity +
+      '<div class="return-actions">' + primary + b('g:return-new', c.new, 'plate return-new') + '<p class="return-note">' + esc(note) + '</p></div></section>' +
+      '<footer class="bar"><div class="return-links">' + back + '<details class="return-help"><summary>' + (wallet ? c.walletHelp : c.fighterHelp) + '</summary><div class="help-pop">' + help + '</div></details></div></footer></div></main>';
+  }
   function view(h) {
     var V = h.V, s = V.step, k = C.key, title, body, back = '', right = '', pk = pick(h), wide = false;
+    var returning = h.returnProfile && h.returnProfile();
+    if (returning && (s === 'wallet' || stepIx(h) === 1)) return returnView(h, returning);
     var gold = function (act, label) { return b(act, label, 'gold main'); };
     var off = function (label, why) { return '<span class="needs" id="needs">' + why + '</span><button type="button" class="gold main" disabled aria-describedby="needs">' + label + '</button>'; };
     if (s === 'wallet') { title = C.wallet.title; body = walletBody(h); right = h.P.wallet ? gold('g:step:presets', C.wallet.next) : off(C.wallet.next, C.wallet.needs); }
@@ -258,7 +288,8 @@
       if (p && p.joined) {
         stopPlan(); g.joinedFor = agent; store().set(LAST_STORE, agent === 'Codex' ? 'Codex' : 'Claude');
         // the code is kept with the draft: the arena page's panel reads the session's log by it (/snap/code/<code>/log)
-        h.P.door = { door: agent === 'Codex' ? 'Codex' : 'Claude', route: 'plan', identity: agent, keyMask: '', hi: '' }; h.P.planCode = g.code && g.code.code; h.save(); h.render();
+        h.P.door = { door: agent === 'Codex' ? 'Codex' : 'Claude', route: 'plan', identity: agent, keyMask: '', hi: '' }; h.P.planCode = g.code && g.code.code;
+        h.P.ended = null; h.P.left = 0; h.save(); h.render();
       }
     }, 3000);
   }
@@ -268,12 +299,18 @@
     var x = a.slice(2), P = h.P;
     if (x.indexOf('step:') === 0) { var st = x.slice(5); if (st === 'doors' && P.pick && h.V.step !== 'doors') { /* keep the door on screen */ } if (st !== 'doors') { /* leaving step 4 keeps the pick */ } return h.go(st); }
     if (x === 'close' || x === 'watch') return h.backToArena();
+    if (x === 'return-new') return h.newReturning();
+    if (x === 'return-retry') return h.retryReturning();
     if (x.indexOf('wallet:') === 0) { var id = x.slice(7); return id === 'dev-throwaway' ? h.devWallet() : h.connectWallet(id); }
     if (x === 'wallet-forget') { P.wallet = null; h.save(); return h.render(); }
-    if (h.fixedPersona && h.fixedPersona() && /^(build|temper:|quirk:)/.test(x)) return h.say(C.persona.fixed, true);
+    if (h.fixedPersona && h.fixedPersona() && /^(temper:|quirk:)/.test(x)) return h.say(C.persona.fixed, true);
     if (x.indexOf('preset:') === 0) { h.setPreset(x.slice(7)); return h.render(); }
-    if (x === 'use') { P.fighterChosen = true; h.save(); return h.claim(); }
-    if (x === 'build') { P.fighterChosen = true; P.claim = null; if (!P.name) P.name = ''; h.save(); return h.go('personality'); }
+    if (x === 'use') {
+      P.fighterChosen = true; h.save();
+      if (h.returnProfile && h.returnProfile() && (P.ended || P.left) && P.door && P.door.route === 'plan') return h.rejoin();
+      return h.claim();
+    }
+    if (x === 'build') return h.buildFighter();
     if (x.indexOf('temper:') === 0) { P.temper = x.slice(7); h.save(); return h.render(); }
     if (x.indexOf('quirk:') === 0) { var q = x.slice(6), qs = P.quirks || (P.quirks = []), i = qs.indexOf(q); if (i >= 0) qs.splice(i, 1); else if (qs.length < 2) qs.push(q); h.save(); return h.render(); }
     if (x.indexOf('door:') === 0) {
@@ -330,5 +367,10 @@
     if (step === 'personality') enterPersona(h);
     if (step === 'doors' && h.P.pick && h.P.pick.route === 'plan' && !g.code && !g.poll && !planJoined(h, h.P.pick.door)) requestCode(h, h.P.pick.door);
   }
-  root.SnapGuide = { view: view, act: act, input: input, paint: paint, enter: enter, leave: leave, aiReady: aiReady, state: g, phone: phone, checkNeeds: checkNeeds };
+  function rejoinPlan(h) {
+    stopPlan(); g.code = null; g.joinedFor = ''; g.codeErr = ''; g.expired = false;
+    h.go('doors');
+    return requestCode(h, h.P.pick.door);   // the saved door alone is not proof its old session still runs
+  }
+  root.SnapGuide = { view: view, act: act, input: input, paint: paint, enter: enter, leave: leave, rejoinPlan: rejoinPlan, aiReady: aiReady, state: g, phone: phone, checkNeeds: checkNeeds };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

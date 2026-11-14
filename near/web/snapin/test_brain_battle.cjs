@@ -93,7 +93,7 @@ function brain(sheet, f, clock, cap) {
       assert.equal(conv[0].text, 'fight everyone'); assert.match(conv[1].text, voice); assert.equal(conv[2].text, out.receipt.summary, 'the receipt is shown verbatim');
       const ask = f.calls.at(-1).messages[1].content;
       assert.match(ask, /Your owner just told you \(their words\): "fight everyone"\./);
-      assert.match(ask, /if it goes against your nature, grumble, but do it/);
+      assert.match(ask, /Your temperament affects only the reply line, never the behaviour\. Obey even when you grumble/);
       assert.match(f.calls.at(-1).messages[0].content, new RegExp('^You are ' + sheet.game.name));
     }
     console.log('ok 2 tell: an in-character reply (caps for a forward persona, a grumble for a calm one) and the host receipt verbatim'); }
@@ -148,7 +148,7 @@ function brain(sheet, f, clock, cap) {
     console.log('ok 7 a refused plan is rewritten once with the arena’s fix'); }
   // 8. N concurrent tells never pass the hourly cap (each call's worst case is reserved before it goes)
   { const clock = { t: 1e6 }, OR = { door: 'OpenRouter', route: 'oauth', identity: 'OpenRouter' };
-    const m = new Map([[B.constants.SAVE, JSON.stringify({ door: OR, sheet: FORWARD })], [B.constants.CAP_STORE, '0.01'], [B.constants.KEY_STORE + 'OpenRouter', KEY]]);
+    const m = new Map([[B.constants.SAVE, JSON.stringify({ door: OR, sheet: FORWARD })], [B.constants.CAP_STORE, '0.02'], [B.constants.KEY_STORE + 'OpenRouter', KEY]]);
     const st = { get: (k) => (m.has(k) ? m.get(k) : null), set: (k, v) => { m.set(k, String(v)); }, del: (k) => { m.delete(k); }, json: (k, d) => { const v = m.get(k); return v ? JSON.parse(v) : d; }, m };
     const calls = [];
     const f = async (url, init) => { calls.push(1); await new Promise((r) => setTimeout(r, 5));
@@ -158,10 +158,10 @@ function brain(sheet, f, clock, cap) {
     r.push({ phase: 'in', fighter: { id: 'dev-me', life: 'dev-me:life:0', lives: 1 } });
     const outs = await Promise.all(Array.from({ length: 6 }, (_, i) => b.tell('fight everyone ' + i)));
     const spent = JSON.parse(m.get(B.constants.SPEND_STORE)).reduce((a, x) => a + x.usd, 0);
-    assert.ok(spent <= 0.01 + 1e-12, 'six concurrent tells spent ' + spent + ' against a 0.01 cap');
+    assert.ok(spent <= 0.02 + 1e-12, 'six concurrent tells spent ' + spent + ' against a 0.02 cap');
     assert.ok(calls.length < 6, 'the calls that could pass the cap were never sent (' + calls.length + ' sent)');
     assert.ok(outs.filter((o) => o.chip && /Hourly cap reached/.test(o.chip)).length >= 1);
-    console.log('ok 8 six concurrent tells: ' + calls.length + ' calls, $' + spent.toFixed(4) + ' of a $0.01 cap'); }
+    console.log('ok 8 six concurrent tells: ' + calls.length + ' calls, $' + spent.toFixed(4) + ' of a $0.02 cap'); }
 
   // 9. low hp is a percent of the fighter's max, not an absolute number
   { const clock = { t: 1e6 }, f = provider((ask) => ask.includes('Predict') ? SPREAD : JSON.stringify({ behaviour: { stance: 'hold' } }));

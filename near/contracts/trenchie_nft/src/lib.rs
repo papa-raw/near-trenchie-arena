@@ -1,7 +1,7 @@
 //! `trenchie_nft`: persona tokens, one kind.
 //!
 //! - NEP-171 core, NEP-177 metadata, NEP-178 approvals, NEP-181 enumeration,
-//!   NEP-297 events, burn (F81). No royalties, no NEP-199.
+//!   NEP-297 events, burn (F81), NEP-199 seller settlement with zero royalties.
 //! - Each token holds its preset, record and **inventory**: a bag of 12-byte
 //!   entries, one of each rules-table row, 48 at most (F25). Only `apply_rows`,
 //!   called by `arena`, changes a bag; a batch applies whole or not at all,
@@ -34,7 +34,18 @@ use near_sdk::{
 };
 pub use trenchie_rows::{Entry, MAX_BAG, Record, Row};
 
+mod media;
+
 pub type TokenId = String;
+const NFT_ASSET_ROOT: &str = "https://neartrenchies.xyz/nft/v1";
+const COLLECTION_ICON: &str = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiM5RkRDQzUiLz48cGF0aCBkPSJNMTIgNDhWMTZoNDB2MTBINDB2MjJIMjRWMjZIMTJ6IiBmaWxsPSIjM0IyRjI1Ii8+PC9zdmc+";
+
+/// NEP-199: the seller receives the full balance; this collection charges no creator royalty.
+#[near(serializers = [json])]
+#[derive(Debug, PartialEq)]
+pub struct Payout {
+    pub payout: BTreeMap<AccountId, U128>,
+}
 
 pub const HOURS_48_NS: u64 = 48 * 3_600 * 1_000_000_000;
 pub const PERMIT_DOMAIN: &str = "game.mint-permit.v1";
@@ -896,7 +907,7 @@ impl TrenchieNft {
         self.tokens.get(&token_id).map(|t| JsonToken {
             token_id: token_id.clone(),
             owner_id: t.owner_id.clone(),
-            metadata: t.metadata.clone(),
+            metadata: Self::wallet_metadata(&t.preset_id, &t.metadata),
             approved_account_ids: t.approvals.clone(),
         })
     }
@@ -963,7 +974,27 @@ impl TrenchieNft {
     // ------------------------------------------------- NEP-177 / NEP-181
 
     pub fn nft_metadata(&self) -> NFTContractMetadata {
-        self.metadata.clone()
+        let mut metadata = self.metadata.clone();
+        if metadata.icon.is_none() { metadata.icon = Some(COLLECTION_ICON.into()); }
+        if metadata.base_uri.is_none() { metadata.base_uri = Some(NFT_ASSET_ROOT.into()); }
+        metadata
+    }
+
+    pub fn nft_payout(&self, token_id: TokenId, balance: U128, max_len_payout: Option<u32>) -> Payout {
+        require!(max_len_payout.is_none_or(|limit| limit >= 1), "payout exceeds max_len_payout");
+        let owner = self.token(&token_id).owner_id;
+        Payout { payout: BTreeMap::from([(owner, balance)]) }
+    }
+
+    #[payable]
+    pub fn nft_transfer_payout(
+        &mut self, receiver_id: AccountId, token_id: TokenId, approval_id: Option<u64>,
+        memo: Option<String>, balance: U128, max_len_payout: Option<u32>,
+    ) -> Payout {
+        // Calculate before ownership moves; a rejected bound must leave the token untouched.
+        let payout = self.nft_payout(token_id.clone(), balance, max_len_payout);
+        self.nft_transfer(receiver_id, token_id, approval_id, memo);
+        payout
     }
 
     pub fn nft_total_supply(&self) -> U128 {
@@ -975,7 +1006,7 @@ impl TrenchieNft {
         self.token_ids
             .iter()
             .skip(start)
-            .take(limit.unwrap_or(50) as usize)
+            .take(limit.and_then(|n| usize::try_from(n).ok()).unwrap_or(usize::MAX))
             .filter_map(|id| self.nft_token(id.clone()))
             .collect()
     }
@@ -991,7 +1022,7 @@ impl TrenchieNft {
             .map(|ids| {
                 ids.iter()
                     .skip(start)
-                    .take(limit.unwrap_or(50) as usize)
+                    .take(limit.and_then(|n| usize::try_from(n).ok()).unwrap_or(usize::MAX))
                     .filter_map(|id| self.nft_token(id.clone()))
                     .collect()
             })
@@ -1086,6 +1117,7 @@ impl TrenchieNft {
         let raw = env::storage_read(b"STATE").unwrap_or_else(|| env::panic_str("no state to migrate"));
         if let Ok(current) = near_sdk::borsh::from_slice::<TrenchieNft>(&raw) {
             require!(mirror.is_none() || mirror == current.mirror, "the mirror is set once, at the migrate that adds it");
+            current.emit_metadata_upgrade();
             return current;
         }
         let old: TrenchieNftV1 = match near_sdk::borsh::from_slice::<TrenchieNftV1>(&raw) {
@@ -1096,7 +1128,7 @@ impl TrenchieNft {
         };
         require!(mirror.is_none() || old.arena.is_some(), "a mirror is for inventory deployments (arena set) only");
         emit("trenchie", "1.0.0", "migrate", json!({"from": "an earlier layout", "mirror": mirror}));
-        Self {
+        let upgraded = Self {
             owner: old.owner,
             minter: old.minter,
             arena: old.arena,
@@ -1129,7 +1161,9 @@ impl TrenchieNft {
             premints: old.premints,
             mirror,
             burned: LookupSet::new(Key::Burned),
-        }
+        };
+        upgraded.emit_metadata_upgrade();
+        upgraded
     }
 
     /// The owner's emergency stop for the writes our own keys make: `mint_trenchie`,
@@ -1236,6 +1270,39 @@ impl TrenchieNft {
 }
 
 impl TrenchieNft {
+    /// Read enrichment leaves historic ownership, inventory and Borsh records byte-for-byte intact.
+    fn wallet_metadata(preset: &str, stored: &TokenMetadata) -> TokenMetadata {
+        let mut metadata = stored.clone();
+        let Some((slug, name, hash, reference)) = media::preset_media(preset) else { return metadata; };
+        metadata.title.get_or_insert_with(|| name.into());
+        metadata.description.get_or_insert_with(|| "An AI-controlled Trenchie from Candle Atoll. Starter portrait; live gear and records follow this token id on testnet.".into());
+        if metadata.media.is_none() {
+            metadata.media = Some(format!("{NFT_ASSET_ROOT}/{slug}.png"));
+            metadata.media_hash = Some(hash.into());
+        }
+        if metadata.reference.is_none() {
+            metadata.reference = Some(format!("{NFT_ASSET_ROOT}/{slug}.json"));
+            metadata.reference_hash = Some(near_sdk::base64::engine::general_purpose::STANDARD.encode(env::sha256(reference.as_bytes())));
+        }
+        metadata
+    }
+
+    fn emit_metadata_upgrade(&self) {
+        emit("nep171", "1.2.0", "contract_metadata_update", json!({"memo": "wallet metadata v1"}));
+        // Identity supply is capped; inventory-only records need no wallet discovery notifications.
+        // Bound migration log bytes for any older deployment with an unusually large cap.
+        let mut ids = Vec::new();
+        let mut bytes = 0;
+        for id in self.token_ids.iter() {
+            if bytes + id.len() + 3 > 12_000 { break; }
+            bytes += id.len() + 3;
+            ids.push(id.clone());
+        }
+        if !ids.is_empty() {
+            emit("nep171", "1.2.0", "nft_metadata_update", json!({"token_ids": ids, "memo": "wallet metadata v1"}));
+        }
+    }
+
     fn assert_owner(&self) {
         require!(env::attached_deposit().as_yoctonear() == ONE_YOCTO, "Requires attached deposit of exactly 1 yoctoNEAR");
         require!(env::predecessor_account_id() == self.owner, "owner only");
@@ -1371,6 +1438,8 @@ impl TrenchieNft {
         sale_ready: bool,
         paid_bytes: u64,
     ) {
+        let mut metadata = metadata;
+        metadata.issued_at.get_or_insert_with(|| env::block_timestamp_ms().to_string());
         self.tokens.insert(
             token_id.clone(),
             TokenState {

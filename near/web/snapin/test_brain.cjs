@@ -67,15 +67,15 @@ const watch = (b) => b.on((s) => seen.push(JSON.stringify(s)));
     assert.equal(req.url, 'https://cloud-api.near.ai/v1/chat/completions'); assert.equal(req.headers.authorization, 'Bearer ' + KEY);
     assert.deepEqual(req.body.chat_template_kwargs, { enable_thinking: false });
     assert.equal(req.body.messages[0].role, 'system'); assert.match(req.body.messages[0].content, /^You are Dune Sprout/);
-    assert.match(req.body.messages[1].content, /"near":\[\{"id":"satrenchi"/, 'the ring is in the ask, nearest first; the bench is not');
-    assert.ok(!req.body.messages[1].content.includes('avichad'));
+    assert.match(req.body.messages[1].content, /"near":\[\{"id":"satrenchi"/, 'nearby combat rows are nearest first; bench identities are in the roster');
+    assert.ok(req.body.messages[1].content.includes('avichad'), 'the identity roster includes bench fighters');
     console.log('ok 1 drives: next-life prediction, then signed orders; a line at most every 10 s'); }
 
   // 2. a bad order is not sent; an order naming a fighter out of view is refused
   { const clock = { t: 1e6 }, f = provider([level(2), order({ focus: 'nobody' }), { text: 'I will attack!' }]);
     const { b, r } = brain(store(NEAR, 0.5), f, clock);
     await b.step(); assert.equal(r.sent.length, 0); assert.match(b.status().chip, /not a valid order \(focus names no fighter in view\)/);
-    clock.t += 5000; await b.step(); assert.equal(r.sent.length, 0); assert.match(b.status().chip, /no JSON object/);
+    clock.t += 5000; await b.step(); assert.equal(r.sent.length, 0); assert.match(b.status().chip, /no complete JSON object/);
     console.log('ok 2 invalid orders are never sent, and the chip says why'); }
 
   // 3. F75: an invalid prediction is asked once more; a second invalid one files the explicit no-prediction marker
@@ -111,12 +111,12 @@ const watch = (b) => b.on((s) => seen.push(JSON.stringify(s)));
   { const clock = { t: 1e6 }, f = provider([{ status: 401 }]);
     const { b, r } = brain(store(NEAR, 0.5), f, clock); watch(b);
     await b.step(); assert.equal(b.status().state, 'failed');
-    assert.match(b.status().chip, /Your AI did not answer \(the key was refused\): your Trenchie is on the arena’s own tactics until you fix it at the AI door\./);
+    assert.match(b.status().chip, /Your AI did not answer \(the key was refused\): your Trenchie keeps its last plan until you fix it at the AI door\./);
     clock.t += 5000; await b.step(); assert.equal(f.calls.length, 1, 'a refused key is not tried again');
     b.store.m.set(B.constants.KEY_STORE + 'NEAR AI Cloud', KEY + 'X'); b.fetch = provider([level(2), order({})]);
     clock.t += 5000; await b.step(); assert.equal(b.status().state, 'driving', 'a new key at the door is tried at once');
     const f2 = provider([{ status: 503 }, level(2), order({})]); const two = brain(store(NEAR, 0.5), f2, clock);
-    await two.b.step(); assert.match(two.b.status().chip, /it returned an error\): your Trenchie is on the arena’s own tactics; trying again\./);
+    await two.b.step(); assert.match(two.b.status().chip, /it returned an error\): your Trenchie keeps its last plan\./);
     clock.t += 5000; await two.b.step(); assert.equal(two.b.status().state, 'driving');
     console.log('ok 5 failures: a chip for each; a refused key stops, an error retries'); }
 

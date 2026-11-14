@@ -37,7 +37,7 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
   const web = await start(['near/web/snapin/serve.py', '--port', '0', '--arena', arenaUrl], (o) => (o.match(/http:\/\/127\.0\.0\.1:(\d+)\//) || [])[1]);
   const ws = 'ws://' + new URL(arenaUrl).host;
   const b = await chromium.launch({ args: ['--single-process', '--no-zygote'] });
-  let current = null, arenaStopped = false; const failed = [], overflow = [];
+  let current = null, arenaStopped = false; const failed = [], overflow = [], consoleReads = [];
   // With no internet, NEAR Connect's own runtime manifest cannot load. These are the SDK's two default endpoints;
   // the focused wallet_manifest_case supplies a complete manifest and walks the real stock chooser instead.
   const WALLET_MANIFESTS = ['https://raw.githubusercontent.com/hot-dao/near-selector/refs/heads/main/repository/manifest.json', 'https://cdn.jsdelivr.net/gh/azbang/hot-connector/repository/manifest.json'];
@@ -60,7 +60,22 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
     const base = opts.origin;
     const p = await ctx.newPage(); const errs = []; current = p;
     await p.setViewportSize({ width: W, height: W > 700 ? 900 : 844 });
-    p.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ': ' + m.text().slice(0, 240) + ' @ ' + p.url().replace(base, '')); });
+    p.on('console', (m) => {
+      if (m.type() !== 'error' && m.type() !== 'warning') return;
+      const line = m.type() + ': ' + m.text().slice(0, 240) + ' @ ' + p.url().replace(base, '');
+      // This fixture supplies prose, not plan JSON; only that exact provider parse diagnostic is expected.
+      consoleReads.push((async () => {
+        try {
+          const args = m.args();
+          if (m.type() === 'warning' && args.length === 2 && await args[0].jsonValue() === 'Trenchie AI order') {
+            const event = await args[1].jsonValue();
+            if (event && event.provider === 'nearai' && event.kind === 'parse' &&
+                event.message === 'the answer had no complete JSON object') return;
+          }
+        } catch (e) { /* An unreadable diagnostic remains a console failure. */ }
+        errs.push(line);
+      })());
+    });
     p.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
     p.on('response', (r) => { if (r.status() >= 400 && !/cloud-api\.near\.ai/.test(r.url())) errs.push('http ' + r.status() + ' ' + r.url().replace(/^https?:\/\/[^/]+/, '')); });
     p.on('requestfailed', (r) => failed.push(r.url()));
@@ -291,13 +306,14 @@ const start = (args, ready, cwd) => HOSTS.start(args, ready, cwd || path.dirname
     }
     const wideBad = overflow.filter((x) => !x[2]);
     ok(overflow.length > 20 && wideBad.length === 0, `no sideways scroll and nothing past the screen edge on ${overflow.length} captured screens` + (wideBad.length ? ': ' + JSON.stringify(wideBad.slice(0, 3)) : ''));
+    await Promise.all(consoleReads);
     const all = [...A.errs, ...B.errs];
     const offline = failed.filter(isWalletCode), other = failed.filter((u) => !isWalletCode(u));
     let unresolved = all.filter((e) => /net::ERR_NAME_NOT_RESOLVED/.test(e)).length;
     ok(other.length === 0 && unresolved === offline.length && cut.every(isWalletCode), `failed requests: ${offline.length} stock manifest requests with no internet in this browser (${cut.length} cut; ${popups.length} wallet windows closed${popups.length ? ': ' + [...new Set(popups)].join(', ') : ''}) (${[...new Set(offline.map((u) => u.split('?')[0]))].join(', ')}), ${other.length} others` + (other.length ? ': ' + other.join(', ') : ''));
     const own = all.filter((e) => !(/net::ERR_NAME_NOT_RESOLVED/.test(e) && other.length === 0)).filter((e) => !(/^http 400 \/dev\/identity$/.test(e) || /status of 400/.test(e))).filter((e) => !(arena && (/status of 502/.test(e) && /index\.html\?step=ring/.test(e) || /^http 502 \/(room|dev)\//.test(e)))).filter((e) => !/GL Driver Message \(OpenGL, Performance, GL_CLOSE_PATH_NV, High\): GPU stall due to ReadPixels/.test(e) && !/cloud-api\.near\.ai.*401|status of 401/.test(e));
     fs.writeFileSync(path.join(OUT, 'console.json'), JSON.stringify(all, null, 1));
-    ok(own.length === 0, 'console clean in both visitors (set aside: headless GL driver notes, the test-supplied 401, the wallet-manifest fetches counted above, the 502s of the stopped-arena check)' + (own.length ? ': ' + own.slice(0, 5).join(' | ') : ''));
+    ok(own.length === 0, 'console clean in both visitors (set aside: the supplied prose answer’s parse diagnostic, headless GL driver notes, the test-supplied 401, the wallet-manifest fetches counted above, the 502s of the stopped-arena check)' + (own.length ? ': ' + own.slice(0, 5).join(' | ') : ''));
   } catch (e) { ok(false, 'case crashed: ' + String(e && e.message || e).slice(0, 400)); try { if (current) await current.screenshot({ path: path.join(OUT, 'crash.png'), fullPage: true }); console.log('crash at', current && current.url()); } catch (e2) { /* gone */ } }
   await b.close().catch(() => {});
   if (arena) { await fetch(arenaUrl + '/dev/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Dev-Admin': arena.m } }).catch(() => {}); arena.child.kill(); }

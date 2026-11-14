@@ -27,7 +27,7 @@ def _stance(drives, gate, target):
 
 
 _RULES = {
-    "version": "integer-17",
+    "version": "integer-19",
     # integer-16: a prediction is one level, "L or more KOs"; a correct one earns (1 - margin) / P(>=L) times its amount
     # (capped), P from the house's own lives as `market` publishes them; arena/predict.py reads this block
     "predict": {"levels": [1, 2, 3, 4], "margin_bps": 1000, "cap_bps": 200000,
@@ -199,11 +199,18 @@ _RULES = {
     "gap_closer_range": 2000,
     "gap_closer_cooldown": 100,
     "behaviour": {                     # integer-13: battle mode (BEHAVIOUR.md); a fighter's AI sends a plan
-        "version": 1, "schema_minor": 1, "max_reflexes": 8, "max_bytes": 2048, "say_chars": 80, "id_chars": 64,
+        "version": 1, "schema_minor": 2, "max_reflexes": 8, "max_bytes": 2048, "say_chars": 80, "id_chars": 64,
         "drive_max": 10, "radius_max_tiles": 12, "hold_radius_max_tiles": 6,
         "default_drives": _drives(),
         "reflex_hold_ticks": 20, "say_ticks": 200, "protect_score": 60,
         "chase_seek": True,            # integer-14: chase walks to the nearest gated enemy when none is in view
+        "protect_spare": True,         # integer-19: spare the effective protected ally, including area damage
+        "target_away": True,           # integer-19: nearest fallback; exclusive gates wait with loot/keep-away
+        "target_is": True,             # integer-19: an exclusive named target gate
+        "target_is_not": True,         # mandatory exclusions in selection and shared damage checks
+        "target_facing_away": True,    # integer-19: facing-only attack gate; busy keeps its existing OR
+        "fighter_hp_below_pct": True,  # observe a named fighter independently of the current target
+        "reflex_target_current": True,  # integer-18: choose this plan's target before checking target reflex conditions
         "stances": {
             "flee": _stance(_drives(loot=2, keep_away=10, keep_away_radius=8), {"distance_under": 2}, "nearest"),
             "berserk": _stance(_drives(chase=10), {}, "nearest"),
@@ -758,6 +765,10 @@ class Sim:
         r, tile = self.rules, self.rules["tile"]
         (key, value), = cond.items()
         p = r["percent"]
+        if key == "fighter_hp_below_pct":
+            watched = self.state["fighters"].get(value["who"])
+            return (watched is not None and watched["state"] == "alive"
+                    and watched["hp"] * p < watched["max_hp"] * value["pct"])
         if key == "self_hp_below_pct":
             return f["hp"] * p < f["max_hp"] * value
         if key == "self_hp_above_pct":
@@ -836,18 +847,39 @@ class Sim:
             mode = then.get("target", mode)
         return drives, gate, mode, anchor
 
+    def _protected_ally(self, f: dict) -> str | None:
+        """The currently effective protection, including lower-numbered reflex precedence."""
+        plan = f.get("behaviour")
+        if plan is None:
+            return None
+        drives = dict(plan["drives"])
+        for index in reversed(range(len(plan["reflexes"]))):
+            if f["battle_reflexes"][index]["on"]:
+                drives.update(plan["reflexes"][index]["then"].get("drives", {}))
+        return drives.get("protect_ally") if drives["protect"] else None
+
     def _passes(self, f, enemy, gate, dist, targets) -> bool:
         r = self.rules
+        if r["behaviour"].get("protect_spare", False) and self._protected_ally(f) == enemy["id"]:
+            return False
+        if gate.get("target_is") is not None and gate["target_is"] != enemy["id"]:
+            return False
+        if enemy["id"] in gate.get("target_is_not", ()):
+            return False
         if gate.get("never"):
             return False
         checks = []
         if "target_hp_below_pct" in gate:
             checks.append(enemy["hp"] * r["percent"] < enemy["max_hp"] * gate["target_hp_below_pct"])
+        if gate.get("target_busy") or gate.get("target_facing_away"):
+            vx, vy = vector(enemy["direction"], r["trig_scale"], r)
+            facing_away = vx * (f["x"] - enemy["x"]) + vy * (f["y"] - enemy["y"]) < 0
         if gate.get("target_busy"):
             theirs = targets.get(enemy["id"])
             fighting = theirs is not None and theirs != f["id"] and theirs in self.state["fighters"]
-            vx, vy = vector(enemy["direction"], r["trig_scale"], r)
-            checks.append(fighting or vx * (f["x"] - enemy["x"]) + vy * (f["y"] - enemy["y"]) < 0)
+            checks.append(fighting or facing_away)
+        if gate.get("target_facing_away"):
+            checks.append(facing_away)
         if "distance_under" in gate:
             checks.append(dist < gate["distance_under"] * r["tile"])
         if gate.get("rival"):
@@ -871,7 +903,13 @@ class Sim:
         ally = self.state["fighters"].get(drives["protect_ally"]) if drives["protect"] else None
         scored = []
         for e in enemies:
+            if r["behaviour"].get("protect_spare", False) and ally is not None and e["id"] == ally["id"]:
+                continue
             score = self.target_score(f, e)
+            if r["behaviour"].get("target_away", False) and mode not in battle.TARGET_MODES:
+                named = self.state["fighters"].get(mode)
+                if e["id"] == mode or named is None or named["state"] != "alive":
+                    score = max(0, score)  # named pursuit and its absent-target fallback work across the floor
             if score < 0 or not self._passes(f, e, gate, near_by_id[e["id"]], targets):
                 continue
             if ally is not None and tick - ally["hits"].get(e["id"], -r["recent_hit_ticks"] - 1) <= r["recent_hit_ticks"]:
@@ -886,7 +924,12 @@ class Sim:
                                               near_by_id[c[1]["id"]], c[1]["id"]))[1]["id"]
         if mode != "auto":
             want = f["last_hit"] if mode == "attacker" else mode
-            return next((e["id"] for _, e in scored if e["id"] == want), None)
+            chosen = next((e["id"] for _, e in scored if e["id"] == want), None)
+            absent = self.state["fighters"].get(want)
+            if (chosen is None and mode != "attacker" and r["behaviour"].get("target_away", False)
+                    and (absent is None or absent["state"] != "alive")):
+                return min(scored, key=lambda c: (near_by_id[c[1]["id"]], c[1]["id"]))[1]["id"]
+            return chosen
         best = max(scored, key=lambda c: (c[0], c[1]["id"]))
         current = next((c for c in scored if c[1]["id"] == f["target"]), None)
         if current is not None and (tick - f["target_since"] < r["sticky_ticks"]
@@ -980,7 +1023,17 @@ class Sim:
         near = sorted((distance(f, e), e["id"]) for e in enemies)
         near_by_id = {name: dist for dist, name in near}
         drops = self._grabbable(f, r["view_radius"])
-        drives, gate, mode, anchor = self._effective(f, near, drops, targets)
+        reflex_targets = targets
+        if r['behaviour'].get('reflex_target_current', False):
+            plan = f['behaviour']
+            selected = self._battle_target(f, enemies, near_by_id, plan['gate'], plan['target'], plan['drives'], targets)
+            reflex_targets = {**targets, f['id']: selected}
+        drives, gate, mode, anchor = self._effective(f, near, drops, reflex_targets)
+        if r["behaviour"].get("target_away", False) and gate.get("target_is"):
+            wanted = self.state["fighters"].get(gate["target_is"])
+            if wanted is None or wanted["state"] != "alive":
+                drives = {**drives, "loot": r["behaviour"]["drive_max"],
+                          "keep_away": r["behaviour"]["drive_max"], "chase": 0, "protect": 0, "hold": 0}
         f["battle_gate"] = gate
         target_id = self._battle_target(f, enemies, near_by_id, gate, mode, drives, targets)
         if target_id != f["target"]:

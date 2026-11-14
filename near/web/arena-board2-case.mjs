@@ -144,7 +144,7 @@ assert.match(html.ko, /No arena running/); assert.match(html.pr, /No arena runni
 assert.equal(WORDS.counted, 'Counted as each life ends.'); n++;
 // H1: a narrow sign gets the short predictions title (the CSS drops points, rank and face before the name)
 assert.match(columnsHtml(boards(json, 'players', 3), { ...opts, short: true }).pr, /class="ttl">Predictions </); n++;
-// L3: "autopilot" is said once, as the feed's chip, not after every house line
+// Pat: autopilot metadata never draws a feed notice; other statuses remain.
 const fake = () => { const el = { children: [], style: {}, dataset: {}, className: '', hidden: false, textContent: '', attrs: {},
   setAttribute(k, v) { this.attrs[k] = v; }, appendChild(c) { this.children.push(c); return c; }, append(...c) { this.children.push(...c); },
   replaceChildren(...c) { this.children = c; }, classList: { add() {}, toggle() {} } }; return el; };
@@ -152,10 +152,10 @@ const doc = { createElement: fake, createTextNode: (t) => ({ textContent: t }) }
 const fd = new Feed(doc, fake(), { name: (id) => id, colour: () => '#2a2622' });
 fd.push({ kind: 'say', who: 'leeth', text: 'Ether Stack.', status: 'autopilot' });
 fd.push({ kind: 'say', who: 'leeth', text: 'Back in a cycle.', status: 'blocked line' });
-assert.equal(fd.chip.hidden, false); assert.equal(fd.chip.textContent, 'House on autopilot');
+assert.equal(fd.box.children.length, 1); assert.equal(fd.box.children[0], fd.list);
 assert.equal(fd.items[0].status, null); assert.equal(fd.items[1].status, 'blocked line'); n++;   // other statuses stay on their line
-fd.items = []; fd.render(); assert.equal(fd.chip.hidden, true); n++;
-// a feed line naming a DEV fighter draws its DEV chip (the autopilot chip element must not shadow that method)
+fd.items = []; fd.render(); assert.equal(fd.list.children.length, 0); n++;
+// a feed line naming a DEV fighter still draws its DEV chip
 const devFeed = new Feed(doc, fake(), { name: (id) => id, colour: () => '#2a2622', dev: (id) => id.startsWith('dev-') });
 devFeed.push({ kind: 'ko', who: 'dev-ann', victim: 'leeth' });
 assert.ok(devFeed.list.children[0].children.some((c) => c.className === 'dev' && c.textContent === 'DEV')); n++;

@@ -9,6 +9,11 @@
 .b2 { position: absolute; inset: 0; pointer-events: none; z-index: 4; color: #2a2622; font: 13px/1.4 'Space Mono', monospace; }
 .b2 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; pointer-events: auto; }
 .b2 button:focus-visible { outline: 3px solid #6FA3D6; outline-offset: 2px; }
+.ha-layer .fighter-tile { cursor: pointer; pointer-events: all; }
+.fighter-tile .tile-hit { fill: transparent; }
+.fighter-tile:focus-visible { outline: none; }
+.fighter-tile:focus-visible .tile-hit { stroke: #6FA3D6; stroke-width: 3px; }
+.tile-follow-hint { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 7px 12px; border-radius: 6px; background: #FFF8EA; color: #3B2F25; box-shadow: 0 0 0 1px #6b5a43; font: 600 13px Fredoka, sans-serif; }
 
 /* name tags: the trenchie's name, a thin divider, then the circles */
 .atag .sep { display: inline-block; width: 1px; height: 10px; background: rgba(59,47,37,.35); margin: 0 4px; vertical-align: -1px; }

@@ -1,0 +1,62 @@
+{
+  "brawler-swing": {
+    "style": "brawler",
+    "name": "Brawler Swing",
+    "weapon_kind": "swing",
+    "signature": "shockwave",
+    "loadout": {
+      "head": "st-cap",
+      "body": "st-tee",
+      "weapon": "st-bonk",
+      "trinket": "c-shockwave"
+    }
+  },
+  "hunter-lunge": {
+    "style": "hunter",
+    "name": "Hunter Lunge",
+    "weapon_kind": "lunge",
+    "signature": "blink_strike",
+    "loadout": {
+      "head": "st-cap",
+      "body": "st-tee",
+      "weapon": "c-lunge",
+      "trinket": "c-blink-strike"
+    }
+  },
+  "survivor-beam": {
+    "style": "survivor",
+    "name": "Survivor Beam",
+    "weapon_kind": "beam",
+    "signature": "bubble",
+    "loadout": {
+      "head": "st-cap",
+      "body": "st-tee",
+      "weapon": "c-beam",
+      "trinket": "c-bubble"
+    }
+  },
+  "looter-lob": {
+    "style": "looter",
+    "name": "Looter Lob",
+    "weapon_kind": "lob",
+    "signature": "magnet",
+    "loadout": {
+      "head": "st-cap",
+      "body": "st-tee",
+      "weapon": "c-lob",
+      "trinket": "c-magnet"
+    }
+  },
+  "brawler-zap": {
+    "style": "brawler",
+    "name": "Brawler Zap",
+    "weapon_kind": "zap",
+    "signature": "chain_storm",
+    "loadout": {
+      "head": "st-cap",
+      "body": "st-tee",
+      "weapon": "c-zap",
+      "trinket": "c-chain-storm"
+    }
+  }
+}

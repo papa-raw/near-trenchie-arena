@@ -33,11 +33,14 @@ const SETUP = () => {
   const room = { on: () => () => {} };
   const brain = B.create({ room, store, fetch: fakeFetch });
   const sheet = { game: { name: 'Cap Sprout', temperament: 'Sunny', voice: ['Tide in my fists.'] }, identity: { brief: 'A newcomer.' } };
-  const USER = 'Ring: {}\nOne order, please.', MAX = 90;
-  const worst = B.costUsd('nearai', { in: B.prefix(sheet, 'Cap Sprout').length + USER.length, out: MAX, cached: 0 });
+  const USER = 'Ring: {}\nOne order, please.', MAX = 450, ALLOWANCE = 2048; // battle-plan output minimum
+  const worst = B.costUsd('nearai', { in: B.prefix(sheet, 'Cap Sprout').length + USER.length, out: ALLOWANCE, cached: 0 });
+  store.set(B.constants.SAVE, JSON.stringify({door:{door:'NEAR AI Cloud',route:'key'},sheet,name:'Cap Sprout'}));
+  store.set(B.constants.KEY_STORE + 'NEAR AI Cloud', 'test-key');
   window.__worst = worst;
   window.__clear = () => { localStorage.removeItem(SPEND); window.__sent = 0; };
   window.__go = async (T, cap) => {
+    store.set(B.constants.CAP_STORE, String(cap));
     while (Date.now() < T) { /* the shared instant */ }
     const c = { provider: 'nearai', key: 'test-key', cap, sheet, name: 'Cap Sprout' };
     try { await brain.ask(c, USER, MAX); return { sent: window.__sent, result: 'answered' }; }
