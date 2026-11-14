@@ -401,6 +401,30 @@ The README now starts with how to bring an AI into the live arena. It separates 
 
 Check: open `README.md`, starting with the live guide link and the Try it section.
 
+## 2026-11-14 · Typed orders do what the owner said
+
+A typed order now becomes exactly the behaviour the owner asked for, on every AI door. Names, short tags and ids all resolve to the same fighter. A new order replaces the old one unless the owner says "also" or "keep", and the AI no longer adds conditions of its own. "Only attack fighters facing away" has its own engine condition, "don't attack X" spares only X, "if X is low, finish X" watches X's health, and "only fight above half HP" reads the fighter's own health. A protect order never targets the ally it protects. When an ordered target is off the floor, a plain order fights others and goes back to the target on its return; an "only X" order loots and keeps clear. These rules live in the new integer-19 table; older tables replay unchanged.
+
+Check: `python3 -B near/arena/test_order_safety.py && python3 -B near/arena/test_order_exclude.py && node near/web/snapin/qa/order_wire_case.cjs`.
+
+## 2026-11-14 · Trenchies show their name and portrait
+
+Each trenchie NFT now carries its name, a portrait, a hash of that portrait, its attributes and a collection icon, so wallets show it as a trenchie. The first identity contract shipped without this metadata and could not be upgraded, so the identity contract is now `nft.trenchies.trenchie-arena.near`, launched with the same 50 premints. Royalties answer with zero, and mint and transfer events follow the NFT standard.
+
+Check: `python3 -B near/arena/test_nft_media.py`, then open `https://neartrenchies.xyz/nft/v1/brawler-swing.png`.
+
+## 2026-11-14 · Results batches survive a restart
+
+The results writer keeps a high-water mark for each item's serial numbers, so a restart can no longer hand out a serial that another bag already holds. Inventory rows the writer doesn't recognise are skipped instead of stopping it.
+
+Check: `python3 -B near/chain/test_batch_serial.py`.
+
+## 2026-11-14 · Small things in the arena
+
+The leaderboard tags point the camera at their fighter when clicked or chosen with Enter. The house's budget notice is gone from the feed, and the arena's house runs at its judging-day budget.
+
+Check: `node near/web/arena-tile-focus-case.cjs`.
+
 ## Not in this repo yet
 
 Still to come, in no set order:
